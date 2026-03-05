@@ -1,13 +1,24 @@
 import NextAuth from "next-auth";
 import Resend from "next-auth/providers/resend";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { db } from "@/lib/db";
 import {
   users,
   accounts,
   sessions,
   verificationTokens,
 } from "@/lib/db/schema";
+
+function getAdapter() {
+  // Defer db import to avoid DrizzleAdapter calling is() during build
+  // when TURSO_DATABASE_URL is not yet available
+  const { db } = require("@/lib/db");
+  return DrizzleAdapter(db, {
+    usersTable: users,
+    accountsTable: accounts,
+    sessionsTable: sessions,
+    verificationTokensTable: verificationTokens,
+  });
+}
 
 const allowedEmails = (process.env.ALLOWED_EMAILS ?? "")
   .split(",")
@@ -16,12 +27,7 @@ const allowedEmails = (process.env.ALLOWED_EMAILS ?? "")
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
-  adapter: DrizzleAdapter(db, {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-  }),
+  adapter: process.env.TURSO_DATABASE_URL ? getAdapter() : undefined,
   providers: [
     Resend({
       apiKey: process.env.AUTH_RESEND_KEY ?? process.env.RESEND_API_KEY,
