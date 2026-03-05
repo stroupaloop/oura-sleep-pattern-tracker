@@ -5,6 +5,7 @@ import { oauthTokens, syncLog } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
 import { OuraConnectButton } from "./oura-connect-button";
 import { BackfillButton, ManualSyncButton } from "./sync-buttons";
+import { AnalyzeAllButton } from "./analyze-button";
 import {
   Card,
   CardContent,
@@ -77,6 +78,7 @@ export default async function SettingsPage() {
           <CardContent className="space-y-4">
             <BackfillButton />
             <ManualSyncButton />
+            <AnalyzeAllButton />
           </CardContent>
         </Card>
       )}

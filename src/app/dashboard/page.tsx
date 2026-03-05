@@ -6,8 +6,10 @@ import {
   sleepPeriods,
   dailySleep,
   dailyReadiness,
+  dailyAnalysis,
 } from "@/lib/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { desc, sql, eq, and, gte } from "drizzle-orm";
+import { format, subDays } from "date-fns";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -97,6 +99,24 @@ export default async function DashboardPage() {
     .orderBy(desc(dailySleep.day))
     .limit(30);
 
+  // Get recent anomalies (last 7 days)
+  const sevenDaysAgo = format(subDays(new Date(), 7), "yyyy-MM-dd");
+  const recentAnomalies = await db
+    .select()
+    .from(dailyAnalysis)
+    .where(
+      and(
+        eq(dailyAnalysis.isAnomaly, 1),
+        gte(dailyAnalysis.day, sevenDaysAgo)
+      )
+    )
+    .orderBy(desc(dailyAnalysis.day));
+
+  // Check for streak (3+ consecutive anomaly days in same direction)
+  const streakDirection = recentAnomalies.length >= 3
+    ? recentAnomalies[0].anomalyDirection
+    : null;
+
   const sleep = lastSleep[0] ?? null;
   const score = lastDailySleep[0] ?? null;
   const readiness = lastReadiness[0] ?? null;
@@ -129,6 +149,33 @@ export default async function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold">Dashboard</h1>
+
+      {recentAnomalies.length > 0 && (
+        <div
+          className={`rounded-lg p-4 ${
+            streakDirection === "hypo"
+              ? "bg-blue-50 border border-blue-200 text-blue-900"
+              : streakDirection === "hyper"
+                ? "bg-amber-50 border border-amber-200 text-amber-900"
+                : "bg-yellow-50 border border-yellow-200 text-yellow-900"
+          }`}
+        >
+          <p className="font-medium">
+            {recentAnomalies.length} anomal{recentAnomalies.length === 1 ? "y" : "ies"} detected in the last 7 days
+            {streakDirection === "hypo" && " — pattern suggests possible depressive episode indicators"}
+            {streakDirection === "hyper" && " — pattern suggests possible hypomanic episode indicators"}
+          </p>
+          <p className="text-sm mt-1 opacity-80">
+            {recentAnomalies[0].anomalyNotes}
+          </p>
+          <Link
+            href="/dashboard/alerts"
+            className="text-sm underline mt-2 inline-block"
+          >
+            View all alerts
+          </Link>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         <Card>
