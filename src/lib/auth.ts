@@ -15,6 +15,7 @@ const allowedEmails = (process.env.ALLOWED_EMAILS ?? "")
   .filter(Boolean);
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   adapter: db
     ? DrizzleAdapter(db, {
         usersTable: users,
@@ -25,7 +26,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     : undefined,
   providers: [
     Resend({
-      apiKey: process.env.RESEND_API_KEY,
+      apiKey: process.env.AUTH_RESEND_KEY ?? process.env.RESEND_API_KEY,
       from: process.env.EMAIL_FROM ?? "noreply@resend.dev",
     }),
   ],
@@ -39,7 +40,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/login",
     verifyRequest: "/login?verify=1",
-    error: "/login?error=1",
+    error: "/login",
   },
-  debug: process.env.NODE_ENV === "development" || !!process.env.AUTH_DEBUG,
+  debug: true,
 });
