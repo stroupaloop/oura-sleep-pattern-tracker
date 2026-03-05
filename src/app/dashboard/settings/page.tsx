@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { oauthTokens, syncLog } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
 import { OuraConnectButton } from "./oura-connect-button";
+import { BackfillButton, ManualSyncButton } from "./sync-buttons";
 import {
   Card,
   CardContent,
@@ -64,6 +65,21 @@ export default async function SettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {isConnected && !isExpired && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Data Sync</CardTitle>
+            <CardDescription>
+              Pull sleep data from your Oura Ring.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <BackfillButton />
+            <ManualSyncButton />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
