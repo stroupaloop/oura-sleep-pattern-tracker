@@ -15,12 +15,14 @@ const allowedEmails = (process.env.ALLOWED_EMAILS ?? "")
   .filter(Boolean);
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: DrizzleAdapter(db, {
-    usersTable: users,
-    accountsTable: accounts,
-    sessionsTable: sessions,
-    verificationTokensTable: verificationTokens,
-  }),
+  adapter: db
+    ? DrizzleAdapter(db, {
+        usersTable: users,
+        accountsTable: accounts,
+        sessionsTable: sessions,
+        verificationTokensTable: verificationTokens,
+      })
+    : undefined,
   providers: [
     Resend({
       apiKey: process.env.RESEND_API_KEY,
@@ -30,6 +32,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     signIn({ user }) {
       if (!user.email) return false;
+      if (allowedEmails.length === 0) return true;
       return allowedEmails.includes(user.email.toLowerCase());
     },
   },

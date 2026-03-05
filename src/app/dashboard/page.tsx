@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { db } from "@/lib/db";
 import { oauthTokens } from "@/lib/db/schema";
 import Link from "next/link";
