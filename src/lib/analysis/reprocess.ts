@@ -75,9 +75,29 @@ export async function reprocessAll(
     }
   }
 
+  const allCalendarDays: string[] = [];
+  if (sortedDays.length > 0) {
+    const first = new Date(sortedDays[0]);
+    const last = new Date(sortedDays[sortedDays.length - 1]);
+    for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
+      allCalendarDays.push(d.toISOString().slice(0, 10));
+    }
+  }
+
   for (const day of uniqueFilteredDays) {
     const dayIndex = sortedDays.indexOf(day);
     if (dayIndex < 0) continue;
+
+    const calendarIndex = allCalendarDays.indexOf(day);
+    const expectedDaysByWindow: Record<number, number> = {};
+    for (const size of [3, 5, 7]) {
+      if (calendarIndex >= 0) {
+        const windowStartCal = Math.max(0, calendarIndex - size + 1);
+        expectedDaysByWindow[size] = calendarIndex - windowStartCal + 1;
+      } else {
+        expectedDaysByWindow[size] = size;
+      }
+    }
 
     const windowStart = Math.max(0, dayIndex - 7);
     const recentDays = sortedDays.slice(windowStart, dayIndex + 1);
@@ -91,7 +111,7 @@ export async function reprocessAll(
       .filter((r): r is DailyAnalysisResult => r !== undefined);
 
     if (recentResults.length > 0) {
-      const episode = assessEpisode(day, recentResults, allPriorResults, config);
+      const episode = assessEpisode(day, recentResults, allPriorResults, config, expectedDaysByWindow);
       await upsertEpisodeAssessment(episode);
 
       if (episode.tier === "watch") episodeCounts.watch++;

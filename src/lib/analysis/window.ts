@@ -11,10 +11,13 @@ export interface WindowResult {
   latencyCV: number;
   latencyCVZScore: number;
   bedtimeCV: number;
+  bedtimeCVZScore: number;
   sleepDurationCV: number;
   hrvCV: number;
   temperatureMean: number;
   temperatureElevated: boolean;
+  missingDaysInWindow: number;
+  hrvCrashDays: number;
   confidence: number;
   direction: "hyper" | "hypo" | null;
 }
@@ -82,7 +85,8 @@ export function analyzeWindow(
   dailyResults: DailyAnalysisResult[],
   windowDays: number,
   allPriorMetrics: DailyAnalysisResult[],
-  config: DetectionConfigValues
+  config: DetectionConfigValues,
+  expectedDays?: number
 ): WindowResult | null {
   if (dailyResults.length < Math.min(windowDays, 2)) return null;
 
@@ -94,6 +98,13 @@ export function analyzeWindow(
   const consistency = consistencyRatio(scores, config.concernThreshold);
   const dirResult = directionConsistencyScore(directions);
   const bounce = bounceBackScore(scores);
+
+  const actualDays = windowData.length;
+  const expected = expectedDays ?? windowDays;
+  const missingDaysInWindow = expected - actualDays;
+  const missingRatio = expected > 0 ? missingDaysInWindow / expected : 0;
+
+  const hrvCrashDays = windowData.filter((d) => d.hrvCrash).length;
 
   const latencyValues = windowData.map((d) => d.metrics.onsetLatencyMinutes);
   const bedtimeValues = windowData.map((d) => d.metrics.bedtimeMinutes);
@@ -115,6 +126,16 @@ export function analyzeWindow(
   const latencyCVStd = priorLatencyCVs.length > 1 ? standardDeviation(priorLatencyCVs, baselineLatencyCV) : 0;
   const latCVZ = zScore(latencyCV, baselineLatencyCV, latencyCVStd);
 
+  const priorBedtimeValues = allPriorMetrics.map((d) => d.metrics.bedtimeMinutes);
+  const priorBedtimeCVs: number[] = [];
+  for (let i = windowDays; i <= priorBedtimeValues.length; i++) {
+    const slice = priorBedtimeValues.slice(i - windowDays, i);
+    priorBedtimeCVs.push(coefficientOfVariation(slice));
+  }
+  const baselineBedtimeCV = priorBedtimeCVs.length > 0 ? trimmedMean(priorBedtimeCVs) : 0;
+  const bedtimeCVStd = priorBedtimeCVs.length > 1 ? standardDeviation(priorBedtimeCVs, baselineBedtimeCV) : 0;
+  const bedtimeCVZ = zScore(bedtimeCV, baselineBedtimeCV, bedtimeCVStd);
+
   const tempDeltas = windowData.map((d) => d.metrics.temperatureDelta);
   const tempResult = temperatureTrend(tempDeltas);
 
@@ -130,7 +151,21 @@ export function analyzeWindow(
     confidence += 2.0;
   }
 
-  confidence *= (1.0 - bounce * 0.7);
+  if (missingRatio > 0.2) {
+    confidence += missingRatio * 1.5;
+  }
+
+  confidence += hrvCrashDays * 1.5;
+
+  if (bedtimeCVZ > 0) {
+    confidence += bedtimeCVZ * 0.8;
+  }
+
+  if (dirResult.dominant === "hypo") {
+    confidence *= (1.0 - bounce * 0.35);
+  } else {
+    confidence *= (1.0 - bounce * 0.7);
+  }
   confidence *= windowMultiplier;
 
   return {
@@ -142,10 +177,13 @@ export function analyzeWindow(
     latencyCV,
     latencyCVZScore: latCVZ,
     bedtimeCV,
+    bedtimeCVZScore: bedtimeCVZ,
     sleepDurationCV,
     hrvCV,
     temperatureMean: tempResult.mean,
     temperatureElevated: tempResult.elevated,
+    missingDaysInWindow,
+    hrvCrashDays,
     confidence,
     direction: dirResult.dominant,
   };
@@ -154,12 +192,14 @@ export function analyzeWindow(
 export function analyzeAllWindows(
   dailyResults: DailyAnalysisResult[],
   allPriorResults: DailyAnalysisResult[],
-  config: DetectionConfigValues
+  config: DetectionConfigValues,
+  expectedDaysByWindow?: Record<number, number>
 ): { best: WindowResult | null; all: WindowResult[] } {
   const windows: WindowResult[] = [];
 
   for (const size of [3, 5, 7]) {
-    const result = analyzeWindow(dailyResults, size, allPriorResults, config);
+    const expected = expectedDaysByWindow?.[size];
+    const result = analyzeWindow(dailyResults, size, allPriorResults, config, expected);
     if (result) windows.push(result);
   }
 

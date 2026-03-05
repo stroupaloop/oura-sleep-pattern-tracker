@@ -14,6 +14,14 @@ export interface MetricWeights {
   sleepEfficiency: number;
 }
 
+export interface AbsoluteThresholds {
+  minSleepMinutes: number;
+  maxHeartRate: number;
+  minHrv: number;
+  minEfficiency: number;
+  maxBedtimeShiftMinutes: number;
+}
+
 export interface DetectionConfigValues {
   version: number;
   baselineDays: number;
@@ -29,6 +37,7 @@ export interface DetectionConfigValues {
   alertMinDays: number;
   bounceBackThreshold: number;
   metricWeights: MetricWeights;
+  absoluteThresholds: AbsoluteThresholds;
 }
 
 export const DEFAULT_WEIGHTS: MetricWeights = {
@@ -41,6 +50,14 @@ export const DEFAULT_WEIGHTS: MetricWeights = {
   temperatureDelta: 0.10,
   restlessPeriods: 0.05,
   sleepEfficiency: 0.07,
+};
+
+export const DEFAULT_ABSOLUTE_THRESHOLDS: AbsoluteThresholds = {
+  minSleepMinutes: 300,
+  maxHeartRate: 80,
+  minHrv: 20,
+  minEfficiency: 70,
+  maxBedtimeShiftMinutes: 120,
 };
 
 export const DEFAULT_CONFIG: DetectionConfigValues = {
@@ -58,6 +75,7 @@ export const DEFAULT_CONFIG: DetectionConfigValues = {
   alertMinDays: 5,
   bounceBackThreshold: 0.6,
   metricWeights: DEFAULT_WEIGHTS,
+  absoluteThresholds: DEFAULT_ABSOLUTE_THRESHOLDS,
 };
 
 export const SENSITIVITY_PRESETS = {
@@ -120,6 +138,7 @@ export async function loadActiveConfig(): Promise<DetectionConfigValues> {
     alertMinDays: row.alertMinDays,
     bounceBackThreshold: row.bounceBackThreshold,
     metricWeights: weights,
+    absoluteThresholds: DEFAULT_ABSOLUTE_THRESHOLDS,
   };
 }
 

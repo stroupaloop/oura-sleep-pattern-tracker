@@ -33,6 +33,7 @@ export interface DailyAnalysisResult {
   isAnomaly: boolean;
   direction: "hyper" | "hypo" | null;
   notes: string;
+  hrvCrash: boolean;
 }
 
 export function extractMetrics(
@@ -64,9 +65,11 @@ export function extractMetrics(
 
 function classifyDirection(
   zScores: Record<string, number>,
+  metrics: DayMetrics,
   config: DetectionConfigValues
 ): "hyper" | "hypo" | null {
   const t = config.dailyAnomalyThreshold;
+  const abs = config.absoluteThresholds;
 
   const hyperSignals =
     (zScores.sleep < -t ? 1 : 0) +
@@ -80,7 +83,11 @@ function classifyDirection(
     (zScores.wake > t ? 1 : 0) +
     (zScores.hrv < -t ? 1 : 0) +
     (zScores.hr > t ? 1 : 0) +
-    (zScores.efficiency < -t ? 1 : 0);
+    (zScores.efficiency < -t ? 1 : 0) +
+    (metrics.totalSleepMinutes < abs.minSleepMinutes ? 1 : 0) +
+    (metrics.avgHeartRate > abs.maxHeartRate ? 1 : 0) +
+    (metrics.avgHrv > 0 && metrics.avgHrv < abs.minHrv ? 1 : 0) +
+    (metrics.efficiency > 0 && metrics.efficiency < abs.minEfficiency ? 1 : 0);
 
   if (hyperSignals >= 2) return "hyper";
   if (hypoSignals >= 2) return "hypo";
@@ -194,7 +201,7 @@ export function computeDailyAnalysis(
     remPct: metrics.remPct > 0 ? zScore(metrics.remPct, baselines.remPct, stds.remPct) : 0,
   };
 
-  const compositeScore =
+  let compositeScore =
     w.sleepDuration * Math.abs(zScores.sleep) +
     w.bedtimeShift * Math.abs(zScores.bedtime) +
     w.wakeTimeShift * Math.abs(zScores.wake) +
@@ -205,11 +212,25 @@ export function computeDailyAnalysis(
     w.restlessPeriods * Math.abs(zScores.restlessness) +
     w.sleepEfficiency * Math.abs(zScores.efficiency);
 
+  const hrvCrash =
+    metrics.avgHrv > 0 &&
+    baselines.hrv > 0 &&
+    metrics.avgHrv < baselines.hrv * 0.7 &&
+    zScores.hr > 1.0;
+
+  const abs = config.absoluteThresholds;
+  let absoluteBonus = 0;
+  if (metrics.totalSleepMinutes < abs.minSleepMinutes) absoluteBonus += 0.5;
+  if (metrics.avgHeartRate > abs.maxHeartRate) absoluteBonus += 0.5;
+  if (metrics.avgHrv > 0 && metrics.avgHrv < abs.minHrv) absoluteBonus += 0.5;
+  if (metrics.efficiency > 0 && metrics.efficiency < abs.minEfficiency) absoluteBonus += 0.3;
+  compositeScore += absoluteBonus;
+
   const isAnomaly =
     compositeScore > config.dailyAnomalyThreshold ||
     Math.abs(zScores.sleep) > 2.0;
 
-  const direction = isAnomaly ? classifyDirection(zScores, config) : null;
+  const direction = isAnomaly ? classifyDirection(zScores, metrics, config) : null;
   const notes = isAnomaly
     ? buildNotes(metrics, baselines, zScores, config.dailyAnomalyThreshold)
     : "";
@@ -223,6 +244,7 @@ export function computeDailyAnalysis(
     isAnomaly,
     direction,
     notes,
+    hrvCrash,
   };
 }
 

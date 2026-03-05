@@ -127,9 +127,10 @@ export function assessEpisode(
   day: string,
   recentDailyResults: DailyAnalysisResult[],
   allPriorResults: DailyAnalysisResult[],
-  config: DetectionConfigValues
+  config: DetectionConfigValues,
+  expectedDaysByWindow?: Record<number, number>
 ): EpisodeResult {
-  const { best, all: _all } = analyzeAllWindows(recentDailyResults, allPriorResults, config);
+  const { best, all: _all } = analyzeAllWindows(recentDailyResults, allPriorResults, config, expectedDaysByWindow);
 
   const consecutiveDays = countConsecutiveConcerning(recentDailyResults, config.concernThreshold);
   const latestResult = recentDailyResults[recentDailyResults.length - 1];
@@ -172,7 +173,10 @@ export function assessEpisode(
     tier = "watch";
   }
 
-  if (tier !== "none" && best.bounceBackScore > config.bounceBackThreshold) {
+  const effectiveBounceThreshold = best.direction === "hypo"
+    ? Math.min(config.bounceBackThreshold + 0.2, 1.0)
+    : config.bounceBackThreshold;
+  if (tier !== "none" && best.bounceBackScore > effectiveBounceThreshold) {
     tier = "none";
   }
 
@@ -214,10 +218,12 @@ export async function upsertEpisodeAssessment(result: EpisodeResult) {
       latencyCV: w?.latencyCV ?? null,
       latencyCVZScore: w?.latencyCVZScore ?? null,
       bedtimeCV: w?.bedtimeCV ?? null,
+      bedtimeCVZScore: w?.bedtimeCVZScore ?? null,
       sleepDurationCV: w?.sleepDurationCV ?? null,
       hrvCV: w?.hrvCV ?? null,
       temperatureMean: w?.temperatureMean ?? null,
       temperatureElevated: w?.temperatureElevated ? 1 : 0,
+      missingDaysInWindow: w?.missingDaysInWindow ?? null,
       consecutiveConcerningDays: result.consecutiveConcerningDays,
       primaryDrivers: JSON.stringify(result.primaryDrivers),
       summary: result.summary,
@@ -239,10 +245,12 @@ export async function upsertEpisodeAssessment(result: EpisodeResult) {
         latencyCV: sql`excluded.latency_cv`,
         latencyCVZScore: sql`excluded.latency_cv_z_score`,
         bedtimeCV: sql`excluded.bedtime_cv`,
+        bedtimeCVZScore: sql`excluded.bedtime_cv_z_score`,
         sleepDurationCV: sql`excluded.sleep_duration_cv`,
         hrvCV: sql`excluded.hrv_cv`,
         temperatureMean: sql`excluded.temperature_mean`,
         temperatureElevated: sql`excluded.temperature_elevated`,
+        missingDaysInWindow: sql`excluded.missing_days_in_window`,
         consecutiveConcerningDays: sql`excluded.consecutive_concerning_days`,
         primaryDrivers: sql`excluded.primary_drivers`,
         summary: sql`excluded.summary`,
