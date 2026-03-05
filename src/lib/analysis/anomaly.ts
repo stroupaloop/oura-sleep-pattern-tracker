@@ -7,19 +7,9 @@ import {
   zScore,
   minutesFromMidnight,
 } from "./baseline";
+import { DetectionConfigValues, DEFAULT_CONFIG } from "./config";
 
-const MIN_BASELINE_DAYS = 14;
-
-const WEIGHTS = {
-  sleepDuration: 0.3,
-  bedtime: 0.2,
-  wakeTime: 0.15,
-  hrv: 0.15,
-  heartRate: 0.1,
-  latency: 0.1,
-};
-
-interface DayMetrics {
+export interface DayMetrics {
   day: string;
   totalSleepMinutes: number;
   bedtimeMinutes: number;
@@ -31,9 +21,21 @@ interface DayMetrics {
   deepPct: number;
   efficiency: number;
   temperatureDelta: number;
+  restlessPeriods: number;
 }
 
-function extractMetrics(
+export interface DailyAnalysisResult {
+  day: string;
+  metrics: DayMetrics;
+  baselines: Record<string, number>;
+  zScores: Record<string, number>;
+  compositeScore: number;
+  isAnomaly: boolean;
+  direction: "hyper" | "hypo" | null;
+  notes: string;
+}
+
+export function extractMetrics(
   s: typeof sleepPeriods.$inferSelect
 ): DayMetrics | null {
   if (!s.totalSleepDuration) return null;
@@ -56,29 +58,29 @@ function extractMetrics(
         : 0,
     efficiency: s.efficiency ?? 0,
     temperatureDelta: s.temperatureDelta ?? 0,
+    restlessPeriods: s.restlessPeriods ?? 0,
   };
 }
 
 function classifyDirection(
-  sleepZ: number,
-  bedtimeZ: number,
-  wakeZ: number,
-  hrvZ: number,
-  hrZ: number
+  zScores: Record<string, number>,
+  config: DetectionConfigValues
 ): "hyper" | "hypo" | null {
-  // Hyper (possible hypomania): less sleep, earlier times, sometimes higher HRV
-  const hyperSignals =
-    (sleepZ < -1.5 ? 1 : 0) +
-    (bedtimeZ < -1.5 ? 1 : 0) +
-    (wakeZ < -1.5 ? 1 : 0);
+  const t = config.dailyAnomalyThreshold;
 
-  // Hypo (possible depression): more sleep, later times, lower HRV, higher HR
+  const hyperSignals =
+    (zScores.sleep < -t ? 1 : 0) +
+    (zScores.bedtime < -t ? 1 : 0) +
+    (zScores.wake < -t ? 1 : 0) +
+    (zScores.temperature > t ? 1 : 0);
+
   const hypoSignals =
-    (sleepZ > 1.5 ? 1 : 0) +
-    (bedtimeZ > 1.5 ? 1 : 0) +
-    (wakeZ > 1.5 ? 1 : 0) +
-    (hrvZ < -1.5 ? 1 : 0) +
-    (hrZ > 1.5 ? 1 : 0);
+    (zScores.sleep > t ? 1 : 0) +
+    (zScores.bedtime > t ? 1 : 0) +
+    (zScores.wake > t ? 1 : 0) +
+    (zScores.hrv < -t ? 1 : 0) +
+    (zScores.hr > t ? 1 : 0) +
+    (zScores.efficiency < -t ? 1 : 0);
 
   if (hyperSignals >= 2) return "hyper";
   if (hypoSignals >= 2) return "hypo";
@@ -88,39 +90,145 @@ function classifyDirection(
 function buildNotes(
   metrics: DayMetrics,
   baselines: Record<string, number>,
-  zScores: Record<string, number>
+  zScores: Record<string, number>,
+  threshold: number
 ): string {
   const notes: string[] = [];
   const sleepDelta = metrics.totalSleepMinutes - baselines.sleep;
 
-  if (Math.abs(zScores.sleep) > 1.5) {
+  if (Math.abs(zScores.sleep) > threshold) {
     const dir = sleepDelta > 0 ? "more" : "less";
     notes.push(
       `Sleep ${Math.abs(sleepDelta).toFixed(0)}min ${dir} than baseline`
     );
   }
-  if (Math.abs(zScores.bedtime) > 1.5) {
+  if (Math.abs(zScores.bedtime) > threshold) {
     const dir = zScores.bedtime > 0 ? "later" : "earlier";
     notes.push(`Bedtime ${dir} than usual`);
   }
-  if (Math.abs(zScores.wake) > 1.5) {
+  if (Math.abs(zScores.wake) > threshold) {
     const dir = zScores.wake > 0 ? "later" : "earlier";
     notes.push(`Wake time ${dir} than usual`);
   }
-  if (Math.abs(zScores.hrv) > 1.5) {
+  if (Math.abs(zScores.hrv) > threshold) {
     const dir = zScores.hrv < 0 ? "lower" : "higher";
     notes.push(`HRV ${dir} than baseline`);
   }
-  if (Math.abs(zScores.hr) > 1.5) {
+  if (Math.abs(zScores.hr) > threshold) {
     const dir = zScores.hr > 0 ? "elevated" : "lower";
     notes.push(`Heart rate ${dir}`);
+  }
+  if (Math.abs(zScores.temperature) > threshold) {
+    const dir = zScores.temperature > 0 ? "elevated" : "lower";
+    notes.push(`Temperature ${dir}`);
+  }
+  if (Math.abs(zScores.efficiency) > threshold) {
+    const dir = zScores.efficiency < 0 ? "lower" : "higher";
+    notes.push(`Sleep efficiency ${dir}`);
   }
 
   return notes.join(". ");
 }
 
-export async function analyzeDay(targetDay: string) {
-  // Get the target day's sleep data
+export function computeDailyAnalysis(
+  metrics: DayMetrics,
+  priorMetrics: DayMetrics[],
+  config: DetectionConfigValues
+): DailyAnalysisResult | null {
+  if (priorMetrics.length < config.minBaselineDays) return null;
+
+  const trimPct = config.baselineTrimPct;
+  const w = config.metricWeights;
+
+  const sleepVals = priorMetrics.map((m) => m.totalSleepMinutes);
+  const bedtimeVals = priorMetrics.map((m) => m.bedtimeMinutes);
+  const wakeVals = priorMetrics.map((m) => m.wakeTimeMinutes);
+  const hrvVals = priorMetrics.filter((m) => m.avgHrv > 0).map((m) => m.avgHrv);
+  const hrVals = priorMetrics.filter((m) => m.avgHeartRate > 0).map((m) => m.avgHeartRate);
+  const latencyVals = priorMetrics.map((m) => m.onsetLatencyMinutes);
+  const tempVals = priorMetrics.map((m) => m.temperatureDelta);
+  const restlessVals = priorMetrics.map((m) => m.restlessPeriods);
+  const efficiencyVals = priorMetrics.filter((m) => m.efficiency > 0).map((m) => m.efficiency);
+  const deepPctVals = priorMetrics.filter((m) => m.deepPct > 0).map((m) => m.deepPct);
+  const remPctVals = priorMetrics.filter((m) => m.remPct > 0).map((m) => m.remPct);
+
+  const baselines: Record<string, number> = {
+    sleep: trimmedMean(sleepVals, trimPct),
+    bedtime: trimmedMean(bedtimeVals, trimPct),
+    wake: trimmedMean(wakeVals, trimPct),
+    hrv: hrvVals.length > 0 ? trimmedMean(hrvVals, trimPct) : 0,
+    hr: hrVals.length > 0 ? trimmedMean(hrVals, trimPct) : 0,
+    latency: trimmedMean(latencyVals, trimPct),
+    temperature: trimmedMean(tempVals, trimPct),
+    restlessness: trimmedMean(restlessVals, trimPct),
+    efficiency: efficiencyVals.length > 0 ? trimmedMean(efficiencyVals, trimPct) : 0,
+    deepPct: deepPctVals.length > 0 ? trimmedMean(deepPctVals, trimPct) : 0,
+    remPct: remPctVals.length > 0 ? trimmedMean(remPctVals, trimPct) : 0,
+  };
+
+  const stds: Record<string, number> = {
+    sleep: standardDeviation(sleepVals, baselines.sleep),
+    bedtime: standardDeviation(bedtimeVals, baselines.bedtime),
+    wake: standardDeviation(wakeVals, baselines.wake),
+    hrv: hrvVals.length > 0 ? standardDeviation(hrvVals, baselines.hrv) : 0,
+    hr: hrVals.length > 0 ? standardDeviation(hrVals, baselines.hr) : 0,
+    latency: standardDeviation(latencyVals, baselines.latency),
+    temperature: standardDeviation(tempVals, baselines.temperature),
+    restlessness: standardDeviation(restlessVals, baselines.restlessness),
+    efficiency: efficiencyVals.length > 0 ? standardDeviation(efficiencyVals, baselines.efficiency) : 0,
+    deepPct: deepPctVals.length > 0 ? standardDeviation(deepPctVals, baselines.deepPct) : 0,
+    remPct: remPctVals.length > 0 ? standardDeviation(remPctVals, baselines.remPct) : 0,
+  };
+
+  const zScores: Record<string, number> = {
+    sleep: zScore(metrics.totalSleepMinutes, baselines.sleep, stds.sleep),
+    bedtime: zScore(metrics.bedtimeMinutes, baselines.bedtime, stds.bedtime),
+    wake: zScore(metrics.wakeTimeMinutes, baselines.wake, stds.wake),
+    hrv: metrics.avgHrv > 0 ? zScore(metrics.avgHrv, baselines.hrv, stds.hrv) : 0,
+    hr: metrics.avgHeartRate > 0 ? zScore(metrics.avgHeartRate, baselines.hr, stds.hr) : 0,
+    latency: zScore(metrics.onsetLatencyMinutes, baselines.latency, stds.latency),
+    temperature: zScore(metrics.temperatureDelta, baselines.temperature, stds.temperature),
+    restlessness: zScore(metrics.restlessPeriods, baselines.restlessness, stds.restlessness),
+    efficiency: metrics.efficiency > 0 ? zScore(metrics.efficiency, baselines.efficiency, stds.efficiency) : 0,
+    deepPct: metrics.deepPct > 0 ? zScore(metrics.deepPct, baselines.deepPct, stds.deepPct) : 0,
+    remPct: metrics.remPct > 0 ? zScore(metrics.remPct, baselines.remPct, stds.remPct) : 0,
+  };
+
+  const compositeScore =
+    w.sleepDuration * Math.abs(zScores.sleep) +
+    w.bedtimeShift * Math.abs(zScores.bedtime) +
+    w.wakeTimeShift * Math.abs(zScores.wake) +
+    w.hrv * Math.abs(zScores.hrv) +
+    w.heartRate * Math.abs(zScores.hr) +
+    w.latency * Math.abs(zScores.latency) +
+    w.temperatureDelta * Math.abs(zScores.temperature) +
+    w.restlessPeriods * Math.abs(zScores.restlessness) +
+    w.sleepEfficiency * Math.abs(zScores.efficiency);
+
+  const isAnomaly =
+    compositeScore > config.dailyAnomalyThreshold ||
+    Math.abs(zScores.sleep) > 2.0;
+
+  const direction = isAnomaly ? classifyDirection(zScores, config) : null;
+  const notes = isAnomaly
+    ? buildNotes(metrics, baselines, zScores, config.dailyAnomalyThreshold)
+    : "";
+
+  return {
+    day: metrics.day,
+    metrics,
+    baselines,
+    zScores,
+    compositeScore,
+    isAnomaly,
+    direction,
+    notes,
+  };
+}
+
+export async function analyzeDay(targetDay: string, config?: DetectionConfigValues) {
+  const cfg = config ?? DEFAULT_CONFIG;
+
   const todaySleep = await db
     .select()
     .from(sleepPeriods)
@@ -137,7 +245,6 @@ export async function analyzeDay(targetDay: string) {
   const metrics = extractMetrics(todaySleep[0]);
   if (!metrics) return null;
 
-  // Get prior 30 days for baseline (excluding target day)
   const priorSleep = await db
     .select()
     .from(sleepPeriods)
@@ -148,74 +255,34 @@ export async function analyzeDay(targetDay: string) {
       )
     )
     .orderBy(desc(sleepPeriods.day))
-    .limit(30);
+    .limit(cfg.baselineDays);
 
   const priorMetrics = priorSleep
     .map(extractMetrics)
     .filter((m): m is DayMetrics => m !== null);
 
-  if (priorMetrics.length < MIN_BASELINE_DAYS) return null;
+  const result = computeDailyAnalysis(metrics, priorMetrics, cfg);
+  if (!result) return null;
 
-  // Compute baselines
-  const sleepVals = priorMetrics.map((m) => m.totalSleepMinutes);
-  const bedtimeVals = priorMetrics.map((m) => m.bedtimeMinutes);
-  const wakeVals = priorMetrics.map((m) => m.wakeTimeMinutes);
-  const hrvVals = priorMetrics.filter((m) => m.avgHrv > 0).map((m) => m.avgHrv);
-  const hrVals = priorMetrics.filter((m) => m.avgHeartRate > 0).map((m) => m.avgHeartRate);
-  const latencyVals = priorMetrics.map((m) => m.onsetLatencyMinutes);
+  await upsertDailyAnalysis(result);
 
-  const baselines = {
-    sleep: trimmedMean(sleepVals),
-    bedtime: trimmedMean(bedtimeVals),
-    wake: trimmedMean(wakeVals),
-    hrv: hrvVals.length > 0 ? trimmedMean(hrvVals) : 0,
-    hr: hrVals.length > 0 ? trimmedMean(hrVals) : 0,
-    latency: trimmedMean(latencyVals),
+  return {
+    day: targetDay,
+    compositeScore: result.compositeScore,
+    isAnomaly: result.isAnomaly,
+    direction: result.direction,
+    notes: result.notes,
   };
+}
 
-  const stds = {
-    sleep: standardDeviation(sleepVals, baselines.sleep),
-    bedtime: standardDeviation(bedtimeVals, baselines.bedtime),
-    wake: standardDeviation(wakeVals, baselines.wake),
-    hrv: hrvVals.length > 0 ? standardDeviation(hrvVals, baselines.hrv) : 0,
-    hr: hrVals.length > 0 ? standardDeviation(hrVals, baselines.hr) : 0,
-    latency: standardDeviation(latencyVals, baselines.latency),
-  };
-
-  const zScores = {
-    sleep: zScore(metrics.totalSleepMinutes, baselines.sleep, stds.sleep),
-    bedtime: zScore(metrics.bedtimeMinutes, baselines.bedtime, stds.bedtime),
-    wake: zScore(metrics.wakeTimeMinutes, baselines.wake, stds.wake),
-    hrv: metrics.avgHrv > 0 ? zScore(metrics.avgHrv, baselines.hrv, stds.hrv) : 0,
-    hr: metrics.avgHeartRate > 0 ? zScore(metrics.avgHeartRate, baselines.hr, stds.hr) : 0,
-    latency: zScore(metrics.onsetLatencyMinutes, baselines.latency, stds.latency),
-  };
-
-  const compositeScore =
-    WEIGHTS.sleepDuration * Math.abs(zScores.sleep) +
-    WEIGHTS.bedtime * Math.abs(zScores.bedtime) +
-    WEIGHTS.wakeTime * Math.abs(zScores.wake) +
-    WEIGHTS.hrv * Math.abs(zScores.hrv) +
-    WEIGHTS.heartRate * Math.abs(zScores.hr) +
-    WEIGHTS.latency * Math.abs(zScores.latency);
-
-  const isAnomaly =
-    compositeScore > 1.5 || Math.abs(zScores.sleep) > 2.0;
-
-  const direction = isAnomaly
-    ? classifyDirection(zScores.sleep, zScores.bedtime, zScores.wake, zScores.hrv, zScores.hr)
-    : null;
-
-  const notes = isAnomaly
-    ? buildNotes(metrics, baselines, zScores)
-    : "";
-
+export async function upsertDailyAnalysis(result: DailyAnalysisResult) {
+  const { metrics, baselines, zScores, compositeScore, isAnomaly, direction, notes } = result;
   const now = Math.floor(Date.now() / 1000);
 
   await db
     .insert(dailyAnalysis)
     .values({
-      day: targetDay,
+      day: result.day,
       totalSleepMinutes: metrics.totalSleepMinutes,
       baselineSleepMinutes: baselines.sleep,
       sleepDurationZScore: zScores.sleep,
@@ -238,6 +305,17 @@ export async function analyzeDay(targetDay: string) {
       onsetLatencyMinutes: metrics.onsetLatencyMinutes,
       baselineLatency: baselines.latency,
       latencyZScore: zScores.latency,
+      temperatureZScore: zScores.temperature,
+      baselineTemperature: baselines.temperature,
+      restlessnessZScore: zScores.restlessness,
+      baselineRestlessness: baselines.restlessness,
+      efficiencyZScore: zScores.efficiency,
+      baselineEfficiency: baselines.efficiency,
+      deepPctZScore: zScores.deepPct,
+      baselineDeepPct: baselines.deepPct,
+      remPctZScore: zScores.remPct,
+      baselineRemPct: baselines.remPct,
+      restlessPeriods: metrics.restlessPeriods,
       anomalyScore: compositeScore,
       isAnomaly: isAnomaly ? 1 : 0,
       anomalyDirection: direction,
@@ -269,17 +347,28 @@ export async function analyzeDay(targetDay: string) {
         onsetLatencyMinutes: sql`excluded.onset_latency_minutes`,
         baselineLatency: sql`excluded.baseline_latency`,
         latencyZScore: sql`excluded.latency_z_score`,
+        temperatureZScore: sql`excluded.temperature_z_score`,
+        baselineTemperature: sql`excluded.baseline_temperature`,
+        restlessnessZScore: sql`excluded.restlessness_z_score`,
+        baselineRestlessness: sql`excluded.baseline_restlessness`,
+        efficiencyZScore: sql`excluded.efficiency_z_score`,
+        baselineEfficiency: sql`excluded.baseline_efficiency`,
+        deepPctZScore: sql`excluded.deep_pct_z_score`,
+        baselineDeepPct: sql`excluded.baseline_deep_pct`,
+        remPctZScore: sql`excluded.rem_pct_z_score`,
+        baselineRemPct: sql`excluded.baseline_rem_pct`,
+        restlessPeriods: sql`excluded.restless_periods`,
         anomalyScore: sql`excluded.anomaly_score`,
         isAnomaly: sql`excluded.is_anomaly`,
         anomalyDirection: sql`excluded.anomaly_direction`,
         anomalyNotes: sql`excluded.anomaly_notes`,
       },
     });
-
-  return { day: targetDay, compositeScore, isAnomaly, direction, notes };
 }
 
-export async function analyzeAllDays() {
+export async function analyzeAllDays(config?: DetectionConfigValues) {
+  const cfg = config ?? DEFAULT_CONFIG;
+
   const allSleep = await db
     .select({ day: sleepPeriods.day })
     .from(sleepPeriods)
@@ -290,7 +379,7 @@ export async function analyzeAllDays() {
   const results = [];
 
   for (const day of days) {
-    const result = await analyzeDay(day);
+    const result = await analyzeDay(day, cfg);
     if (result) results.push(result);
   }
 

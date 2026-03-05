@@ -18,6 +18,14 @@ export function zScore(value: number, mean: number, std: number): number {
   return (value - mean) / std;
 }
 
+export function coefficientOfVariation(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((s, v) => s + v, 0) / values.length;
+  if (Math.abs(mean) < 0.001) return 0;
+  const std = standardDeviation(values, mean);
+  return std / Math.abs(mean);
+}
+
 export function minutesFromMidnight(isoDatetime: string): number {
   const d = new Date(isoDatetime);
   let minutes = d.getHours() * 60 + d.getMinutes();

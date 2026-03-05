@@ -6,6 +6,7 @@ import { desc } from "drizzle-orm";
 import { OuraConnectButton } from "./oura-connect-button";
 import { BackfillButton, ManualSyncButton } from "./sync-buttons";
 import { AnalyzeAllButton } from "./analyze-button";
+import { DetectionConfig } from "./detection-config";
 import {
   Card,
   CardContent,
@@ -79,6 +80,20 @@ export default async function SettingsPage() {
             <BackfillButton />
             <ManualSyncButton />
             <AnalyzeAllButton />
+          </CardContent>
+        </Card>
+      )}
+
+      {isConnected && !isExpired && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Anomaly Detection</CardTitle>
+            <CardDescription>
+              Configure sensitivity for multi-day pattern detection.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DetectionConfig />
           </CardContent>
         </Card>
       )}

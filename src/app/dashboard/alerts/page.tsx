@@ -1,8 +1,8 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
-import { dailyAnalysis } from "@/lib/db/schema";
-import { desc, eq } from "drizzle-orm";
+import { episodeAssessments, dailyAnalysis } from "@/lib/db/schema";
+import { desc, and, ne, eq } from "drizzle-orm";
 import {
   Card,
   CardContent,
@@ -12,12 +12,49 @@ import {
 } from "@/components/ui/card";
 import { AnalyzeButton } from "./analyze-button";
 
+const tierConfig = {
+  alert: {
+    border: "border-l-red-500",
+    badge: "bg-red-100 text-red-800",
+    label: "Alert",
+  },
+  warning: {
+    border: "border-l-amber-500",
+    badge: "bg-amber-100 text-amber-800",
+    label: "Warning",
+  },
+  watch: {
+    border: "border-l-blue-500",
+    badge: "bg-blue-100 text-blue-800",
+    label: "Watch",
+  },
+} as const;
+
+function ConfidenceBar({ value }: { value: number }) {
+  const pct = Math.min(100, (value / 10) * 100);
+  const color =
+    value >= 5 ? "bg-red-500" : value >= 3.5 ? "bg-amber-500" : "bg-blue-500";
+  return (
+    <div className="w-full bg-muted rounded-full h-2">
+      <div
+        className={`h-2 rounded-full ${color}`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 export default async function AlertsPage() {
-  const anomalies = await db
+  const episodes = await db
     .select()
-    .from(dailyAnalysis)
-    .where(eq(dailyAnalysis.isAnomaly, 1))
-    .orderBy(desc(dailyAnalysis.day));
+    .from(episodeAssessments)
+    .where(ne(episodeAssessments.tier, "none"))
+    .orderBy(desc(episodeAssessments.day));
+
+  const allEpisodes = await db
+    .select()
+    .from(episodeAssessments)
+    .orderBy(desc(episodeAssessments.day));
 
   const allAnalysis = await db
     .select()
@@ -30,14 +67,14 @@ export default async function AlertsPage() {
         <div>
           <h1 className="text-3xl font-bold">Alerts</h1>
           <p className="text-muted-foreground">
-            {allAnalysis.length} days analyzed, {anomalies.length} anomalies
-            detected
+            {allAnalysis.length} days analyzed, {episodes.length} episode
+            {episodes.length !== 1 ? "s" : ""} detected
           </p>
         </div>
         <AnalyzeButton />
       </div>
 
-      {anomalies.length === 0 && allAnalysis.length === 0 && (
+      {episodes.length === 0 && allAnalysis.length === 0 && (
         <Card>
           <CardContent className="pt-6">
             <p className="text-muted-foreground">
@@ -48,114 +85,126 @@ export default async function AlertsPage() {
         </Card>
       )}
 
-      {anomalies.length === 0 && allAnalysis.length > 0 && (
+      {episodes.length === 0 && allAnalysis.length > 0 && (
         <Card>
           <CardContent className="pt-6">
             <p className="text-green-600 font-medium">
-              No anomalies detected. Your sleep patterns appear stable.
+              No concerning patterns detected. Your sleep patterns appear stable.
             </p>
           </CardContent>
         </Card>
       )}
 
-      {anomalies.map((a) => (
-        <Card
-          key={a.day}
-          className={
-            a.anomalyDirection === "hypo"
-              ? "border-l-4 border-l-blue-500"
-              : a.anomalyDirection === "hyper"
-                ? "border-l-4 border-l-amber-500"
-                : "border-l-4 border-l-yellow-500"
-          }
-        >
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-lg">{a.day}</CardTitle>
-              {a.anomalyDirection && (
-                <span
-                  className={`text-xs font-medium px-2 py-1 rounded ${
-                    a.anomalyDirection === "hypo"
-                      ? "bg-blue-100 text-blue-800"
-                      : "bg-amber-100 text-amber-800"
-                  }`}
-                >
-                  {a.anomalyDirection === "hypo"
-                    ? "Possible depressive pattern"
-                    : "Possible hypomanic pattern"}
-                </span>
+      {episodes.map((ep) => {
+        const cfg =
+          tierConfig[ep.tier as keyof typeof tierConfig] ?? tierConfig.watch;
+        let drivers: string[] = [];
+        try {
+          drivers = JSON.parse(ep.primaryDrivers ?? "[]");
+        } catch {
+          drivers = [];
+        }
+
+        return (
+          <Card key={ep.day} className={`border-l-4 ${cfg.border}`}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">{ep.day}</CardTitle>
+                <div className="flex items-center gap-2">
+                  {ep.direction && (
+                    <span
+                      className={`text-xs font-medium px-2 py-1 rounded ${
+                        ep.direction === "hypo"
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-amber-100 text-amber-800"
+                      }`}
+                    >
+                      {ep.direction === "hypo"
+                        ? "Depressive pattern"
+                        : "Hypomanic pattern"}
+                    </span>
+                  )}
+                  <span
+                    className={`text-xs font-bold px-2 py-1 rounded ${cfg.badge}`}
+                  >
+                    {cfg.label}
+                  </span>
+                </div>
+              </div>
+              <CardDescription className="flex items-center gap-2">
+                <span>Confidence: {ep.confidence?.toFixed(1)}/10</span>
+                {ep.consecutiveConcerningDays != null && (
+                  <span>
+                    &middot; {ep.consecutiveConcerningDays} consecutive day
+                    {ep.consecutiveConcerningDays !== 1 ? "s" : ""}
+                  </span>
+                )}
+                {ep.bestWindowDays && (
+                  <span>&middot; {ep.bestWindowDays}-day window</span>
+                )}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <ConfidenceBar value={ep.confidence ?? 0} />
+
+              {ep.summary && <p className="text-sm">{ep.summary}</p>}
+
+              {drivers.length > 0 && (
+                <div className="flex flex-wrap gap-1.5">
+                  {drivers.map((d, i) => (
+                    <span
+                      key={i}
+                      className="text-xs bg-muted px-2 py-1 rounded"
+                    >
+                      {d}
+                    </span>
+                  ))}
+                </div>
               )}
-            </div>
-            <CardDescription>
-              Anomaly score: {a.anomalyScore?.toFixed(2)}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {a.anomalyNotes && (
-              <p className="text-sm mb-3">{a.anomalyNotes}</p>
-            )}
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <p className="text-muted-foreground">Sleep</p>
-                <p className="font-medium">
-                  {a.totalSleepMinutes?.toFixed(0)}min
-                  <span className="text-muted-foreground">
-                    {" "}
-                    (baseline: {a.baselineSleepMinutes?.toFixed(0)}min)
-                  </span>
+
+              {(ep.confounderLikelihood ?? 0) > 0.2 && (
+                <p className="text-xs text-muted-foreground">
+                  Confounder likelihood:{" "}
+                  {((ep.confounderLikelihood ?? 0) * 100).toFixed(0)}%
+                  {ep.bounceBackScore != null &&
+                    ` (bounce-back: ${ep.bounceBackScore.toFixed(2)})`}
                 </p>
-                <p
-                  className={`text-xs ${
-                    Math.abs(a.sleepDurationZScore ?? 0) > 2
-                      ? "text-red-500"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  z = {a.sleepDurationZScore?.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">HRV</p>
-                <p className="font-medium">
-                  {a.avgHrv?.toFixed(0)}ms
-                  <span className="text-muted-foreground">
-                    {" "}
-                    (baseline: {a.baselineHrv?.toFixed(0)}ms)
-                  </span>
-                </p>
-                <p
-                  className={`text-xs ${
-                    Math.abs(a.hrvZScore ?? 0) > 2
-                      ? "text-red-500"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  z = {a.hrvZScore?.toFixed(2)}
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground">Heart Rate</p>
-                <p className="font-medium">
-                  {a.avgHeartRate?.toFixed(0)}bpm
-                  <span className="text-muted-foreground">
-                    {" "}
-                    (baseline: {a.baselineHeartRate?.toFixed(0)}bpm)
-                  </span>
-                </p>
-                <p
-                  className={`text-xs ${
-                    Math.abs(a.heartRateZScore ?? 0) > 2
-                      ? "text-red-500"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  z = {a.heartRateZScore?.toFixed(2)}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+              )}
+
+              <details className="text-xs">
+                <summary className="text-muted-foreground cursor-pointer">
+                  Advanced details
+                </summary>
+                <div className="mt-2 grid grid-cols-2 gap-2 text-muted-foreground">
+                  {ep.trendSlope != null && (
+                    <div>Trend slope: {ep.trendSlope.toFixed(3)}</div>
+                  )}
+                  {ep.consistencyRatio != null && (
+                    <div>
+                      Consistency: {(ep.consistencyRatio * 100).toFixed(0)}%
+                    </div>
+                  )}
+                  {ep.directionConsistency != null && (
+                    <div>
+                      Direction consistency:{" "}
+                      {(ep.directionConsistency * 100).toFixed(0)}%
+                    </div>
+                  )}
+                  {ep.latencyCV != null && (
+                    <div>Latency CV: {ep.latencyCV.toFixed(3)}</div>
+                  )}
+                  {ep.temperatureMean != null && (
+                    <div>
+                      Temp mean: {ep.temperatureMean.toFixed(2)}&deg;
+                      {ep.temperatureElevated === 1 && " (elevated)"}
+                    </div>
+                  )}
+                </div>
+              </details>
+            </CardContent>
+          </Card>
+        );
+      })}
     </div>
   );
 }

@@ -3,24 +3,25 @@ import { auth } from "@/lib/auth";
 import { loadActiveConfig } from "@/lib/analysis/config";
 import { reprocessAll } from "@/lib/analysis/reprocess";
 
-export async function POST() {
+export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const config = await loadActiveConfig();
-    const result = await reprocessAll(config);
+    const body = await request.json().catch(() => ({}));
+    const { startDate, endDate } = body as {
+      startDate?: string;
+      endDate?: string;
+    };
 
-    return NextResponse.json({
-      success: true,
-      daysAnalyzed: result.daysProcessed,
-      episodes: result.episodes,
-      processingTimeMs: result.processingTimeMs,
-    });
+    const config = await loadActiveConfig();
+    const result = await reprocessAll(config, startDate, endDate);
+
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
-    console.error("Analysis error:", error);
+    console.error("Reprocess error:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },
       { status: 500 }

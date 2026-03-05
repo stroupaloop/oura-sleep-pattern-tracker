@@ -6,9 +6,9 @@ import {
   sleepPeriods,
   dailySleep,
   dailyReadiness,
-  dailyAnalysis,
+  episodeAssessments,
 } from "@/lib/db/schema";
-import { desc, sql, eq, and, gte } from "drizzle-orm";
+import { desc, sql, and, gte, ne } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -99,22 +99,26 @@ export default async function DashboardPage() {
     .orderBy(desc(dailySleep.day))
     .limit(30);
 
-  // Get recent anomalies (last 7 days)
-  const sevenDaysAgo = format(subDays(new Date(), 7), "yyyy-MM-dd");
-  const recentAnomalies = await db
+  // Get recent episode assessments (last 14 days)
+  const fourteenDaysAgo = format(subDays(new Date(), 14), "yyyy-MM-dd");
+  const recentEpisodes = await db
     .select()
-    .from(dailyAnalysis)
+    .from(episodeAssessments)
     .where(
       and(
-        eq(dailyAnalysis.isAnomaly, 1),
-        gte(dailyAnalysis.day, sevenDaysAgo)
+        ne(episodeAssessments.tier, "none"),
+        gte(episodeAssessments.day, fourteenDaysAgo)
       )
     )
-    .orderBy(desc(dailyAnalysis.day));
+    .orderBy(desc(episodeAssessments.day));
 
-  // Check for streak (3+ consecutive anomaly days in same direction)
-  const streakDirection = recentAnomalies.length >= 3
-    ? recentAnomalies[0].anomalyDirection
+  const highestTier = recentEpisodes.length > 0
+    ? recentEpisodes.reduce((best, ep) => {
+        const rank = { alert: 3, warning: 2, watch: 1, none: 0 };
+        const epRank = rank[ep.tier as keyof typeof rank] ?? 0;
+        const bestRank = rank[best.tier as keyof typeof rank] ?? 0;
+        return epRank > bestRank ? ep : best;
+      })
     : null;
 
   const sleep = lastSleep[0] ?? null;
@@ -150,24 +154,35 @@ export default async function DashboardPage() {
     <div className="max-w-6xl mx-auto space-y-6">
       <h1 className="text-3xl font-bold">Dashboard</h1>
 
-      {recentAnomalies.length > 0 && (
+      {highestTier && (
         <div
           className={`rounded-lg p-4 ${
-            streakDirection === "hypo"
-              ? "bg-blue-50 border border-blue-200 text-blue-900"
-              : streakDirection === "hyper"
+            highestTier.tier === "alert"
+              ? "bg-red-50 border border-red-200 text-red-900"
+              : highestTier.tier === "warning"
                 ? "bg-amber-50 border border-amber-200 text-amber-900"
-                : "bg-yellow-50 border border-yellow-200 text-yellow-900"
+                : "bg-muted border text-muted-foreground"
           }`}
         >
-          <p className="font-medium">
-            {recentAnomalies.length} anomal{recentAnomalies.length === 1 ? "y" : "ies"} detected in the last 7 days
-            {streakDirection === "hypo" && " — pattern suggests possible depressive episode indicators"}
-            {streakDirection === "hyper" && " — pattern suggests possible hypomanic episode indicators"}
-          </p>
-          <p className="text-sm mt-1 opacity-80">
-            {recentAnomalies[0].anomalyNotes}
-          </p>
+          <div className="flex items-center gap-2">
+            <span
+              className={`text-xs font-bold px-2 py-0.5 rounded ${
+                highestTier.tier === "alert"
+                  ? "bg-red-200 text-red-900"
+                  : highestTier.tier === "warning"
+                    ? "bg-amber-200 text-amber-900"
+                    : "bg-blue-200 text-blue-900"
+              }`}
+            >
+              {highestTier.tier.toUpperCase()}
+            </span>
+            <p className="font-medium">
+              {recentEpisodes.length} episode{recentEpisodes.length !== 1 ? "s" : ""} detected in the last 14 days
+            </p>
+          </div>
+          {highestTier.summary && (
+            <p className="text-sm mt-1 opacity-80">{highestTier.summary}</p>
+          )}
           <Link
             href="/dashboard/alerts"
             className="text-sm underline mt-2 inline-block"
