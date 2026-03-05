@@ -39,5 +39,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   pages: {
     signIn: "/login",
     verifyRequest: "/login?verify=1",
+    error: "/login?error=1",
   },
+  debug: process.env.NODE_ENV === "development" || !!process.env.AUTH_DEBUG,
 });

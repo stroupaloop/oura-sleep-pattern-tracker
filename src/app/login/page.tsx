@@ -19,6 +19,26 @@ function LoginForm() {
   const [loading, setLoading] = useState(false);
   const searchParams = useSearchParams();
   const isVerify = searchParams.get("verify") === "1";
+  const isError = searchParams.get("error");
+
+  if (isError) {
+    return (
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Sign in error</CardTitle>
+          <CardDescription>
+            Something went wrong. Error: {isError}. Please try again or check
+            the server configuration.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={() => window.location.assign("/login")} className="w-full">
+            Try again
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   if (isVerify) {
     return (
