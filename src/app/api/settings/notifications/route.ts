@@ -18,7 +18,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { type, destination } = body;
+    const { type, destination, reminderHour } = body;
 
     if (!type || !destination) {
       return NextResponse.json({ error: "type and destination are required" }, { status: 400 });
@@ -30,7 +30,13 @@ export async function POST(req: NextRequest) {
     const now = Math.floor(Date.now() / 1000);
     const result = await db
       .insert(notificationSettings)
-      .values({ type, destination, enabled: 1, createdAt: now })
+      .values({
+        type,
+        destination,
+        enabled: 1,
+        reminderHour: reminderHour ?? 22,
+        createdAt: now,
+      })
       .returning();
 
     return NextResponse.json(result[0]);
@@ -45,15 +51,23 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, enabled } = body;
+    const { id, enabled, reminderHour } = body;
 
-    if (!id || enabled === undefined) {
-      return NextResponse.json({ error: "id and enabled are required" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "id is required" }, { status: 400 });
+    }
+
+    const updates: Record<string, number> = {};
+    if (enabled !== undefined) updates.enabled = enabled ? 1 : 0;
+    if (reminderHour !== undefined) updates.reminderHour = reminderHour;
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "No fields to update" }, { status: 400 });
     }
 
     await db
       .update(notificationSettings)
-      .set({ enabled: enabled ? 1 : 0 })
+      .set(updates)
       .where(eq(notificationSettings.id, id));
 
     return NextResponse.json({ success: true });

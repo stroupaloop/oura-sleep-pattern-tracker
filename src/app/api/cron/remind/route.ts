@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { notificationSettings, dailyMood } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { format } from "date-fns";
 import { sendEmail } from "@/lib/notifications/email";
 import { sendSms } from "@/lib/notifications/sms";
@@ -15,6 +15,15 @@ export async function GET(request: NextRequest) {
   }
 
   const today = format(new Date(), "yyyy-MM-dd");
+
+  const currentEtHour = parseInt(
+    new Date().toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      hour: "numeric",
+      hour12: false,
+    }),
+    10
+  );
 
   try {
     const existingMood = await db
@@ -30,10 +39,15 @@ export async function GET(request: NextRequest) {
     const recipients = await db
       .select()
       .from(notificationSettings)
-      .where(eq(notificationSettings.enabled, 1));
+      .where(
+        and(
+          eq(notificationSettings.enabled, 1),
+          eq(notificationSettings.reminderHour, currentEtHour)
+        )
+      );
 
     if (recipients.length === 0) {
-      return NextResponse.json({ skipped: true, reason: "No enabled recipients" });
+      return NextResponse.json({ skipped: true, reason: "No enabled recipients for current hour", currentEtHour });
     }
 
     const appUrl = process.env.NEXTAUTH_URL ?? "https://your-app.vercel.app";

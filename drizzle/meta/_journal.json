@@ -50,6 +50,13 @@
       "when": 1772773181620,
       "tag": "0006_striped_lady_ursula",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1772774146322,
+      "tag": "0007_remarkable_george_stacy",
+      "breakpoints": true
     }
   ]
 }

@@ -7,7 +7,14 @@ interface NotificationRecipient {
   type: string;
   destination: string;
   enabled: number | null;
+  reminderHour: number | null;
 }
+
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => {
+  const period = i >= 12 ? "PM" : "AM";
+  const display = i === 0 ? 12 : i > 12 ? i - 12 : i;
+  return { value: i, label: `${display}:00 ${period}` };
+});
 
 export function NotificationSettings() {
   const [recipients, setRecipients] = useState<NotificationRecipient[]>([]);
@@ -15,11 +22,15 @@ export function NotificationSettings() {
   const [newType, setNewType] = useState<"email" | "sms">("email");
   const [newDestination, setNewDestination] = useState("");
   const [saving, setSaving] = useState(false);
+  const [reminderHour, setReminderHour] = useState(22);
 
   async function fetchRecipients() {
     const res = await fetch("/api/settings/notifications");
     const data = await res.json();
     setRecipients(data);
+    if (data.length > 0) {
+      setReminderHour(data[0].reminderHour ?? 22);
+    }
     setLoading(false);
   }
 
@@ -33,7 +44,7 @@ export function NotificationSettings() {
     await fetch("/api/settings/notifications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: newType, destination: newDestination.trim() }),
+      body: JSON.stringify({ type: newType, destination: newDestination.trim(), reminderHour }),
     });
     setNewDestination("");
     await fetchRecipients();
@@ -54,15 +65,44 @@ export function NotificationSettings() {
     await fetchRecipients();
   }
 
+  async function updateReminderHour(hour: number) {
+    setReminderHour(hour);
+    for (const r of recipients) {
+      await fetch("/api/settings/notifications", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: r.id, reminderHour: hour }),
+      });
+    }
+    await fetchRecipients();
+  }
+
   if (loading) {
     return <p className="text-sm text-muted-foreground">Loading notification settings...</p>;
   }
 
+  const selectedLabel = HOUR_OPTIONS.find((o) => o.value === reminderHour)?.label ?? "10:00 PM";
+
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Get a reminder at 10:30 PM ET if you haven&apos;t checked in yet.
+        Get a reminder at {selectedLabel} ET if you haven&apos;t checked in yet.
       </p>
+
+      <div className="flex items-center gap-2">
+        <label className="text-sm font-medium">Reminder time</label>
+        <select
+          value={reminderHour}
+          onChange={(e) => updateReminderHour(Number(e.target.value))}
+          className="text-sm rounded border bg-transparent px-2 py-1.5"
+        >
+          {HOUR_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label} ET
+            </option>
+          ))}
+        </select>
+      </div>
 
       {recipients.length > 0 && (
         <div className="space-y-2">

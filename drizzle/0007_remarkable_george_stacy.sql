@@ -1,0 +1,1 @@
+ALTER TABLE `notification_settings` ADD `reminder_hour` integer DEFAULT 22;

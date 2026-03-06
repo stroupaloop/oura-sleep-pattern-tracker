@@ -90,6 +90,12 @@ export async function syncDateRange(
             lowestHeartRate: sql`excluded.lowest_heart_rate`,
             averageHrv: sql`excluded.average_hrv`,
             temperatureDelta: sql`excluded.temperature_delta`,
+            averageBreath: sql`excluded.average_breath`,
+            restlessPeriods: sql`excluded.restless_periods`,
+            timeInBed: sql`excluded.time_in_bed`,
+            hr5min: sql`excluded.hr_5min`,
+            hrv5min: sql`excluded.hrv_5min`,
+            hypnogram5min: sql`excluded.hypnogram_5min`,
           },
         });
     }

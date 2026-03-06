@@ -383,5 +383,6 @@ export const notificationSettings = sqliteTable("notification_settings", {
   type: text("type").notNull(),
   destination: text("destination").notNull(),
   enabled: integer("enabled").default(1),
+  reminderHour: integer("reminder_hour").default(22),
   createdAt: integer("created_at").notNull(),
 });
