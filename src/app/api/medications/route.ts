@@ -3,13 +3,18 @@ import { db } from "@/lib/db";
 import { medications } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
-    const rows = await db
-      .select()
-      .from(medications)
-      .where(eq(medications.isActive, 1))
-      .orderBy(medications.name);
+    const { searchParams } = new URL(req.url);
+    const all = searchParams.get("all");
+
+    const rows = all
+      ? await db.select().from(medications).orderBy(medications.name)
+      : await db
+          .select()
+          .from(medications)
+          .where(eq(medications.isActive, 1))
+          .orderBy(medications.name);
 
     return NextResponse.json(rows);
   } catch (error) {
@@ -23,7 +28,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, dosage, frequency } = body;
+    const { name, dosage, frequency, startDate } = body;
 
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
@@ -37,6 +42,7 @@ export async function POST(req: NextRequest) {
         dosage: dosage ?? null,
         frequency: frequency ?? "daily",
         isActive: 1,
+        startDate: startDate ?? null,
         createdAt: now,
       })
       .returning();
@@ -53,7 +59,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, name, dosage, frequency, isActive } = body;
+    const { id, name, dosage, frequency, isActive, startDate, endDate } = body;
 
     if (!id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
@@ -64,6 +70,8 @@ export async function PUT(req: NextRequest) {
     if (dosage !== undefined) updates.dosage = dosage;
     if (frequency !== undefined) updates.frequency = frequency;
     if (isActive !== undefined) updates.isActive = isActive;
+    if (startDate !== undefined) updates.startDate = startDate;
+    if (endDate !== undefined) updates.endDate = endDate;
 
     await db.update(medications).set(updates).where(eq(medications.id, id));
 

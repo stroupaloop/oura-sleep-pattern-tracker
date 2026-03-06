@@ -43,6 +43,13 @@
       "when": 1772771405189,
       "tag": "0005_cuddly_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1772773181620,
+      "tag": "0006_striped_lady_ursula",
+      "breakpoints": true
     }
   ]
 }

@@ -184,6 +184,8 @@ export const medications = sqliteTable("medications", {
   dosage: text("dosage"),
   frequency: text("frequency"),
   isActive: integer("is_active").default(1),
+  startDate: text("start_date"),
+  endDate: text("end_date"),
   createdAt: integer("created_at").notNull(),
 });
 
@@ -373,5 +375,13 @@ export const syncLog = sqliteTable("sync_log", {
   recordsFetched: integer("records_fetched"),
   status: text("status").notNull(),
   errorMessage: text("error_message"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const notificationSettings = sqliteTable("notification_settings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  type: text("type").notNull(),
+  destination: text("destination").notNull(),
+  enabled: integer("enabled").default(1),
   createdAt: integer("created_at").notNull(),
 });

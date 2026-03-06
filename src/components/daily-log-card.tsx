@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 
 const EPISODE_STATES = [
   { value: "none", label: "None" },
@@ -21,10 +21,23 @@ const MOODS = [
   { value: 3, label: "Manic", color: "bg-amber-600" },
 ];
 
+const TAGS = [
+  "travel",
+  "illness",
+  "stressor",
+  "alcohol",
+  "medication_change",
+  "exercise",
+  "social",
+  "poor_sleep",
+];
+
 interface Medication {
   id: number;
   name: string;
   dosage: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 interface DailyLogCardProps {
@@ -57,6 +70,23 @@ function shiftDay(dateStr: string, delta: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+function medsForDay(allMeds: Medication[], day: string): Medication[] {
+  return allMeds.filter((med) => {
+    if (med.startDate && med.startDate > day) return false;
+    if (med.endDate && med.endDate < day) return false;
+    return true;
+  });
+}
+
+function parseTags(tags: string | null | undefined): string[] {
+  if (!tags) return [];
+  try {
+    return JSON.parse(tags);
+  } catch {
+    return [];
+  }
+}
+
 export function DailyLogCard({
   initialDay,
   medications,
@@ -78,6 +108,9 @@ export function DailyLogCard({
   const [episodeState, setEpisodeState] = useState<string | null>(
     initialEpisodeState
   );
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [notes, setNotes] = useState("");
+  const [showMore, setShowMore] = useState(false);
   const [savedIndicator, setSavedIndicator] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -98,6 +131,8 @@ export function DailyLogCard({
 
       setMoodScore(moodData?.moodScore ?? null);
       setEpisodeState(moodData?.episodeState ?? null);
+      setSelectedTags(parseTags(moodData?.tags));
+      setNotes(moodData?.notes ?? "");
 
       const newMap: Record<number, boolean> = {};
       if (medData.logs) {
@@ -133,7 +168,12 @@ export function DailyLogCard({
     await fetch("/api/mood", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ day: selectedDay, moodScore: score }),
+      body: JSON.stringify({
+        day: selectedDay,
+        moodScore: score,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+        notes: notes || undefined,
+      }),
     });
     showSaved();
   }
@@ -148,6 +188,8 @@ export function DailyLogCard({
         day: selectedDay,
         moodScore: moodScore ?? 0,
         episodeState: newValue,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+        notes: notes || undefined,
       }),
     });
     showSaved();
@@ -168,8 +210,43 @@ export function DailyLogCard({
     showSaved();
   }
 
+  async function toggleTag(tag: string) {
+    const newTags = selectedTags.includes(tag)
+      ? selectedTags.filter((t) => t !== tag)
+      : [...selectedTags, tag];
+    setSelectedTags(newTags);
+    await fetch("/api/mood", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day: selectedDay,
+        moodScore: moodScore ?? 0,
+        tags: newTags.length > 0 ? newTags : undefined,
+        notes: notes || undefined,
+        episodeState: episodeState ?? undefined,
+      }),
+    });
+    showSaved();
+  }
+
+  async function saveNotes() {
+    await fetch("/api/mood", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day: selectedDay,
+        moodScore: moodScore ?? 0,
+        tags: selectedTags.length > 0 ? selectedTags : undefined,
+        notes: notes || undefined,
+        episodeState: episodeState ?? undefined,
+      }),
+    });
+    showSaved();
+  }
+
   const todayStr = new Date().toISOString().slice(0, 10);
   const isToday = selectedDay === todayStr;
+  const dayMeds = medsForDay(medications, selectedDay);
 
   return (
     <Card>
@@ -242,11 +319,11 @@ export function DailyLogCard({
           </div>
         </div>
 
-        {medications.length > 0 && (
+        {dayMeds.length > 0 && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Medications</p>
             <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-              {medications.map((med) => {
+              {dayMeds.map((med) => {
                 const checked = medStates[med.id] ?? false;
                 return (
                   <label
@@ -297,6 +374,50 @@ export function DailyLogCard({
             })}
           </div>
         </div>
+
+        <button
+          onClick={() => setShowMore(!showMore)}
+          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
+        >
+          {showMore ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {showMore ? "Less" : "More"} (tags, notes)
+        </button>
+
+        {showMore && (
+          <div className="space-y-3 pt-1">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">Tags</p>
+              <div className="flex flex-wrap gap-1.5">
+                {TAGS.map((tag) => (
+                  <button
+                    key={tag}
+                    onClick={() => toggleTag(tag)}
+                    disabled={loading}
+                    className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
+                      selectedTags.includes(tag)
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {tag.replace("_", " ")}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1.5">Notes</p>
+              <textarea
+                placeholder="Any notes? (optional)"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                onBlur={saveNotes}
+                disabled={loading}
+                className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
+                rows={2}
+              />
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

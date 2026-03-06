@@ -141,7 +141,13 @@ export default async function DashboardPage() {
     .limit(1);
 
   let activeMeds = await db
-    .select({ id: medications.id, name: medications.name, dosage: medications.dosage })
+    .select({
+      id: medications.id,
+      name: medications.name,
+      dosage: medications.dosage,
+      startDate: medications.startDate,
+      endDate: medications.endDate,
+    })
     .from(medications)
     .where(eq(medications.isActive, 1));
 
@@ -152,7 +158,13 @@ export default async function DashboardPage() {
       defaults.map((name) => ({ name, createdAt: now }))
     );
     activeMeds = await db
-      .select({ id: medications.id, name: medications.name, dosage: medications.dosage })
+      .select({
+        id: medications.id,
+        name: medications.name,
+        dosage: medications.dosage,
+        startDate: medications.startDate,
+        endDate: medications.endDate,
+      })
       .from(medications)
       .where(eq(medications.isActive, 1));
   }
