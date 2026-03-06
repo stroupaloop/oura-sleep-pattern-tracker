@@ -120,13 +120,13 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
   });
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-3">
       <Card>
-        <CardHeader className="py-2 px-4">
+        <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm">Mood</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-2">
-          <ResponsiveContainer width="100%" height={60}>
+          <ResponsiveContainer width="100%" height={80}>
             <BarChart data={moodData} syncId={syncId}>
               <XAxis dataKey="day" hide />
               <YAxis domain={[-3, 3]} hide />
@@ -153,11 +153,11 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
       </Card>
 
       <Card>
-        <CardHeader className="py-2 px-4">
+        <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm">Sleep Duration</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-2">
-          <ResponsiveContainer width="100%" height={120}>
+          <ResponsiveContainer width="100%" height={160}>
             <AreaChart data={sleepData} syncId={syncId}>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 5%)" />
               <XAxis dataKey="day" hide />
@@ -191,11 +191,11 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
       </Card>
 
       <Card>
-        <CardHeader className="py-2 px-4">
+        <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm">Key Metrics (z-scores)</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-2">
-          <ResponsiveContainer width="100%" height={100}>
+          <ResponsiveContainer width="100%" height={140}>
             <LineChart data={metricsData} syncId={syncId}>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 5%)" />
               <XAxis dataKey="day" hide />
@@ -222,11 +222,11 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
       </Card>
 
       <Card>
-        <CardHeader className="py-2 px-4">
+        <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm">Activity</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-2">
-          <ResponsiveContainer width="100%" height={80}>
+          <ResponsiveContainer width="100%" height={120}>
             <BarChart data={stepsData} syncId={syncId}>
               <XAxis
                 dataKey="day"
@@ -255,7 +255,7 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
       </Card>
 
       <Card>
-        <CardHeader className="py-2 px-4">
+        <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm">Context</CardTitle>
         </CardHeader>
         <CardContent className="px-4 pb-2">

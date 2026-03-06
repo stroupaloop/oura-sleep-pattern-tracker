@@ -4,6 +4,7 @@ import {
   integer,
   real,
   primaryKey,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 // NextAuth required tables
@@ -185,15 +186,21 @@ export const medications = sqliteTable("medications", {
   createdAt: integer("created_at").notNull(),
 });
 
-export const medicationLogs = sqliteTable("medication_logs", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  medicationId: integer("medication_id")
-    .notNull()
-    .references(() => medications.id),
-  day: text("day").notNull(),
-  taken: integer("taken").notNull(),
-  createdAt: integer("created_at").notNull(),
-});
+export const medicationLogs = sqliteTable(
+  "medication_logs",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    medicationId: integer("medication_id")
+      .notNull()
+      .references(() => medications.id),
+    day: text("day").notNull(),
+    taken: integer("taken").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("medication_logs_med_day_uniq").on(table.medicationId, table.day),
+  ]
+);
 
 export const dailySpo2 = sqliteTable("daily_spo2", {
   id: text("id").primaryKey(),

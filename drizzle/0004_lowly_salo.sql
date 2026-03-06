@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `medication_logs_med_day_uniq` ON `medication_logs` (`medication_id`,`day`);

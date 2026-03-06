@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { medicationLogs } from "@/lib/db/schema";
-import { eq, gte, lte, and } from "drizzle-orm";
+import { gte, lte, and } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 
 export async function POST(req: NextRequest) {
@@ -17,12 +17,20 @@ export async function POST(req: NextRequest) {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    await db.insert(medicationLogs).values({
-      medicationId,
-      day,
-      taken: taken ? 1 : 0,
-      createdAt: now,
-    });
+    await db
+      .insert(medicationLogs)
+      .values({
+        medicationId,
+        day,
+        taken: taken ? 1 : 0,
+        createdAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [medicationLogs.medicationId, medicationLogs.day],
+        set: {
+          taken: sql`excluded.taken`,
+        },
+      });
 
     return NextResponse.json({ success: true });
   } catch (error) {

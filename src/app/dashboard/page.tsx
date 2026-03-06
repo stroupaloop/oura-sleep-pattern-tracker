@@ -8,6 +8,8 @@ import {
   dailyReadiness,
   dailyAnalysis,
   dailyMood,
+  medications,
+  medicationLogs,
   episodeAssessments,
 } from "@/lib/db/schema";
 import { desc, sql, and, gte, ne, eq } from "drizzle-orm";
@@ -26,7 +28,7 @@ import { ScoreRing } from "@/components/charts/score-ring";
 import { HypnogramChart } from "@/components/charts/hypnogram-chart";
 import { SleepCompositionBar } from "@/components/charts/sleep-composition-bar";
 import { ResearchTooltip } from "@/components/research-tooltip";
-import { MoodPromptCard } from "@/components/mood-prompt-card";
+import { DailyLogCard } from "@/components/daily-log-card";
 import { ConfidenceIndicator } from "@/components/confidence-indicator";
 import { computeDataConfidence } from "@/lib/analysis/confidence";
 import type { AlertResearchContext } from "@/lib/analysis/episode";
@@ -133,11 +135,32 @@ export default async function DashboardPage() {
 
   const today = format(new Date(), "yyyy-MM-dd");
   const todayMood = await db
-    .select()
+    .select({ moodScore: dailyMood.moodScore })
     .from(dailyMood)
     .where(eq(dailyMood.day, today))
     .limit(1);
-  const hasMoodToday = todayMood.length > 0;
+
+  let activeMeds = await db
+    .select({ id: medications.id, name: medications.name, dosage: medications.dosage })
+    .from(medications)
+    .where(eq(medications.isActive, 1));
+
+  if (activeMeds.length === 0) {
+    const now = Math.floor(Date.now() / 1000);
+    const defaults = ["Lithium", "Lamotrigine", "Wellbutrin", "Trazodone"];
+    await db.insert(medications).values(
+      defaults.map((name) => ({ name, createdAt: now }))
+    );
+    activeMeds = await db
+      .select({ id: medications.id, name: medications.name, dosage: medications.dosage })
+      .from(medications)
+      .where(eq(medications.isActive, 1));
+  }
+
+  const todayMedLogs = await db
+    .select({ medicationId: medicationLogs.medicationId, taken: medicationLogs.taken })
+    .from(medicationLogs)
+    .where(eq(medicationLogs.day, today));
 
   const confidenceData = await computeDataConfidence(30);
 
@@ -243,7 +266,12 @@ export default async function DashboardPage() {
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
       <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
 
-      {!hasMoodToday && <MoodPromptCard today={today} />}
+      <DailyLogCard
+        initialDay={today}
+        medications={activeMeds}
+        initialMood={todayMood[0] ?? null}
+        initialMedLogs={todayMedLogs}
+      />
 
       {highestTier && (
         <div
