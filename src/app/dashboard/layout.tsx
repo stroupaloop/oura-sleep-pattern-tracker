@@ -20,47 +20,6 @@ export default async function DashboardLayout({
             Slothie&apos;s Bipolar Tracker
           </Link>
         </div>
-        <nav className="hidden md:flex items-center gap-6">
-          <Link
-            href="/dashboard"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Overview
-          </Link>
-          <Link
-            href="/dashboard/sleep"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Sleep
-          </Link>
-          <Link
-            href="/dashboard/insights"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Insights
-          </Link>
-          <Link
-            href="/dashboard/lifechart"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Life Chart
-          </Link>
-          <Link
-            href="/dashboard/alerts"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Alerts
-          </Link>
-          <Link
-            href="/dashboard/settings"
-            className="text-sm text-muted-foreground hover:text-foreground"
-          >
-            Settings
-          </Link>
-        </nav>
-        <span className="hidden md:block text-sm text-muted-foreground">
-          {session.user.email}
-        </span>
       </header>
       <main className="flex-1 p-4 md:p-6">{children}</main>
       <footer className="border-t px-4 md:px-6 py-3 text-xs text-muted-foreground">
