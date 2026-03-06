@@ -24,19 +24,26 @@ function LoginForm() {
   const isError = searchParams.get("error");
 
   if (isError) {
+    const errorMessages: Record<string, string> = {
+      Verification: "Your sign-in link has expired or is invalid.",
+      Configuration: "There's a server configuration issue. Please contact support.",
+      AccessDenied: "This email is not authorized to sign in.",
+    };
+    const message = errorMessages[isError] ?? `Something went wrong (${isError}).`;
+
     return (
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Sign in error</CardTitle>
-          <CardDescription>
-            Something went wrong. Error: {isError}. Please try again or check
-            the server configuration.
-          </CardDescription>
+          <CardDescription>{message}</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <Button onClick={() => window.location.assign("/login")} className="w-full">
-            Try again
+            Send a new link
           </Button>
+          <p className="text-xs text-muted-foreground text-center">
+            Tip: Click the link directly from your email app. Copy/pasting into some browsers may not work.
+          </p>
         </CardContent>
       </Card>
     );
@@ -52,8 +59,11 @@ function LoginForm() {
             to log in.
           </CardDescription>
         </CardHeader>
-        {sentTo && (
-          <CardContent>
+        <CardContent className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Tip: Click the link directly from your email app. Copy/pasting into some browsers (like Brave) may not work.
+          </p>
+          {sentTo && (
             <button
               type="button"
               onClick={() => { setSentTo(null); setError(null); }}
@@ -61,8 +71,8 @@ function LoginForm() {
             >
               Use a different email
             </button>
-          </CardContent>
-        )}
+          )}
+        </CardContent>
       </Card>
     );
   }
