@@ -12,7 +12,7 @@ import { AnalyzeAllButton } from "./analyze-button";
 import { DetectionConfig } from "./detection-config";
 import { BipolarTypeSelector } from "./bipolar-type-selector";
 import { MedicationSettings } from "./medication-settings";
-import { NotificationSettings } from "./notification-settings";
+// import { NotificationSettings } from "./notification-settings";
 import {
   Card,
   CardContent,
@@ -74,6 +74,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
+      {/* Notification Preferences hidden — cron not configured on Vercel free tier
       <Card>
         <CardHeader>
           <CardTitle>Notification Preferences</CardTitle>
@@ -85,6 +86,7 @@ export default async function SettingsPage() {
           <NotificationSettings />
         </CardContent>
       </Card>
+      */}
 
       <Card>
         <CardHeader>

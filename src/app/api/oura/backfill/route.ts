@@ -4,9 +4,13 @@ import { syncDateRange } from "@/lib/oura/sync";
 import { format, subDays } from "date-fns";
 
 export async function POST(request: NextRequest) {
-  const session = await auth();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const cronAuth = request.headers.get("authorization");
+  const isCron = process.env.CRON_SECRET && cronAuth === `Bearer ${process.env.CRON_SECRET}`;
+  if (!isCron) {
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
   }
 
   const body = await request.json().catch(() => ({}));
