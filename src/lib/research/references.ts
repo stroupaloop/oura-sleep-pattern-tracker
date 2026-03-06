@@ -112,6 +112,28 @@ export const RESEARCH_REFERENCES: ResearchReference[] = [
   },
 ];
 
+export const METRIC_LIMITATIONS: Record<string, string> = {
+  circadianIS: "Circadian metrics require continuous ring wear for accuracy. IS computed from 3-day activity windows.",
+  circadianIV: "Intradaily variability depends on activity data quality. Non-wear time may skew results.",
+  circadianRA: "Relative amplitude requires full-day activity data. Partial wear reduces accuracy.",
+  withinNightVariability: "Within-night metrics require 5-min HR/HRV data from long sleep periods.",
+  sleepDuration: "Sleep duration is ring-detected and may miss naps or misclassify rest periods.",
+  activityLevel: "Activity data may be incomplete on days with low ring wear time.",
+  temperatureDelta: "Temperature readings require consistent ring placement and wearing the ring to bed.",
+  hrv: "HRV accuracy depends on ring fit and consistent sleep position.",
+  steps: "Step count may undercount certain activities (cycling, swimming).",
+};
+
+export const OURA_LIMITATIONS = [
+  { missing: "Subjective mood", impact: "Cannot distinguish euthymia from hypomania without self-report", mitigation: "Daily mood check-in" },
+  { missing: "Medication adherence", impact: "Cannot assess if sleep changes are medication-related", mitigation: "Medication tracking" },
+  { missing: "Life events/context", impact: "Cannot distinguish episode signals from external stressors", mitigation: "Tags on mood entries" },
+  { missing: "Speech patterns", impact: "Rate/volume changes are strong mania indicators", mitigation: "Acknowledged limitation" },
+  { missing: "Cognitive performance", impact: "Attention/reaction time changes", mitigation: "Acknowledged limitation" },
+  { missing: "Social activity", impact: "Social rhythm disruption is a key trigger", mitigation: "Add as mood tag" },
+  { missing: "Phone usage patterns", impact: "Screen time correlates with episodes", mitigation: "Outside Oura domain" },
+];
+
 export function getReferencesForMetric(metric: string): ResearchReference[] {
   return RESEARCH_REFERENCES.filter((r) =>
     r.relevantMetrics.includes(metric)

@@ -17,6 +17,9 @@ export interface MetricWeights {
   withinNightVariability: number;
   activityLevel: number;
   circadianRegularity: number;
+  mood?: number;
+  energy?: number;
+  irritability?: number;
 }
 
 export type BipolarType = "bp1" | "bp2" | "unspecified";
@@ -88,8 +91,8 @@ export interface DetectionConfigValues {
 }
 
 export const DEFAULT_WEIGHTS: MetricWeights = {
-  sleepDuration: 0.15,
-  bedtimeShift: 0.10,
+  sleepDuration: 0.12,
+  bedtimeShift: 0.08,
   wakeTimeShift: 0.08,
   hrv: 0.12,
   heartRate: 0.08,
@@ -102,6 +105,9 @@ export const DEFAULT_WEIGHTS: MetricWeights = {
   withinNightVariability: 0.06,
   activityLevel: 0.04,
   circadianRegularity: 0.04,
+  mood: 0.08,
+  energy: 0.04,
+  irritability: 0.04,
 };
 
 export const DEFAULT_ABSOLUTE_THRESHOLDS: AbsoluteThresholds = {

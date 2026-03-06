@@ -6,6 +6,9 @@ import {
   dailyResilience,
   dailySleep,
   dailyReadiness,
+  dailyMood,
+  dailySpo2,
+  medicationLogs,
 } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
 import { DetectionConfigValues, BipolarType } from "./config";
@@ -59,12 +62,23 @@ export async function reprocessAll(
   const allResilienceRows = await db.select().from(dailyResilience).orderBy(dailyResilience.day);
   const allDailySleepRows = await db.select().from(dailySleep).orderBy(dailySleep.day);
   const allReadinessRows = await db.select().from(dailyReadiness).orderBy(dailyReadiness.day);
+  const allMoodRows = await db.select().from(dailyMood).orderBy(dailyMood.day);
+  const allSpo2Rows = await db.select().from(dailySpo2).orderBy(dailySpo2.day);
+  const allMedLogRows = await db.select().from(medicationLogs).orderBy(medicationLogs.day);
 
   const activityByDay = new Map(allActivityRows.map((r) => [r.day, r]));
   const stressByDay = new Map(allStressRows.map((r) => [r.day, r]));
   const resilienceByDay = new Map(allResilienceRows.map((r) => [r.day, r]));
   const dailySleepByDay = new Map(allDailySleepRows.map((r) => [r.day, r]));
   const readinessByDay = new Map(allReadinessRows.map((r) => [r.day, r]));
+  const moodByDay = new Map(allMoodRows.map((r) => [r.day, r]));
+  const spo2ByDay = new Map(allSpo2Rows.map((r) => [r.day, r]));
+  const medLogsByDay = new Map<string, typeof allMedLogRows>();
+  for (const log of allMedLogRows) {
+    const existing = medLogsByDay.get(log.day) ?? [];
+    existing.push(log);
+    medLogsByDay.set(log.day, existing);
+  }
 
   const allMetricsByDay = new Map<string, DayMetrics>();
   for (const row of allSleepRows) {
@@ -113,6 +127,20 @@ export async function reprocessAll(
           m.readinessScore = readiness.score ?? 0;
           m.temperatureDeviation = readiness.temperatureDeviation ?? 0;
           m.temperatureTrendDeviation = readiness.temperatureTrendDeviation ?? 0;
+        }
+
+        const mood = moodByDay.get(row.day);
+        if (mood) {
+          m.moodScore = mood.moodScore;
+          m.energyScore = mood.energyScore ?? null;
+          m.irritabilityScore = mood.irritabilityScore ?? null;
+          m.anxietyScore = mood.anxietyScore ?? null;
+        }
+
+        const spo2 = spo2ByDay.get(row.day);
+        if (spo2) {
+          m.averageSpo2 = spo2.averageSpo2 ?? null;
+          m.breathingDisturbanceIndex = spo2.breathingDisturbanceIndex ?? null;
         }
 
         allMetricsByDay.set(row.day, m);

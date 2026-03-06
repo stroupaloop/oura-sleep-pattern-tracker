@@ -44,6 +44,12 @@ export interface DayMetrics {
   circadianIS: number;
   circadianIV: number;
   circadianRA: number;
+  moodScore: number | null;
+  energyScore: number | null;
+  irritabilityScore: number | null;
+  anxietyScore: number | null;
+  averageSpo2: number | null;
+  breathingDisturbanceIndex: number | null;
 }
 
 export interface DailyAnalysisResult {
@@ -104,6 +110,12 @@ export function extractMetrics(
     circadianIS: 0,
     circadianIV: 0,
     circadianRA: 0,
+    moodScore: null,
+    energyScore: null,
+    irritabilityScore: null,
+    anxietyScore: null,
+    averageSpo2: null,
+    breathingDisturbanceIndex: null,
   };
 }
 
@@ -292,6 +304,26 @@ export function computeDailyAnalysis(
     circadianIS: metrics.circadianIS > 0 ? zScore(metrics.circadianIS, baselines.circadianIS, stds.circadianIS) : 0,
   };
 
+  const moodVals = priorMetrics.filter((m) => m.moodScore != null).map((m) => m.moodScore!);
+  const energyVals = priorMetrics.filter((m) => m.energyScore != null).map((m) => m.energyScore!);
+  const irritabilityVals = priorMetrics.filter((m) => m.irritabilityScore != null).map((m) => m.irritabilityScore!);
+
+  if (moodVals.length >= 5) {
+    baselines.mood = trimmedMean(moodVals, trimPct);
+    stds.mood = standardDeviation(moodVals, baselines.mood);
+    zScores.mood = metrics.moodScore != null ? zScore(metrics.moodScore, baselines.mood, stds.mood) : 0;
+  }
+  if (energyVals.length >= 5) {
+    baselines.energy = trimmedMean(energyVals, trimPct);
+    stds.energy = standardDeviation(energyVals, baselines.energy);
+    zScores.energy = metrics.energyScore != null ? zScore(metrics.energyScore, baselines.energy, stds.energy) : 0;
+  }
+  if (irritabilityVals.length >= 5) {
+    baselines.irritability = trimmedMean(irritabilityVals, trimPct);
+    stds.irritability = standardDeviation(irritabilityVals, baselines.irritability);
+    zScores.irritability = metrics.irritabilityScore != null ? zScore(metrics.irritabilityScore, baselines.irritability, stds.irritability) : 0;
+  }
+
   const withinNightVarZ = Math.max(
     zScores.withinNightHrvCV,
     zScores.withinNightHrCV,
@@ -325,7 +357,10 @@ export function computeDailyAnalysis(
     effectiveWeights.remPct * Math.abs(zScores.remPct) +
     effectiveWeights.withinNightVariability * Math.abs(withinNightVarZ) +
     effectiveWeights.activityLevel * Math.abs(activityZ) +
-    effectiveWeights.circadianRegularity * Math.abs(circadianZ);
+    effectiveWeights.circadianRegularity * Math.abs(circadianZ) +
+    (effectiveWeights.mood ?? 0) * Math.abs(zScores.mood ?? 0) +
+    (effectiveWeights.energy ?? 0) * Math.abs(zScores.energy ?? 0) +
+    (effectiveWeights.irritability ?? 0) * Math.abs(zScores.irritability ?? 0);
 
   const hrvCrash =
     metrics.avgHrv > 0 &&
@@ -481,6 +516,12 @@ export async function upsertDailyAnalysis(result: DailyAnalysisResult) {
       circadianIS: metrics.circadianIS || null,
       circadianIV: metrics.circadianIV || null,
       circadianRA: metrics.circadianRA || null,
+      averageSpo2: metrics.averageSpo2 ?? null,
+      breathingDisturbanceIndex: metrics.breathingDisturbanceIndex ?? null,
+      moodScore: metrics.moodScore ?? null,
+      energyScore: metrics.energyScore ?? null,
+      irritabilityScore: metrics.irritabilityScore ?? null,
+      anxietyScore: metrics.anxietyScore ?? null,
       createdAt: now,
     })
     .onConflictDoUpdate({
@@ -547,6 +588,12 @@ export async function upsertDailyAnalysis(result: DailyAnalysisResult) {
         circadianIS: sql`excluded.circadian_is`,
         circadianIV: sql`excluded.circadian_iv`,
         circadianRA: sql`excluded.circadian_ra`,
+        averageSpo2: sql`excluded.average_spo2`,
+        breathingDisturbanceIndex: sql`excluded.breathing_disturbance_index`,
+        moodScore: sql`excluded.mood_score`,
+        energyScore: sql`excluded.energy_score`,
+        irritabilityScore: sql`excluded.irritability_score`,
+        anxietyScore: sql`excluded.anxiety_score`,
       },
     });
 }

@@ -6,6 +6,9 @@ import {
   dailyActivity,
   dailyStress,
   dailyResilience,
+  dailySpo2,
+  workouts,
+  sessionsOura,
   syncLog,
 } from "@/lib/db/schema";
 import { ouraFetch } from "./client";
@@ -16,6 +19,9 @@ import type {
   OuraDailyActivity,
   OuraDailyStress,
   OuraDailyResilience,
+  OuraDailySpO2,
+  OuraWorkout,
+  OuraSession,
 } from "./types";
 import { sql } from "drizzle-orm";
 
@@ -237,6 +243,84 @@ export async function syncDateRange(
         });
     }
     totalRecords += resilienceData.length;
+
+    const [spo2Data, workoutData, sessionData] = await Promise.all([
+      ouraFetch<OuraDailySpO2>("v2/usercollection/daily_spo2", params).catch(() => [] as OuraDailySpO2[]),
+      ouraFetch<OuraWorkout>("v2/usercollection/workout", params).catch(() => [] as OuraWorkout[]),
+      ouraFetch<OuraSession>("v2/usercollection/session", params).catch(() => [] as OuraSession[]),
+    ]);
+
+    for (const s of spo2Data) {
+      await db
+        .insert(dailySpo2)
+        .values({
+          id: s.id,
+          day: s.day,
+          averageSpo2: s.spo2_percentage?.average ?? null,
+          breathingDisturbanceIndex: s.breathing_disturbance_index,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: dailySpo2.id,
+          set: {
+            averageSpo2: sql`excluded.average_spo2`,
+            breathingDisturbanceIndex: sql`excluded.breathing_disturbance_index`,
+          },
+        });
+    }
+    totalRecords += spo2Data.length;
+
+    for (const w of workoutData) {
+      await db
+        .insert(workouts)
+        .values({
+          id: w.id,
+          day: w.day,
+          activity: w.activity,
+          calories: w.calories,
+          distance: w.distance,
+          intensity: w.intensity,
+          startDatetime: w.start_datetime,
+          endDatetime: w.end_datetime,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: workouts.id,
+          set: {
+            activity: sql`excluded.activity`,
+            calories: sql`excluded.calories`,
+            distance: sql`excluded.distance`,
+            intensity: sql`excluded.intensity`,
+          },
+        });
+    }
+    totalRecords += workoutData.length;
+
+    for (const s of sessionData) {
+      await db
+        .insert(sessionsOura)
+        .values({
+          id: s.id,
+          day: s.day,
+          type: s.type,
+          mood: s.mood,
+          startDatetime: s.start_datetime,
+          endDatetime: s.end_datetime,
+          avgHr: s.heart_rate?.average ?? null,
+          avgHrv: s.heart_rate_variability?.average ?? null,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: sessionsOura.id,
+          set: {
+            type: sql`excluded.type`,
+            mood: sql`excluded.mood`,
+            avgHr: sql`excluded.avg_hr`,
+            avgHrv: sql`excluded.avg_hrv`,
+          },
+        });
+    }
+    totalRecords += sessionData.length;
 
     await db.insert(syncLog).values({
       syncType,

@@ -104,3 +104,34 @@ export interface OuraDailyResilience {
     stress: number | null;
   };
 }
+
+export interface OuraDailySpO2 {
+  id: string;
+  day: string;
+  spo2_percentage: {
+    average: number | null;
+  } | null;
+  breathing_disturbance_index: number | null;
+}
+
+export interface OuraWorkout {
+  id: string;
+  day: string;
+  activity: string | null;
+  calories: number | null;
+  distance: number | null;
+  intensity: string | null;
+  start_datetime: string | null;
+  end_datetime: string | null;
+}
+
+export interface OuraSession {
+  id: string;
+  day: string;
+  type: string | null;
+  mood: string | null;
+  start_datetime: string | null;
+  end_datetime: string | null;
+  heart_rate: { average: number | null } | null;
+  heart_rate_variability: { average: number | null } | null;
+}

@@ -163,6 +163,70 @@ export const dailyResilience = sqliteTable("daily_resilience", {
   createdAt: integer("created_at").notNull(),
 });
 
+export const dailyMood = sqliteTable("daily_mood", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  day: text("day").notNull().unique(),
+  moodScore: integer("mood_score").notNull(),
+  energyScore: integer("energy_score"),
+  irritabilityScore: integer("irritability_score"),
+  anxietyScore: integer("anxiety_score"),
+  sleepSubjective: integer("sleep_subjective"),
+  notes: text("notes"),
+  tags: text("tags"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const medications = sqliteTable("medications", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  dosage: text("dosage"),
+  frequency: text("frequency"),
+  isActive: integer("is_active").default(1),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const medicationLogs = sqliteTable("medication_logs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  medicationId: integer("medication_id")
+    .notNull()
+    .references(() => medications.id),
+  day: text("day").notNull(),
+  taken: integer("taken").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const dailySpo2 = sqliteTable("daily_spo2", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull().unique(),
+  averageSpo2: real("average_spo2"),
+  breathingDisturbanceIndex: real("breathing_disturbance_index"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const workouts = sqliteTable("workouts", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull(),
+  activity: text("activity"),
+  calories: real("calories"),
+  distance: real("distance"),
+  intensity: text("intensity"),
+  startDatetime: text("start_datetime"),
+  endDatetime: text("end_datetime"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const sessionsOura = sqliteTable("sessions_oura", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull(),
+  type: text("type"),
+  mood: text("mood"),
+  startDatetime: text("start_datetime"),
+  endDatetime: text("end_datetime"),
+  avgHr: real("avg_hr"),
+  avgHrv: real("avg_hrv"),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const dailyAnalysis = sqliteTable("daily_analysis", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   day: text("day").notNull().unique(),
@@ -227,6 +291,16 @@ export const dailyAnalysis = sqliteTable("daily_analysis", {
   circadianIS: real("circadian_is"),
   circadianIV: real("circadian_iv"),
   circadianRA: real("circadian_ra"),
+  averageSpo2: real("average_spo2"),
+  breathingDisturbanceIndex: real("breathing_disturbance_index"),
+  workoutCount: integer("workout_count"),
+  workoutCalories: real("workout_calories"),
+  meditationMinutes: real("meditation_minutes"),
+  moodScore: integer("mood_score"),
+  energyScore: integer("energy_score"),
+  irritabilityScore: integer("irritability_score"),
+  anxietyScore: integer("anxiety_score"),
+  medicationAdherence: real("medication_adherence"),
   createdAt: integer("created_at").notNull(),
 });
 

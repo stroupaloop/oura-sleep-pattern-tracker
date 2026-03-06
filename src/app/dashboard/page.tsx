@@ -7,9 +7,10 @@ import {
   dailySleep,
   dailyReadiness,
   dailyAnalysis,
+  dailyMood,
   episodeAssessments,
 } from "@/lib/db/schema";
-import { desc, sql, and, gte, ne } from "drizzle-orm";
+import { desc, sql, and, gte, ne, eq } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,9 @@ import { ScoreRing } from "@/components/charts/score-ring";
 import { HypnogramChart } from "@/components/charts/hypnogram-chart";
 import { SleepCompositionBar } from "@/components/charts/sleep-composition-bar";
 import { ResearchTooltip } from "@/components/research-tooltip";
+import { MoodPromptCard } from "@/components/mood-prompt-card";
+import { ConfidenceIndicator } from "@/components/confidence-indicator";
+import { computeDataConfidence } from "@/lib/analysis/confidence";
 import type { AlertResearchContext } from "@/lib/analysis/episode";
 
 function formatDuration(seconds: number | null): string {
@@ -127,6 +131,16 @@ export default async function DashboardPage() {
     )
     .orderBy(desc(episodeAssessments.day));
 
+  const today = format(new Date(), "yyyy-MM-dd");
+  const todayMood = await db
+    .select()
+    .from(dailyMood)
+    .where(eq(dailyMood.day, today))
+    .limit(1);
+  const hasMoodToday = todayMood.length > 0;
+
+  const confidenceData = await computeDataConfidence(30);
+
   const thirtyDaysAgo = format(subDays(new Date(), 30), "yyyy-MM-dd");
   const recentAnalysis = await db
     .select({
@@ -228,6 +242,8 @@ export default async function DashboardPage() {
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
       <h1 className="text-2xl md:text-3xl font-bold">Dashboard</h1>
+
+      {!hasMoodToday && <MoodPromptCard today={today} />}
 
       {highestTier && (
         <div
@@ -369,6 +385,8 @@ export default async function DashboardPage() {
       {compositionData.length > 0 && (
         <SleepCompositionBar data={compositionData} />
       )}
+
+      <ConfidenceIndicator data={confidenceData} />
     </div>
   );
 }

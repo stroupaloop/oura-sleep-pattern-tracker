@@ -34,6 +34,18 @@ export default async function DashboardLayout({
             Sleep
           </Link>
           <Link
+            href="/dashboard/insights"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            Insights
+          </Link>
+          <Link
+            href="/dashboard/lifechart"
+            className="text-sm text-muted-foreground hover:text-foreground"
+          >
+            Life Chart
+          </Link>
+          <Link
             href="/dashboard/alerts"
             className="text-sm text-muted-foreground hover:text-foreground"
           >

@@ -13,7 +13,11 @@ import {
 const navLinks = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/sleep", label: "Sleep" },
+  { href: "/dashboard/insights", label: "Insights" },
+  { href: "/dashboard/lifechart", label: "Life Chart" },
   { href: "/dashboard/alerts", label: "Alerts" },
+  { href: "/dashboard/checkin", label: "Check-in" },
+  { href: "/dashboard/reports", label: "Reports" },
   { href: "/dashboard/settings", label: "Settings" },
 ];
 
