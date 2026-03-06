@@ -257,13 +257,16 @@ export async function syncDateRange(
     ]);
 
     for (const s of spo2Data) {
+      const avg = s.spo2_percentage?.average ?? null;
+      const bdi = s.breathing_disturbance_index ?? null;
+      if (avg === null && bdi === null) continue;
       await db
         .insert(dailySpo2)
         .values({
           id: s.id,
           day: s.day,
-          averageSpo2: s.spo2_percentage?.average ?? null,
-          breathingDisturbanceIndex: s.breathing_disturbance_index,
+          averageSpo2: avg,
+          breathingDisturbanceIndex: bdi,
           createdAt: now,
         })
         .onConflictDoUpdate({
