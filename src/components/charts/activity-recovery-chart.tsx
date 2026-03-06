@@ -95,6 +95,12 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
           <CardDescription>Daily steps + active minutes</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
+            <span className="font-medium text-blue-300">What to watch for:</span>{" "}
+            Sudden drops in daily steps and active minutes can signal the onset of a depressive episode (detected up
+            to 7 days ahead). Conversely, unusually high activity with reduced recovery may accompany hypomania. Watch
+            the stress-to-recovery ratio — sustained high stress with low recovery is a red flag.
+          </div>
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={data}>
               <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />

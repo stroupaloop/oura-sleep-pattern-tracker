@@ -75,6 +75,12 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
           Within-night sleep variability detected hypomanic episodes ~3 days before onset with 94% sensitivity
           (Luykx et al., 2025)
         </div>
+        <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
+          <span className="font-medium text-blue-300">What to watch for:</span>{" "}
+          Spikes in HRV CV or HR CV mean your heart rate was unusually erratic during sleep — research links this to
+          hypomanic episodes ~3 days before onset. Rising fragmentation means more frequent sleep stage transitions
+          (restless sleep). Watch for 2–3 consecutive days of elevated values rather than single-night spikes.
+        </div>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />

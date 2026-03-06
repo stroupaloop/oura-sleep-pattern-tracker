@@ -64,6 +64,12 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
+          <span className="font-medium text-blue-300">What to watch for:</span>{" "}
+          Rising CV values mean your sleep schedule is becoming more irregular. Bedtime CV is especially important —
+          erratic bedtimes disrupt circadian rhythm and are an early warning sign. Activity variability predicts
+          depressive episodes up to 7 days before onset. Stable, low CV values generally indicate euthymia.
+        </div>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
