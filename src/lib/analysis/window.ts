@@ -203,6 +203,19 @@ export function analyzeWindow(
     confidence += lowResilience.length * 0.4;
   }
 
+  if (dirResult.dominant) {
+    const alignedDays = windowData.filter((d) => {
+      const ep = d.metrics.episodeState;
+      if (!ep || ep === "none") return false;
+      if (dirResult.dominant === "hypo" && (ep === "depressive" || ep === "mixed")) return true;
+      if (dirResult.dominant === "hyper" && (ep === "hypomanic" || ep === "mixed")) return true;
+      return false;
+    }).length;
+    if (alignedDays >= 2) {
+      confidence += alignedDays * 0.8;
+    }
+  }
+
   const profile = getBipolarProfile(bipolarType);
   if (dirResult.dominant === "hypo") {
     confidence *= (1.0 - bounce * profile.hypoBounceBackMultiplier);

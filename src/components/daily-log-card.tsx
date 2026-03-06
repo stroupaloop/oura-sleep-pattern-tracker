@@ -4,6 +4,13 @@ import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 
+const EPISODE_STATES = [
+  { value: "none", label: "None" },
+  { value: "depressive", label: "Depressive" },
+  { value: "hypomanic", label: "Hypo/Manic" },
+  { value: "mixed", label: "Mixed" },
+];
+
 const MOODS = [
   { value: -3, label: "Depressed", color: "bg-blue-600" },
   { value: -2, label: "Low", color: "bg-blue-500" },
@@ -25,6 +32,7 @@ interface DailyLogCardProps {
   medications: Medication[];
   initialMood: { moodScore: number } | null;
   initialMedLogs: { medicationId: number; taken: number }[];
+  initialEpisodeState: string | null;
 }
 
 function formatDisplayDate(dateStr: string): string {
@@ -54,6 +62,7 @@ export function DailyLogCard({
   medications,
   initialMood,
   initialMedLogs,
+  initialEpisodeState,
 }: DailyLogCardProps) {
   const [selectedDay, setSelectedDay] = useState(initialDay);
   const [moodScore, setMoodScore] = useState<number | null>(
@@ -66,6 +75,9 @@ export function DailyLogCard({
     }
     return map;
   });
+  const [episodeState, setEpisodeState] = useState<string | null>(
+    initialEpisodeState
+  );
   const [savedIndicator, setSavedIndicator] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -85,6 +97,7 @@ export function DailyLogCard({
       const medData = await medRes.json();
 
       setMoodScore(moodData?.moodScore ?? null);
+      setEpisodeState(moodData?.episodeState ?? null);
 
       const newMap: Record<number, boolean> = {};
       if (medData.logs) {
@@ -121,6 +134,21 @@ export function DailyLogCard({
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ day: selectedDay, moodScore: score }),
+    });
+    showSaved();
+  }
+
+  async function saveEpisode(value: string) {
+    const newValue = episodeState === value ? null : value;
+    setEpisodeState(newValue);
+    await fetch("/api/mood", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        day: selectedDay,
+        moodScore: moodScore ?? 0,
+        episodeState: newValue,
+      }),
     });
     showSaved();
   }
@@ -246,6 +274,29 @@ export function DailyLogCard({
             </div>
           </div>
         )}
+
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5">Episode</p>
+          <div className="flex gap-1.5 flex-wrap">
+            {EPISODE_STATES.map((ep) => {
+              const isSelected = episodeState === ep.value;
+              return (
+                <button
+                  key={ep.value}
+                  onClick={() => saveEpisode(ep.value)}
+                  disabled={loading}
+                  className={`px-3 py-1 text-xs rounded-full transition-all ${
+                    isSelected
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {ep.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

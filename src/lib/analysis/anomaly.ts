@@ -50,6 +50,7 @@ export interface DayMetrics {
   anxietyScore: number | null;
   averageSpo2: number | null;
   breathingDisturbanceIndex: number | null;
+  episodeState: string | null;
 }
 
 export interface DailyAnalysisResult {
@@ -116,6 +117,7 @@ export function extractMetrics(
     anxietyScore: null,
     averageSpo2: null,
     breathingDisturbanceIndex: null,
+    episodeState: null,
   };
 }
 
@@ -129,6 +131,8 @@ function classifyDirection(
   const abs = config.absoluteThresholds;
   const profile = getBipolarProfile(bipolarType);
 
+  const ep = metrics.episodeState;
+
   const hyperSignals =
     (zScores.sleep < -t ? 1 : 0) +
     (Math.abs(zScores.bedtime) > t && zScores.sleep < 0 ? 1 : 0) +
@@ -137,7 +141,8 @@ function classifyDirection(
     (zScores.hrv > t ? 1 : 0) +
     (zScores.activity > t ? 1 : 0) +
     (zScores.withinNightVar > t ? 1 : 0) +
-    (zScores.circadianIV > t ? 1 : 0);
+    (zScores.circadianIV > t ? 1 : 0) +
+    (ep === "hypomanic" || ep === "mixed" ? 1 : 0);
 
   const hypoSignals =
     (zScores.sleep > t ? 1 : 0) +
@@ -151,7 +156,8 @@ function classifyDirection(
     (metrics.avgHrv > 0 && metrics.avgHrv < abs.minHrv ? 1 : 0) +
     (metrics.efficiency > 0 && metrics.efficiency < abs.minEfficiency ? 1 : 0) +
     (zScores.activity < -t ? 1 : 0) +
-    (zScores.circadianIV < -t ? 1 : 0);
+    (zScores.circadianIV < -t ? 1 : 0) +
+    (ep === "depressive" || ep === "mixed" ? 1 : 0);
 
   const hyperThreshold = bipolarType === "bp2" ? 2 : 2;
   if (hyperSignals >= hyperThreshold) return "hyper";
@@ -362,6 +368,10 @@ export function computeDailyAnalysis(
     (effectiveWeights.energy ?? 0) * Math.abs(zScores.energy ?? 0) +
     (effectiveWeights.irritability ?? 0) * Math.abs(zScores.irritability ?? 0);
 
+  if (metrics.episodeState && metrics.episodeState !== "none") {
+    compositeScore += 0.3;
+  }
+
   const hrvCrash =
     metrics.avgHrv > 0 &&
     baselines.hrv > 0 &&
@@ -522,6 +532,7 @@ export async function upsertDailyAnalysis(result: DailyAnalysisResult) {
       energyScore: metrics.energyScore ?? null,
       irritabilityScore: metrics.irritabilityScore ?? null,
       anxietyScore: metrics.anxietyScore ?? null,
+      selfReportedEpisode: metrics.episodeState ?? null,
       createdAt: now,
     })
     .onConflictDoUpdate({
@@ -594,6 +605,7 @@ export async function upsertDailyAnalysis(result: DailyAnalysisResult) {
         energyScore: sql`excluded.energy_score`,
         irritabilityScore: sql`excluded.irritability_score`,
         anxietyScore: sql`excluded.anxiety_score`,
+        selfReportedEpisode: sql`excluded.self_reported_episode`,
       },
     });
 }

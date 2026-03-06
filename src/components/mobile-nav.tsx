@@ -33,7 +33,7 @@ export function MobileNav({ email }: { email?: string | null }) {
         </Button>
       </SheetTrigger>
       <SheetContent side="left" className="w-64">
-        <nav className="flex flex-col gap-4 mt-8">
+        <nav className="flex flex-col gap-4 mt-8 px-4">
           <Link
             href="/dashboard"
             className="font-semibold text-lg"
@@ -53,7 +53,7 @@ export function MobileNav({ email }: { email?: string | null }) {
           ))}
         </nav>
         {email && (
-          <p className="text-sm text-muted-foreground mt-8">{email}</p>
+          <p className="text-sm text-muted-foreground mt-8 px-4">{email}</p>
         )}
       </SheetContent>
     </Sheet>

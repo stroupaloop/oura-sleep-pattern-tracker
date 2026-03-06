@@ -135,6 +135,7 @@ export async function reprocessAll(
           m.energyScore = mood.energyScore ?? null;
           m.irritabilityScore = mood.irritabilityScore ?? null;
           m.anxietyScore = mood.anxietyScore ?? null;
+          m.episodeState = mood.episodeState ?? null;
         }
 
         const spo2 = spo2ByDay.get(row.day);

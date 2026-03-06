@@ -135,7 +135,7 @@ export default async function DashboardPage() {
 
   const today = format(new Date(), "yyyy-MM-dd");
   const todayMood = await db
-    .select({ moodScore: dailyMood.moodScore })
+    .select({ moodScore: dailyMood.moodScore, episodeState: dailyMood.episodeState })
     .from(dailyMood)
     .where(eq(dailyMood.day, today))
     .limit(1);
@@ -271,6 +271,7 @@ export default async function DashboardPage() {
         medications={activeMeds}
         initialMood={todayMood[0] ?? null}
         initialMedLogs={todayMedLogs}
+        initialEpisodeState={todayMood[0]?.episodeState ?? null}
       />
 
       {highestTier && (

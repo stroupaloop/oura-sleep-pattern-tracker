@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { day, moodScore, energyScore, irritabilityScore, anxietyScore, sleepSubjective, notes, tags } = body;
+    const { day, moodScore, energyScore, irritabilityScore, anxietyScore, sleepSubjective, notes, tags, episodeState } = body;
 
     if (!day || moodScore === undefined || moodScore === null) {
       return NextResponse.json({ error: "day and moodScore are required" }, { status: 400 });
@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
         sleepSubjective: sleepSubjective ?? null,
         notes: notes ?? null,
         tags: tags ? JSON.stringify(tags) : null,
+        episodeState: episodeState ?? null,
         createdAt: now,
       })
       .onConflictDoUpdate({
@@ -41,6 +42,7 @@ export async function POST(req: NextRequest) {
           sleepSubjective: sql`excluded.sleep_subjective`,
           notes: sql`excluded.notes`,
           tags: sql`excluded.tags`,
+          episodeState: sql`excluded.episode_state`,
         },
       });
 

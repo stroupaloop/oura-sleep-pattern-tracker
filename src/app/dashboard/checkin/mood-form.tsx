@@ -20,6 +20,13 @@ const MOOD_OPTIONS = [
   { value: 3, label: "Very High", color: "bg-amber-600" },
 ];
 
+const EPISODE_STATES = [
+  { value: "none", label: "None" },
+  { value: "depressive", label: "Depressive" },
+  { value: "hypomanic", label: "Hypo/Manic" },
+  { value: "mixed", label: "Mixed" },
+];
+
 const TAGS = [
   "travel",
   "illness",
@@ -47,6 +54,7 @@ interface MoodFormProps {
     sleepSubjective: number | null;
     notes: string | null;
     tags: string | null;
+    episodeState: string | null;
   } | null;
   medications: MedicationItem[];
 }
@@ -57,6 +65,7 @@ export function MoodForm({ today, existingMood, medications }: MoodFormProps) {
   const [irritability, setIrritability] = useState(existingMood?.irritabilityScore ?? 1);
   const [anxiety, setAnxiety] = useState(existingMood?.anxietyScore ?? 1);
   const [sleepSubjective, setSleepSubjective] = useState(existingMood?.sleepSubjective ?? 3);
+  const [episodeState, setEpisodeState] = useState<string | null>(existingMood?.episodeState ?? null);
   const [notes, setNotes] = useState(existingMood?.notes ?? "");
   const [selectedTags, setSelectedTags] = useState<string[]>(() => {
     try {
@@ -88,6 +97,7 @@ export function MoodForm({ today, existingMood, medications }: MoodFormProps) {
           sleepSubjective: showOptional ? sleepSubjective : undefined,
           notes: notes || undefined,
           tags: selectedTags.length > 0 ? selectedTags : undefined,
+          episodeState: episodeState ?? undefined,
         }),
       });
 
@@ -153,6 +163,30 @@ export function MoodForm({ today, existingMood, medications }: MoodFormProps) {
 
       {moodScore !== null && (
         <>
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Episode State</CardTitle>
+              <CardDescription>Do you think you&apos;re in an episode right now?</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-2 flex-wrap">
+                {EPISODE_STATES.map((ep) => (
+                  <button
+                    key={ep.value}
+                    onClick={() => setEpisodeState(episodeState === ep.value ? null : ep.value)}
+                    className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
+                      episodeState === ep.value
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {ep.label}
+                  </button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
           <button
             onClick={() => setShowOptional(!showOptional)}
             className="text-sm text-muted-foreground hover:text-foreground transition-colors"
