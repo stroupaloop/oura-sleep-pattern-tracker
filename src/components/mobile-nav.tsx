@@ -18,6 +18,7 @@ const navLinks = [
   { href: "/dashboard/alerts", label: "Alerts" },
   { href: "/dashboard/checkin", label: "Check-in" },
   { href: "/dashboard/reports", label: "Reports" },
+  { href: "/dashboard/methodology", label: "Methodology" },
   { href: "/dashboard/settings", label: "Settings" },
 ];
 
@@ -39,7 +40,7 @@ export function MobileNav({ email }: { email?: string | null }) {
             className="font-semibold text-lg"
             onClick={() => setOpen(false)}
           >
-            Slothie&apos;s Bipolar Tracker
+            🦥 Slothie&apos;s Bipolar Tracker
           </Link>
           {navLinks.map((link) => (
             <Link

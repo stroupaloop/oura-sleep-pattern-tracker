@@ -17,7 +17,7 @@ export default async function DashboardLayout({
         <div className="flex items-center gap-2">
           <MobileNav email={session.user.email} />
           <Link href="/dashboard" className="font-semibold">
-            Slothie&apos;s Bipolar Tracker
+            🦥 Slothie&apos;s Bipolar Tracker
           </Link>
         </div>
       </header>
@@ -25,7 +25,14 @@ export default async function DashboardLayout({
       <footer className="border-t px-4 md:px-6 py-3 text-xs text-muted-foreground">
         This tool tracks sleep patterns for personal awareness. It is not a
         medical device and does not provide diagnoses. Discuss concerns with
-        your healthcare provider.
+        your healthcare provider.{" "}
+        <Link
+          href="/dashboard/methodology"
+          className="underline hover:text-foreground"
+        >
+          Learn about our approach
+        </Link>
+        .
       </footer>
     </div>
   );

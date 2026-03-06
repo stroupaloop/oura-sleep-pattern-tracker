@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { dailyAnalysis, episodeAssessments } from "@/lib/db/schema";
 import { desc, gte, ne, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
+import Link from "next/link";
 import { InsightsTabs } from "./insights-tabs";
 
 export default async function InsightsPage() {
@@ -58,7 +59,13 @@ export default async function InsightsPage() {
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Insights</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          Deep analysis of 16+ computed metrics from the last 90 days
+          Deep analysis of 16+ computed metrics from the last 90 days.{" "}
+          <Link
+            href="/dashboard/methodology"
+            className="underline hover:text-foreground"
+          >
+            Learn how we calculate these metrics
+          </Link>
         </p>
       </div>
 

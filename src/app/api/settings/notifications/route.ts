@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { notificationSettings } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export async function GET() {
   try {
@@ -28,15 +28,9 @@ export async function POST(req: NextRequest) {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    await db
-      .insert(notificationSettings)
-      .values({
-        type,
-        destination,
-        enabled: 1,
-        reminderHour: reminderHour ?? 22,
-        createdAt: now,
-      });
+    await db.run(
+      sql`INSERT INTO notification_settings (type, destination, enabled, reminder_hour, created_at) VALUES (${type}, ${destination}, 1, ${reminderHour ?? 22}, ${now})`
+    );
 
     return NextResponse.json({ success: true });
   } catch (error) {
