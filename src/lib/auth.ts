@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Resend from "next-auth/providers/resend";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { db } from "@/lib/db";
 import {
   users,
   accounts,
@@ -9,9 +10,7 @@ import {
 } from "@/lib/db/schema";
 
 function getAdapter() {
-  // Defer db import to avoid DrizzleAdapter calling is() during build
-  // when TURSO_DATABASE_URL is not yet available
-  const { db } = require("@/lib/db");
+  if (!db) throw new Error("Database not initialized – check TURSO_DATABASE_URL");
   return DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,

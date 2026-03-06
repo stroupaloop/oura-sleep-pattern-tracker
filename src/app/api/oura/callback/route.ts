@@ -12,6 +12,14 @@ export async function GET(request: NextRequest) {
 
   const code = request.nextUrl.searchParams.get("code");
   const error = request.nextUrl.searchParams.get("error");
+  const state = request.nextUrl.searchParams.get("state");
+  const storedState = request.cookies.get("oura_oauth_state")?.value;
+
+  if (!storedState || storedState !== state) {
+    return NextResponse.redirect(
+      new URL("/dashboard/settings?error=state_mismatch", request.url)
+    );
+  }
 
   if (error) {
     return NextResponse.redirect(
@@ -38,9 +46,17 @@ export async function GET(request: NextRequest) {
       updatedAt: now,
     });
 
-    return NextResponse.redirect(
+    const response = NextResponse.redirect(
       new URL("/dashboard/settings?connected=1", request.url)
     );
+    response.cookies.set("oura_oauth_state", "", {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: 0,
+    });
+    return response;
   } catch (err) {
     console.error("Oura OAuth callback error:", err);
     return NextResponse.redirect(

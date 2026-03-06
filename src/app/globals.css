@@ -124,3 +124,25 @@
     @apply bg-background text-foreground;
   }
 }
+
+.recharts-cartesian-grid line {
+  stroke: oklch(1 0 0 / 8%);
+}
+
+.recharts-text {
+  fill: oklch(0.708 0 0);
+}
+
+.recharts-default-tooltip {
+  background-color: oklch(0.205 0 0) !important;
+  border-color: oklch(1 0 0 / 10%) !important;
+  border-radius: 0.5rem !important;
+}
+
+.recharts-tooltip-label {
+  color: oklch(0.985 0 0) !important;
+}
+
+.recharts-tooltip-item {
+  color: oklch(0.85 0 0) !important;
+}

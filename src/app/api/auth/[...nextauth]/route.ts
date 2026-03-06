@@ -1,5 +1,7 @@
 import { handlers } from "@/lib/auth";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(...args: Parameters<typeof handlers.GET>) {
   try {
     return await handlers.GET(...args);
