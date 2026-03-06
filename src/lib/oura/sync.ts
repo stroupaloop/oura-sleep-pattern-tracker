@@ -71,9 +71,9 @@ export async function syncDateRange(
           averageBreath: s.average_breath,
           restlessPeriods: s.restless_periods,
           timeInBed: s.time_in_bed,
-          hr5min: s.hr_5min ? JSON.stringify(s.hr_5min) : null,
-          hrv5min: s.rmssd_5min ? JSON.stringify(s.rmssd_5min) : null,
-          hypnogram5min: s.hypnogram_5min,
+          hr5min: s.heart_rate?.items ? JSON.stringify(s.heart_rate.items) : null,
+          hrv5min: s.hrv?.items ? JSON.stringify(s.hrv.items) : null,
+          hypnogram5min: s.sleep_phase_5_min ?? null,
           createdAt: now,
         })
         .onConflictDoUpdate({

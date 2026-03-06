@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { syncDateRange } from "@/lib/oura/sync";
+import { reprocessAll } from "@/lib/analysis/reprocess";
+import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { format, subDays } from "date-fns";
 
 export async function GET(request: NextRequest) {
@@ -15,10 +17,19 @@ export async function GET(request: NextRequest) {
   const endDate = format(today, "yyyy-MM-dd");
 
   try {
-    const result = await syncDateRange(startDate, endDate, "cron");
+    const syncResult = await syncDateRange(startDate, endDate, "cron");
+
+    const config = await loadActiveConfig();
+    const bipolarType = await loadBipolarType();
+    const analysisResult = await reprocessAll(config, startDate, endDate, bipolarType);
+
     return NextResponse.json({
       success: true,
-      records: result.records,
+      records: syncResult.records,
+      analysis: {
+        daysProcessed: analysisResult.daysProcessed,
+        episodes: analysisResult.episodes,
+      },
       startDate,
       endDate,
     });

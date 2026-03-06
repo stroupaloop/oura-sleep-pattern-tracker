@@ -23,9 +23,9 @@ export interface OuraSleepPeriod {
   average_breath: number | null;
   restless_periods: number | null;
   time_in_bed: number | null;
-  hr_5min: number[] | null;
-  rmssd_5min: number[] | null;
-  hypnogram_5min: string | null;
+  heart_rate: { interval: number; items: (number | null)[]; timestamp: string } | null;
+  hrv: { interval: number; items: (number | null)[]; timestamp: string } | null;
+  sleep_phase_5_min: string | null;
 }
 
 export interface OuraDailySleep {

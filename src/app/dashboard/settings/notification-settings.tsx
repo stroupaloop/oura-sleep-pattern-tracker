@@ -22,6 +22,7 @@ export function NotificationSettings() {
   const [newType, setNewType] = useState<"email" | "sms">("email");
   const [newDestination, setNewDestination] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [reminderHour, setReminderHour] = useState(22);
 
   async function fetchRecipients() {
@@ -41,13 +42,24 @@ export function NotificationSettings() {
   async function addRecipient() {
     if (!newDestination.trim()) return;
     setSaving(true);
-    await fetch("/api/settings/notifications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: newType, destination: newDestination.trim(), reminderHour }),
-    });
-    setNewDestination("");
-    await fetchRecipients();
+    setError(null);
+    try {
+      const res = await fetch("/api/settings/notifications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: newType, destination: newDestination.trim(), reminderHour }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: "Failed to save" }));
+        setError(data.error || `Failed to save (${res.status})`);
+        setSaving(false);
+        return;
+      }
+      setNewDestination("");
+      await fetchRecipients();
+    } catch {
+      setError("Network error — could not save");
+    }
     setSaving(false);
   }
 
@@ -133,6 +145,10 @@ export function NotificationSettings() {
             </div>
           ))}
         </div>
+      )}
+
+      {error && (
+        <p className="text-sm text-red-400">{error}</p>
       )}
 
       <div className="border rounded-md p-3 space-y-2">

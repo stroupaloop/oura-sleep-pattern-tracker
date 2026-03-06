@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
     }
 
     const now = Math.floor(Date.now() / 1000);
-    const result = await db
+    await db
       .insert(notificationSettings)
       .values({
         type,
@@ -36,10 +36,9 @@ export async function POST(req: NextRequest) {
         enabled: 1,
         reminderHour: reminderHour ?? 22,
         createdAt: now,
-      })
-      .returning();
+      });
 
-    return NextResponse.json(result[0]);
+    return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },

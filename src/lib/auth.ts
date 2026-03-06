@@ -25,6 +25,7 @@ const allowedEmails = (process.env.ALLOWED_EMAILS ?? "")
   .filter(Boolean);
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,
   adapter: process.env.TURSO_DATABASE_URL ? getAdapter() : undefined,
   providers: [

@@ -17,6 +17,8 @@ import {
 function LoginForm() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [sentTo, setSentTo] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const searchParams = useSearchParams();
   const isVerify = searchParams.get("verify") === "1";
   const isError = searchParams.get("error");
@@ -40,16 +42,27 @@ function LoginForm() {
     );
   }
 
-  if (isVerify) {
+  if (sentTo || isVerify) {
     return (
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Check your email</CardTitle>
           <CardDescription>
-            A sign-in link has been sent to your email address. Click the link
+            A sign-in link has been sent to{sentTo ? <> <strong>{sentTo}</strong></> : " your email address"}. Click the link
             to log in.
           </CardDescription>
         </CardHeader>
+        {sentTo && (
+          <CardContent>
+            <button
+              type="button"
+              onClick={() => { setSentTo(null); setError(null); }}
+              className="text-sm text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              Use a different email
+            </button>
+          </CardContent>
+        )}
       </Card>
     );
   }
@@ -57,8 +70,19 @@ function LoginForm() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    await signIn("resend", { email, callbackUrl: "/dashboard" });
-    setLoading(false);
+    setError(null);
+    try {
+      const result = await signIn("resend", { email, redirect: false, callbackUrl: "/dashboard" });
+      if (result?.error) {
+        setError(result.error);
+      } else {
+        setSentTo(email);
+      }
+    } catch {
+      setError("Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -82,6 +106,9 @@ function LoginForm() {
               required
             />
           </div>
+          {error && (
+            <p className="text-sm text-destructive">{error}</p>
+          )}
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Sending..." : "Send magic link"}
           </Button>
