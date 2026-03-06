@@ -74,9 +74,12 @@ export function DetectionConfig() {
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          {preset === "low" && "Fewer alerts — only strong, sustained patterns trigger warnings."}
-          {preset === "medium" && "Balanced — aligns with DSM-5 episode duration criteria."}
-          {preset === "high" && "More sensitive — catches earlier signals but may flag more confounders."}
+          {preset === "low" && "Fewer alerts \u2014 only strong, sustained patterns trigger warnings."}
+          {preset === "medium" && "Balanced \u2014 aligns with DSM-5 episode duration criteria."}
+          {preset === "high" && "More sensitive \u2014 catches earlier signals but may flag more confounders."}
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Detection now uses {">"}25 metrics including within-night sleep variability, circadian rhythm analysis, and activity patterns. Your condition profile (set above) adjusts metric weights automatically.
         </p>
       </div>
 

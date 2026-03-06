@@ -62,3 +62,45 @@ export interface OuraDailyReadiness {
     sleep_balance: number | null;
   };
 }
+
+export interface OuraDailyActivity {
+  id: string;
+  day: string;
+  score: number | null;
+  active_calories: number | null;
+  total_calories: number | null;
+  steps: number | null;
+  high_activity_time: number | null;
+  medium_activity_time: number | null;
+  low_activity_time: number | null;
+  sedentary_time: number | null;
+  resting_time: number | null;
+  non_wear_time: number | null;
+  average_met_minutes: number | null;
+  class_5min: string | null;
+  met: {
+    interval: number;
+    items: number[];
+    timestamp: string;
+  } | null;
+  timestamp: string;
+}
+
+export interface OuraDailyStress {
+  id: string;
+  day: string;
+  stress_high: number | null;
+  recovery_high: number | null;
+  day_summary: string | null;
+}
+
+export interface OuraDailyResilience {
+  id: string;
+  day: string;
+  level: string | null;
+  contributors: {
+    sleep_recovery: number | null;
+    daytime_recovery: number | null;
+    stress: number | null;
+  };
+}

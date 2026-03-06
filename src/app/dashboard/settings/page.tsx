@@ -1,12 +1,16 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
-import { oauthTokens, syncLog } from "@/lib/db/schema";
+import { oauthTokens, syncLog, users } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
+import { auth } from "@/lib/auth";
+import { eq } from "drizzle-orm";
 import { OuraConnectButton } from "./oura-connect-button";
+import { DisconnectButton } from "./disconnect-button";
 import { BackfillButton, ManualSyncButton } from "./sync-buttons";
 import { AnalyzeAllButton } from "./analyze-button";
 import { DetectionConfig } from "./detection-config";
+import { BipolarTypeSelector } from "./bipolar-type-selector";
 import {
   Card,
   CardContent,
@@ -16,6 +20,7 @@ import {
 } from "@/components/ui/card";
 
 export default async function SettingsPage() {
+  const session = await auth();
   const tokens = await db.select().from(oauthTokens).limit(1);
   const isConnected = tokens.length > 0;
   const tokenExpiry = isConnected
@@ -29,9 +34,31 @@ export default async function SettingsPage() {
     .orderBy(desc(syncLog.createdAt))
     .limit(5);
 
+  let bipolarType = "unspecified";
+  if (session?.user?.id) {
+    const userRows = await db
+      .select({ bipolarType: users.bipolarType })
+      .from(users)
+      .where(eq(users.id, session.user.id))
+      .limit(1);
+    bipolarType = userRows[0]?.bipolarType ?? "unspecified";
+  }
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-3xl font-bold">Settings</h1>
+      <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Condition Profile</CardTitle>
+          <CardDescription>
+            Help tune detection to your needs.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BipolarTypeSelector initial={bipolarType} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -61,6 +88,7 @@ export default async function SettingsPage() {
                 </p>
               )}
               {isExpired && <OuraConnectButton label="Reconnect Oura" />}
+              <DisconnectButton />
             </div>
           ) : (
             <OuraConnectButton label="Connect Oura Ring" />
@@ -113,7 +141,7 @@ export default async function SettingsPage() {
               {recentSyncs.map((sync) => (
                 <div
                   key={sync.id}
-                  className="flex justify-between text-sm border-b pb-2"
+                  className="flex flex-col sm:flex-row sm:justify-between gap-1 text-sm border-b pb-2"
                 >
                   <span>
                     {sync.syncType} ({sync.startDate} to {sync.endDate})

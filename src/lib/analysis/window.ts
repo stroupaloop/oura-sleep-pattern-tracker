@@ -1,5 +1,5 @@
 import { coefficientOfVariation, zScore, standardDeviation, trimmedMean } from "./baseline";
-import { DetectionConfigValues } from "./config";
+import { DetectionConfigValues, BipolarType, getBipolarProfile } from "./config";
 import { DailyAnalysisResult } from "./anomaly";
 
 export interface WindowResult {
@@ -86,7 +86,8 @@ export function analyzeWindow(
   windowDays: number,
   allPriorMetrics: DailyAnalysisResult[],
   config: DetectionConfigValues,
-  expectedDays?: number
+  expectedDays?: number,
+  bipolarType: BipolarType = "unspecified"
 ): WindowResult | null {
   if (dailyResults.length < Math.min(windowDays, 2)) return null;
 
@@ -161,10 +162,52 @@ export function analyzeWindow(
     confidence += bedtimeCVZ * 0.8;
   }
 
+  const withinNightVarValues = windowData
+    .map((d) => d.zScores.withinNightVar ?? 0)
+    .filter((v) => v !== 0);
+  if (withinNightVarValues.length > 0) {
+    const withinNightVarTrend = trendSlope(withinNightVarValues);
+    if (withinNightVarTrend > 0) {
+      confidence += withinNightVarTrend * 1.5;
+    }
+  }
+
+  const activityZScores = windowData
+    .map((d) => d.zScores.activity ?? 0)
+    .filter((v) => v !== 0);
+  if (activityZScores.length > 0) {
+    const avgActivityZ = activityZScores.reduce((s, v) => s + v, 0) / activityZScores.length;
+    confidence += Math.abs(avgActivityZ) * 1.0;
+  }
+
+  const circadianIVZScores = windowData
+    .map((d) => d.zScores.circadianIV ?? 0)
+    .filter((v) => v !== 0);
+  if (circadianIVZScores.length > 0) {
+    const avgCircadianIVZ = circadianIVZScores.reduce((s, v) => s + v, 0) / circadianIVZScores.length;
+    if (avgCircadianIVZ > 0) {
+      confidence += avgCircadianIVZ * 1.0;
+    }
+  }
+
+  const stressfulDays = windowData.filter((d) => d.metrics.stressHigh > 3600);
+  if (stressfulDays.length >= 2) {
+    confidence += stressfulDays.length * 0.4;
+  }
+
+  const resilienceLevels = windowData
+    .map((d) => d.metrics.resilienceLevel)
+    .filter((l): l is string => l !== null);
+  const lowResilience = resilienceLevels.filter((l) => l === "limited" || l === "adequate");
+  if (lowResilience.length >= 2) {
+    confidence += lowResilience.length * 0.4;
+  }
+
+  const profile = getBipolarProfile(bipolarType);
   if (dirResult.dominant === "hypo") {
-    confidence *= (1.0 - bounce * 0.35);
+    confidence *= (1.0 - bounce * profile.hypoBounceBackMultiplier);
   } else {
-    confidence *= (1.0 - bounce * 0.7);
+    confidence *= (1.0 - bounce * profile.hyperBounceBackMultiplier);
   }
   confidence *= windowMultiplier;
 
@@ -193,13 +236,14 @@ export function analyzeAllWindows(
   dailyResults: DailyAnalysisResult[],
   allPriorResults: DailyAnalysisResult[],
   config: DetectionConfigValues,
-  expectedDaysByWindow?: Record<number, number>
+  expectedDaysByWindow?: Record<number, number>,
+  bipolarType: BipolarType = "unspecified"
 ): { best: WindowResult | null; all: WindowResult[] } {
   const windows: WindowResult[] = [];
 
   for (const size of [3, 5, 7]) {
     const expected = expectedDaysByWindow?.[size];
-    const result = analyzeWindow(dailyResults, size, allPriorResults, config, expected);
+    const result = analyzeWindow(dailyResults, size, allPriorResults, config, expected, bipolarType);
     if (result) windows.push(result);
   }
 

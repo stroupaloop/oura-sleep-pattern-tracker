@@ -15,6 +15,7 @@ export const users = sqliteTable("user", {
   email: text("email").notNull(),
   emailVerified: integer("emailVerified", { mode: "timestamp_ms" }),
   image: text("image"),
+  bipolarType: text("bipolar_type").default("unspecified"),
 });
 
 export const accounts = sqliteTable(
@@ -124,6 +125,44 @@ export const dailyReadiness = sqliteTable("daily_readiness", {
   createdAt: integer("created_at").notNull(),
 });
 
+export const dailyActivity = sqliteTable("daily_activity", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull().unique(),
+  score: integer("score"),
+  activeCalories: integer("active_calories"),
+  totalCalories: integer("total_calories"),
+  steps: integer("steps"),
+  highActivityTime: integer("high_activity_time"),
+  mediumActivityTime: integer("medium_activity_time"),
+  lowActivityTime: integer("low_activity_time"),
+  sedentaryTime: integer("sedentary_time"),
+  restingTime: integer("resting_time"),
+  nonWearTime: integer("non_wear_time"),
+  averageMetMinutes: real("average_met_minutes"),
+  class5min: text("class_5min"),
+  met: text("met"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const dailyStress = sqliteTable("daily_stress", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull().unique(),
+  stressHigh: integer("stress_high"),
+  recoveryHigh: integer("recovery_high"),
+  daySummary: text("day_summary"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const dailyResilience = sqliteTable("daily_resilience", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull().unique(),
+  level: text("level"),
+  contributorSleepRecovery: integer("contributor_sleep_recovery"),
+  contributorDaytimeRecovery: integer("contributor_daytime_recovery"),
+  contributorStress: integer("contributor_stress"),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const dailyAnalysis = sqliteTable("daily_analysis", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   day: text("day").notNull().unique(),
@@ -164,6 +203,30 @@ export const dailyAnalysis = sqliteTable("daily_analysis", {
   isAnomaly: integer("is_anomaly"),
   anomalyDirection: text("anomaly_direction"),
   anomalyNotes: text("anomaly_notes"),
+  withinNightHrvCV: real("within_night_hrv_cv"),
+  withinNightHrCV: real("within_night_hr_cv"),
+  sleepStageTransitions: integer("sleep_stage_transitions"),
+  hypnogramFragmentation: real("hypnogram_fragmentation"),
+  lowestHeartRate: integer("lowest_heart_rate"),
+  averageBreath: real("average_breath"),
+  activityScore: integer("activity_score"),
+  steps: integer("steps"),
+  activeMinutes: integer("active_minutes"),
+  sedentaryMinutes: integer("sedentary_minutes"),
+  activityClassFragmentation: real("activity_class_fragmentation"),
+  stressHigh: integer("stress_high"),
+  recoveryHigh: integer("recovery_high"),
+  resilienceLevel: text("resilience_level"),
+  sleepTimingScore: integer("sleep_timing_score"),
+  readinessScore: integer("readiness_score"),
+  temperatureDeviation: real("temperature_deviation"),
+  temperatureTrendDeviation: real("temperature_trend_deviation"),
+  dayToDaySleepCV: real("day_to_day_sleep_cv"),
+  dayToDayBedtimeCV: real("day_to_day_bedtime_cv"),
+  dayToDayWakeCV: real("day_to_day_wake_cv"),
+  circadianIS: real("circadian_is"),
+  circadianIV: real("circadian_iv"),
+  circadianRA: real("circadian_ra"),
   createdAt: integer("created_at").notNull(),
 });
 
@@ -191,6 +254,7 @@ export const episodeAssessments = sqliteTable("episode_assessments", {
   consecutiveConcerningDays: integer("consecutive_concerning_days"),
   primaryDrivers: text("primary_drivers"),
   summary: text("summary"),
+  researchContext: text("research_context"),
   configVersion: integer("config_version"),
   createdAt: integer("created_at").notNull(),
 });

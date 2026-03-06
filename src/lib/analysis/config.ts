@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { detectionConfig } from "@/lib/db/schema";
+import { detectionConfig, users } from "@/lib/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 
 export interface MetricWeights {
@@ -12,6 +12,53 @@ export interface MetricWeights {
   temperatureDelta: number;
   restlessPeriods: number;
   sleepEfficiency: number;
+  deepPct: number;
+  remPct: number;
+  withinNightVariability: number;
+  activityLevel: number;
+  circadianRegularity: number;
+}
+
+export type BipolarType = "bp1" | "bp2" | "unspecified";
+
+export interface BipolarProfile {
+  hyperBounceBackMultiplier: number;
+  hypoBounceBackMultiplier: number;
+  hyperSignalThreshold: number;
+  variabilityWeight: number;
+  activityWeight: number;
+  circadianWeight: number;
+}
+
+const BIPOLAR_PROFILES: Record<BipolarType, BipolarProfile> = {
+  bp1: {
+    hyperBounceBackMultiplier: 0.35,
+    hypoBounceBackMultiplier: 0.35,
+    hyperSignalThreshold: 1.5,
+    variabilityWeight: 0.10,
+    activityWeight: 0.04,
+    circadianWeight: 0.04,
+  },
+  bp2: {
+    hyperBounceBackMultiplier: 0.50,
+    hypoBounceBackMultiplier: 0.35,
+    hyperSignalThreshold: 1.0,
+    variabilityWeight: 0.20,
+    activityWeight: 0.04,
+    circadianWeight: 0.04,
+  },
+  unspecified: {
+    hyperBounceBackMultiplier: 0.50,
+    hypoBounceBackMultiplier: 0.35,
+    hyperSignalThreshold: 1.0,
+    variabilityWeight: 0.10,
+    activityWeight: 0.04,
+    circadianWeight: 0.04,
+  },
+};
+
+export function getBipolarProfile(type: BipolarType): BipolarProfile {
+  return BIPOLAR_PROFILES[type] ?? BIPOLAR_PROFILES.unspecified;
 }
 
 export interface AbsoluteThresholds {
@@ -41,15 +88,20 @@ export interface DetectionConfigValues {
 }
 
 export const DEFAULT_WEIGHTS: MetricWeights = {
-  sleepDuration: 0.20,
-  bedtimeShift: 0.15,
-  wakeTimeShift: 0.10,
-  hrv: 0.15,
-  heartRate: 0.10,
-  latency: 0.08,
-  temperatureDelta: 0.10,
-  restlessPeriods: 0.05,
-  sleepEfficiency: 0.07,
+  sleepDuration: 0.15,
+  bedtimeShift: 0.10,
+  wakeTimeShift: 0.08,
+  hrv: 0.12,
+  heartRate: 0.08,
+  latency: 0.06,
+  temperatureDelta: 0.08,
+  restlessPeriods: 0.03,
+  sleepEfficiency: 0.06,
+  deepPct: 0.05,
+  remPct: 0.05,
+  withinNightVariability: 0.06,
+  activityLevel: 0.04,
+  circadianRegularity: 0.04,
 };
 
 export const DEFAULT_ABSOLUTE_THRESHOLDS: AbsoluteThresholds = {
@@ -140,6 +192,14 @@ export async function loadActiveConfig(): Promise<DetectionConfigValues> {
     metricWeights: weights,
     absoluteThresholds: DEFAULT_ABSOLUTE_THRESHOLDS,
   };
+}
+
+export async function loadBipolarType(): Promise<BipolarType> {
+  const rows = await db.select({ bipolarType: users.bipolarType }).from(users).limit(1);
+  if (rows.length === 0) return "unspecified";
+  const val = rows[0].bipolarType;
+  if (val === "bp1" || val === "bp2") return val;
+  return "unspecified";
 }
 
 export async function createConfig(

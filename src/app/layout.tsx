@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sleep Pattern Tracker",
-  description: "Track sleep patterns using Oura Ring data for early detection of mood episode indicators.",
+  title: "Slothie's Bipolar Tracker",
+  description: "Track sleep and activity patterns using Oura Ring data for early detection of bipolar mood episode indicators.",
 };
 
 export default function RootLayout({
@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

@@ -1,11 +1,22 @@
 import { db } from "@/lib/db";
 import { episodeAssessments } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
-import { DetectionConfigValues } from "./config";
+import { DetectionConfigValues, BipolarType, getBipolarProfile } from "./config";
 import { DailyAnalysisResult } from "./anomaly";
 import { WindowResult, analyzeAllWindows } from "./window";
+import { getReferencesForDirection } from "@/lib/research/references";
 
 export type Tier = "none" | "watch" | "warning" | "alert";
+
+export interface AlertResearchContext {
+  headline: string;
+  whatWeDetected: string[];
+  whyItMatters: string;
+  whatYouCanDo: string[];
+  researchIds: string[];
+  confidence: string;
+  disclaimer: string;
+}
 
 export interface EpisodeResult {
   day: string;
@@ -18,6 +29,7 @@ export interface EpisodeResult {
   confounderLikelihood: number;
   primaryDrivers: string[];
   summary: string;
+  researchContext: AlertResearchContext | null;
   configVersion: number;
 }
 
@@ -75,6 +87,24 @@ function computePrimaryDrivers(
     const dir = z.latency > 0 ? "increased" : "decreased";
     drivers.push(`Sleep onset latency ${dir}`);
   }
+  if ((z.withinNightVar ?? 0) > 1.5) {
+    drivers.push("Within-night sleep variability elevated");
+  }
+  if (Math.abs(z.activity ?? 0) > 1.5) {
+    const dir = (z.activity ?? 0) > 0 ? "increased" : "decreased";
+    drivers.push(`Activity level ${dir}`);
+  }
+  if ((z.circadianIV ?? 0) > 1.5) {
+    drivers.push("Circadian rhythm fragmentation increased");
+  }
+  if (Math.abs(z.deepPct ?? 0) > 1.5) {
+    const dir = (z.deepPct ?? 0) < 0 ? "decreased" : "increased";
+    drivers.push(`Deep sleep ${dir}`);
+  }
+  if (Math.abs(z.remPct ?? 0) > 1.5) {
+    const dir = (z.remPct ?? 0) < 0 ? "decreased" : "increased";
+    drivers.push(`REM sleep ${dir}`);
+  }
 
   return drivers;
 }
@@ -89,7 +119,7 @@ function buildSummary(
 ): string {
   if (tier === "none") {
     if (confounderLikelihood > 0.5) {
-      return "Isolated disruption detected — likely a confounder (alcohol, travel, late night). Pattern has resolved.";
+      return "Isolated disruption detected \u2014 likely a confounder (alcohol, travel, late night). Pattern has resolved.";
     }
     return "Sleep patterns within normal range.";
   }
@@ -117,10 +147,84 @@ function buildSummary(
   }
 
   if (confounderLikelihood > 0.3) {
-    parts.push(`Note: ${(confounderLikelihood * 100).toFixed(0)}% confounder probability — pattern may resolve.`);
+    parts.push(`Note: ${(confounderLikelihood * 100).toFixed(0)}% confounder probability \u2014 pattern may resolve.`);
   }
 
   return parts.join(" ");
+}
+
+function buildResearchContext(
+  tier: Tier,
+  direction: "hyper" | "hypo" | null,
+  confidence: number,
+  consecutiveDays: number,
+  drivers: string[],
+  result: DailyAnalysisResult
+): AlertResearchContext | null {
+  if (tier === "none") return null;
+
+  const dirLabel = direction === "hyper" ? "hypomanic" : direction === "hypo" ? "depressive" : "mood";
+
+  const headline =
+    `Your sleep patterns over the last ${consecutiveDays} day${consecutiveDays !== 1 ? "s" : ""} show signs consistent with early ${dirLabel} changes`;
+
+  const whatWeDetected: string[] = [];
+  const z = result.zScores;
+  const m = result.metrics;
+  const b = result.baselines;
+
+  if (Math.abs(z.sleep) > 1.0) {
+    const delta = Math.abs(m.totalSleepMinutes - b.sleep);
+    const dir = z.sleep < 0 ? "decreased" : "increased";
+    whatWeDetected.push(`Sleep duration ${dir} ${delta.toFixed(0)} min ${z.sleep < 0 ? "below" : "above"} your baseline`);
+  }
+  if ((z.withinNightVar ?? 0) > 1.0) {
+    whatWeDetected.push(`Within-night sleep variability increased ${((z.withinNightVar ?? 0)).toFixed(1)}x above baseline`);
+  }
+  if (Math.abs(z.hrv) > 1.0) {
+    const dir = z.hrv > 0 ? "elevated" : "decreased";
+    whatWeDetected.push(`HRV ${dir} compared to your baseline`);
+  }
+  if (Math.abs(z.bedtime) > 1.0) {
+    const dir = z.bedtime > 0 ? "later" : "earlier";
+    whatWeDetected.push(`Bedtime shifted ${dir} than usual`);
+  }
+  if (Math.abs(z.temperature) > 1.0) {
+    whatWeDetected.push(`Temperature ${z.temperature > 0 ? "elevated" : "lower"} compared to baseline`);
+  }
+  if (Math.abs(z.activity ?? 0) > 1.0) {
+    whatWeDetected.push(`Activity levels ${(z.activity ?? 0) > 0 ? "increased" : "decreased"} from baseline`);
+  }
+
+  const refs = direction ? getReferencesForDirection(direction) : [];
+  const topRef = refs[0];
+  const whyItMatters = topRef
+    ? `${topRef.finding} (${topRef.authors}, ${topRef.year})`
+    : "Research shows that changes in sleep and activity patterns can signal mood episode onset days before symptoms become apparent.";
+
+  const whatYouCanDo =
+    direction === "hyper"
+      ? [
+          "Track your mood and energy levels today",
+          "Maintain your regular bedtime tonight",
+          "Reach out to your care team if you notice changes",
+        ]
+      : [
+          "Try to maintain regular sleep and wake times",
+          "Consider light physical activity today",
+          "Reach out to your care team if you notice changes",
+        ];
+
+  return {
+    headline,
+    whatWeDetected: whatWeDetected.slice(0, 4),
+    whyItMatters,
+    whatYouCanDo,
+    researchIds: refs.slice(0, 3).map((r) => r.id),
+    confidence: confidence >= 5 ? "high" : confidence >= 2 ? "moderate" : "low",
+    disclaimer:
+      "This tool tracks patterns for personal awareness. It is not a medical device and does not provide diagnoses. Always consult your healthcare provider for medical decisions.",
+  };
 }
 
 export function assessEpisode(
@@ -128,9 +232,10 @@ export function assessEpisode(
   recentDailyResults: DailyAnalysisResult[],
   allPriorResults: DailyAnalysisResult[],
   config: DetectionConfigValues,
-  expectedDaysByWindow?: Record<number, number>
+  expectedDaysByWindow?: Record<number, number>,
+  bipolarType: BipolarType = "unspecified"
 ): EpisodeResult {
-  const { best, all: _all } = analyzeAllWindows(recentDailyResults, allPriorResults, config, expectedDaysByWindow);
+  const { best, all: _all } = analyzeAllWindows(recentDailyResults, allPriorResults, config, expectedDaysByWindow, bipolarType);
 
   const consecutiveDays = countConsecutiveConcerning(recentDailyResults, config.concernThreshold);
   const latestResult = recentDailyResults[recentDailyResults.length - 1];
@@ -147,6 +252,7 @@ export function assessEpisode(
       confounderLikelihood: 0,
       primaryDrivers: [],
       summary: "Insufficient data for episode assessment.",
+      researchContext: null,
       configVersion: config.version,
     };
   }
@@ -173,6 +279,7 @@ export function assessEpisode(
     tier = "watch";
   }
 
+  const profile = getBipolarProfile(bipolarType);
   const effectiveBounceThreshold = best.direction === "hypo"
     ? Math.min(config.bounceBackThreshold + 0.2, 1.0)
     : config.bounceBackThreshold;
@@ -182,6 +289,7 @@ export function assessEpisode(
 
   const direction = best.direction;
   const summary = buildSummary(tier, direction, confidence, confounderLikelihood, consecutiveDays, drivers);
+  const researchContext = buildResearchContext(tier, direction, confidence, consecutiveDays, drivers, latestResult);
 
   return {
     day,
@@ -194,6 +302,7 @@ export function assessEpisode(
     confounderLikelihood,
     primaryDrivers: drivers,
     summary,
+    researchContext,
     configVersion: config.version,
   };
 }
@@ -227,6 +336,7 @@ export async function upsertEpisodeAssessment(result: EpisodeResult) {
       consecutiveConcerningDays: result.consecutiveConcerningDays,
       primaryDrivers: JSON.stringify(result.primaryDrivers),
       summary: result.summary,
+      researchContext: result.researchContext ? JSON.stringify(result.researchContext) : null,
       configVersion: result.configVersion,
       createdAt: now,
     })
@@ -254,6 +364,7 @@ export async function upsertEpisodeAssessment(result: EpisodeResult) {
         consecutiveConcerningDays: sql`excluded.consecutive_concerning_days`,
         primaryDrivers: sql`excluded.primary_drivers`,
         summary: sql`excluded.summary`,
+        researchContext: sql`excluded.research_context`,
         configVersion: sql`excluded.config_version`,
       },
     });

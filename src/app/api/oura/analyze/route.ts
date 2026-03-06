@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { loadActiveConfig } from "@/lib/analysis/config";
+import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { reprocessAll } from "@/lib/analysis/reprocess";
 
 export async function POST() {
@@ -11,7 +11,8 @@ export async function POST() {
 
   try {
     const config = await loadActiveConfig();
-    const result = await reprocessAll(config);
+    const bipolarType = await loadBipolarType();
+    const result = await reprocessAll(config, undefined, undefined, bipolarType);
 
     return NextResponse.json({
       success: true,

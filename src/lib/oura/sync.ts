@@ -3,6 +3,9 @@ import {
   sleepPeriods,
   dailySleep,
   dailyReadiness,
+  dailyActivity,
+  dailyStress,
+  dailyResilience,
   syncLog,
 } from "@/lib/db/schema";
 import { ouraFetch } from "./client";
@@ -10,6 +13,9 @@ import type {
   OuraSleepPeriod,
   OuraDailySleep,
   OuraDailyReadiness,
+  OuraDailyActivity,
+  OuraDailyStress,
+  OuraDailyResilience,
 } from "./types";
 import { sql } from "drizzle-orm";
 
@@ -28,6 +34,12 @@ export async function syncDateRange(
       ouraFetch<OuraSleepPeriod>("v2/usercollection/sleep", params),
       ouraFetch<OuraDailySleep>("v2/usercollection/daily_sleep", params),
       ouraFetch<OuraDailyReadiness>("v2/usercollection/daily_readiness", params),
+    ]);
+
+    const [activityData, stressData, resilienceData] = await Promise.all([
+      ouraFetch<OuraDailyActivity>("v2/usercollection/daily_activity", params).catch(() => [] as OuraDailyActivity[]),
+      ouraFetch<OuraDailyStress>("v2/usercollection/daily_stress", params).catch(() => [] as OuraDailyStress[]),
+      ouraFetch<OuraDailyResilience>("v2/usercollection/daily_resilience", params).catch(() => [] as OuraDailyResilience[]),
     ]);
 
     for (const s of sleepData) {
@@ -140,6 +152,91 @@ export async function syncDateRange(
         });
     }
     totalRecords += readinessData.length;
+
+    for (const a of activityData) {
+      await db
+        .insert(dailyActivity)
+        .values({
+          id: a.id,
+          day: a.day,
+          score: a.score,
+          activeCalories: a.active_calories,
+          totalCalories: a.total_calories,
+          steps: a.steps,
+          highActivityTime: a.high_activity_time,
+          mediumActivityTime: a.medium_activity_time,
+          lowActivityTime: a.low_activity_time,
+          sedentaryTime: a.sedentary_time,
+          restingTime: a.resting_time,
+          nonWearTime: a.non_wear_time,
+          averageMetMinutes: a.average_met_minutes,
+          class5min: a.class_5min,
+          met: a.met ? JSON.stringify(a.met) : null,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: dailyActivity.id,
+          set: {
+            score: sql`excluded.score`,
+            activeCalories: sql`excluded.active_calories`,
+            totalCalories: sql`excluded.total_calories`,
+            steps: sql`excluded.steps`,
+            highActivityTime: sql`excluded.high_activity_time`,
+            mediumActivityTime: sql`excluded.medium_activity_time`,
+            lowActivityTime: sql`excluded.low_activity_time`,
+            sedentaryTime: sql`excluded.sedentary_time`,
+            class5min: sql`excluded.class_5min`,
+            met: sql`excluded.met`,
+          },
+        });
+    }
+    totalRecords += activityData.length;
+
+    for (const s of stressData) {
+      await db
+        .insert(dailyStress)
+        .values({
+          id: s.id,
+          day: s.day,
+          stressHigh: s.stress_high,
+          recoveryHigh: s.recovery_high,
+          daySummary: s.day_summary,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: dailyStress.id,
+          set: {
+            stressHigh: sql`excluded.stress_high`,
+            recoveryHigh: sql`excluded.recovery_high`,
+            daySummary: sql`excluded.day_summary`,
+          },
+        });
+    }
+    totalRecords += stressData.length;
+
+    for (const r of resilienceData) {
+      await db
+        .insert(dailyResilience)
+        .values({
+          id: r.id,
+          day: r.day,
+          level: r.level,
+          contributorSleepRecovery: r.contributors?.sleep_recovery ?? null,
+          contributorDaytimeRecovery: r.contributors?.daytime_recovery ?? null,
+          contributorStress: r.contributors?.stress ?? null,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: dailyResilience.id,
+          set: {
+            level: sql`excluded.level`,
+            contributorSleepRecovery: sql`excluded.contributor_sleep_recovery`,
+            contributorDaytimeRecovery: sql`excluded.contributor_daytime_recovery`,
+            contributorStress: sql`excluded.contributor_stress`,
+          },
+        });
+    }
+    totalRecords += resilienceData.length;
 
     await db.insert(syncLog).values({
       syncType,
