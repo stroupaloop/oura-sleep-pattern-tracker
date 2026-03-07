@@ -53,6 +53,16 @@ const allowedEmails = (process.env.ALLOWED_EMAILS ?? "")
   .map((e) => e.trim().toLowerCase())
   .filter(Boolean);
 
+const sensitiveEmails = (process.env.SENSITIVE_EMAILS ?? "")
+  .split(",")
+  .map((e) => e.trim().toLowerCase())
+  .filter(Boolean);
+
+export function isSensitiveUser(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return sensitiveEmails.includes(email.toLowerCase());
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
   secret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET,

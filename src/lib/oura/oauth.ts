@@ -1,7 +1,7 @@
 const AUTHORIZE_URL = "https://cloud.ouraring.com/oauth/authorize";
 const TOKEN_URL = "https://api.ouraring.com/oauth/token";
 
-const SCOPES = ["email", "personal", "daily", "heartrate", "spo2"];
+const SCOPES = ["email", "personal", "daily", "heartrate", "spo2", "workout", "session"];
 
 export function getOuraAuthUrl(state: string): string {
   const params = new URLSearchParams({

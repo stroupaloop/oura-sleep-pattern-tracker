@@ -22,7 +22,7 @@ const navLinks = [
   { href: "/dashboard/settings", label: "Settings" },
 ];
 
-export function MobileNav({ email }: { email?: string | null }) {
+export function MobileNav({ email, isSensitive }: { email?: string | null; isSensitive?: boolean }) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -52,6 +52,15 @@ export function MobileNav({ email }: { email?: string | null }) {
               {link.label}
             </Link>
           ))}
+          {isSensitive && (
+            <Link
+              href="/dashboard/private"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setOpen(false)}
+            >
+              Private
+            </Link>
+          )}
         </nav>
         {email && (
           <p className="text-sm text-muted-foreground mt-8 px-4">{email}</p>

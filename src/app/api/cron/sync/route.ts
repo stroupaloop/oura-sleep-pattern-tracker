@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncDateRange } from "@/lib/oura/sync";
+import { syncDateRange, syncSensitiveDateRange } from "@/lib/oura/sync";
 import { reprocessAll } from "@/lib/analysis/reprocess";
+import { runCyclePredictions } from "@/lib/analysis/cycle";
 import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { format, subDays } from "date-fns";
 
@@ -19,6 +20,13 @@ export async function GET(request: NextRequest) {
   try {
     const syncResult = await syncDateRange(startDate, endDate, "cron");
 
+    const sensitiveResult = await syncSensitiveDateRange(startDate, endDate, "cron")
+      .catch((err) => { console.error("Sensitive sync (non-fatal):", err); return { records: 0 }; });
+
+    await runCyclePredictions().catch((err) => {
+      console.error("Cycle prediction (non-fatal):", err);
+    });
+
     const config = await loadActiveConfig();
     const bipolarType = await loadBipolarType();
     const analysisResult = await reprocessAll(config, startDate, endDate, bipolarType);
@@ -26,6 +34,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       records: syncResult.records,
+      sensitiveRecords: sensitiveResult.records,
       analysis: {
         daysProcessed: analysisResult.daysProcessed,
         episodes: analysisResult.episodes,

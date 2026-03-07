@@ -29,6 +29,15 @@ async function getAccessToken(): Promise<string> {
   return refreshed.access_token;
 }
 
+export async function ouraFetchSingle<T>(endpoint: string): Promise<T> {
+  const accessToken = await getAccessToken();
+  const res = await fetch(`${BASE_URL}/${endpoint}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`Oura API ${res.status}: ${await res.text()}`);
+  return (await res.json()) as T;
+}
+
 export async function ouraFetch<T>(
   endpoint: string,
   params: Record<string, string> = {}

@@ -10,8 +10,14 @@ import {
   workouts,
   sessionsOura,
   syncLog,
+  enhancedTags,
+  restModePeriods,
+  dailyCardiovascularAge,
+  vo2Max,
+  sleepTime,
+  personalInfo,
 } from "@/lib/db/schema";
-import { ouraFetch } from "./client";
+import { ouraFetch, ouraFetchSingle } from "./client";
 import type {
   OuraSleepPeriod,
   OuraDailySleep,
@@ -22,6 +28,12 @@ import type {
   OuraDailySpO2,
   OuraWorkout,
   OuraSession,
+  OuraEnhancedTag,
+  OuraRestModePeriod,
+  OuraDailyCardiovascularAge,
+  OuraVo2Max,
+  OuraSleepTime,
+  OuraPersonalInfo,
 } from "./types";
 import { sql } from "drizzle-orm";
 
@@ -344,6 +356,189 @@ export async function syncDateRange(
   } catch (error) {
     await db.insert(syncLog).values({
       syncType,
+      startDate,
+      endDate,
+      recordsFetched: 0,
+      status: "error",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      createdAt: now,
+    });
+    throw error;
+  }
+}
+
+export async function syncSensitiveDateRange(
+  startDate: string,
+  endDate: string,
+  syncType: string
+) {
+  const now = Math.floor(Date.now() / 1000);
+  let totalRecords = 0;
+
+  try {
+    const params = { start_date: startDate, end_date: endDate };
+
+    const [tagData, restModeData, cvAgeData] = await Promise.all([
+      ouraFetch<OuraEnhancedTag>("v2/usercollection/enhanced_tag", params).catch(() => [] as OuraEnhancedTag[]),
+      ouraFetch<OuraRestModePeriod>("v2/usercollection/rest_mode_period", params).catch(() => [] as OuraRestModePeriod[]),
+      ouraFetch<OuraDailyCardiovascularAge>("v2/usercollection/daily_cardiovascular_age", params).catch(() => [] as OuraDailyCardiovascularAge[]),
+    ]);
+
+    const [vo2Data, sleepTimeData] = await Promise.all([
+      ouraFetch<OuraVo2Max>("v2/usercollection/daily_vo2_max", params).catch(() => [] as OuraVo2Max[]),
+      ouraFetch<OuraSleepTime>("v2/usercollection/daily_sleep_time", params).catch(() => [] as OuraSleepTime[]),
+    ]);
+
+    const personalInfoData = await ouraFetchSingle<OuraPersonalInfo>("v2/usercollection/personal_info").catch(() => null);
+
+    for (const t of tagData) {
+      await db
+        .insert(enhancedTags)
+        .values({
+          id: t.id,
+          day: t.day,
+          tagTypeCode: t.tag_type_code,
+          startTime: t.start_time,
+          endTime: t.end_time,
+          comment: t.comment,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: enhancedTags.id,
+          set: {
+            tagTypeCode: sql`excluded.tag_type_code`,
+            startTime: sql`excluded.start_time`,
+            endTime: sql`excluded.end_time`,
+            comment: sql`excluded.comment`,
+          },
+        });
+    }
+    totalRecords += tagData.length;
+
+    for (const r of restModeData) {
+      await db
+        .insert(restModePeriods)
+        .values({
+          id: r.id,
+          startDay: r.start_day,
+          endDay: r.end_day,
+          startTime: r.start_time,
+          endTime: r.end_time,
+          episodes: r.episodes ? JSON.stringify(r.episodes) : null,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: restModePeriods.id,
+          set: {
+            startDay: sql`excluded.start_day`,
+            endDay: sql`excluded.end_day`,
+            startTime: sql`excluded.start_time`,
+            endTime: sql`excluded.end_time`,
+            episodes: sql`excluded.episodes`,
+          },
+        });
+    }
+    totalRecords += restModeData.length;
+
+    for (const c of cvAgeData) {
+      await db
+        .insert(dailyCardiovascularAge)
+        .values({
+          day: c.day,
+          vascularAge: c.vascular_age,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: dailyCardiovascularAge.day,
+          set: {
+            vascularAge: sql`excluded.vascular_age`,
+          },
+        });
+    }
+    totalRecords += cvAgeData.length;
+
+    for (const v of vo2Data) {
+      await db
+        .insert(vo2Max)
+        .values({
+          id: v.id,
+          day: v.day,
+          vo2Max: v.vo2_max,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: vo2Max.id,
+          set: {
+            vo2Max: sql`excluded.vo2_max`,
+          },
+        });
+    }
+    totalRecords += vo2Data.length;
+
+    for (const s of sleepTimeData) {
+      const startOffset = s.optimal_bedtime?.start_offset;
+      const endOffset = s.optimal_bedtime?.end_offset;
+      await db
+        .insert(sleepTime)
+        .values({
+          id: s.id,
+          day: s.day,
+          optimalBedtimeStart: startOffset != null ? String(startOffset) : null,
+          optimalBedtimeEnd: endOffset != null ? String(endOffset) : null,
+          recommendation: s.recommendation,
+          status: s.status,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: sleepTime.id,
+          set: {
+            optimalBedtimeStart: sql`excluded.optimal_bedtime_start`,
+            optimalBedtimeEnd: sql`excluded.optimal_bedtime_end`,
+            recommendation: sql`excluded.recommendation`,
+            status: sql`excluded.status`,
+          },
+        });
+    }
+    totalRecords += sleepTimeData.length;
+
+    if (personalInfoData) {
+      await db
+        .insert(personalInfo)
+        .values({
+          id: personalInfoData.id,
+          age: personalInfoData.age,
+          weight: personalInfoData.weight,
+          height: personalInfoData.height,
+          biologicalSex: personalInfoData.biological_sex,
+          email: personalInfoData.email,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: personalInfo.id,
+          set: {
+            age: sql`excluded.age`,
+            weight: sql`excluded.weight`,
+            height: sql`excluded.height`,
+            biologicalSex: sql`excluded.biological_sex`,
+            email: sql`excluded.email`,
+          },
+        });
+      totalRecords += 1;
+    }
+
+    await db.insert(syncLog).values({
+      syncType: `${syncType}-sensitive`,
+      startDate,
+      endDate,
+      recordsFetched: totalRecords,
+      status: "success",
+      createdAt: now,
+    });
+
+    return { success: true, records: totalRecords };
+  } catch (error) {
+    await db.insert(syncLog).values({
+      syncType: `${syncType}-sensitive`,
       startDate,
       endDate,
       recordsFetched: 0,

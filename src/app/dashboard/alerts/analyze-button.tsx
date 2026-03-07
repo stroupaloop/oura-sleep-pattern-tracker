@@ -11,7 +11,7 @@ export function AnalyzeButton() {
   async function handleAnalyze() {
     setLoading(true);
     try {
-      const res = await fetch("/api/oura/analyze", { method: "POST" });
+      const res = await fetch("/api/oura/reprocess", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
         router.refresh();

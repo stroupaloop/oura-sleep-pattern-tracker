@@ -386,3 +386,78 @@ export const notificationSettings = sqliteTable("notification_settings", {
   reminderHour: integer("reminder_hour").default(22),
   createdAt: integer("created_at").notNull(),
 });
+
+// Sensitive data tables (gated by SENSITIVE_EMAILS)
+
+export const enhancedTags = sqliteTable("enhanced_tags", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull(),
+  tagTypeCode: text("tag_type_code"),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  comment: text("comment"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const restModePeriods = sqliteTable("rest_mode_periods", {
+  id: text("id").primaryKey(),
+  startDay: text("start_day"),
+  endDay: text("end_day"),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  episodes: text("episodes"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const dailyCardiovascularAge = sqliteTable("daily_cardiovascular_age", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  day: text("day").notNull().unique(),
+  vascularAge: integer("vascular_age"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const vo2Max = sqliteTable("vo2_max", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull().unique(),
+  vo2Max: real("vo2_max"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const sleepTime = sqliteTable("sleep_time", {
+  id: text("id").primaryKey(),
+  day: text("day").notNull().unique(),
+  optimalBedtimeStart: text("optimal_bedtime_start"),
+  optimalBedtimeEnd: text("optimal_bedtime_end"),
+  recommendation: text("recommendation"),
+  status: text("status"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const personalInfo = sqliteTable("personal_info", {
+  id: text("id").primaryKey(),
+  age: integer("age"),
+  weight: real("weight"),
+  height: real("height"),
+  biologicalSex: text("biological_sex"),
+  email: text("email"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const dailyLocation = sqliteTable("daily_location", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  day: text("day").notNull().unique(),
+  city: text("city"),
+  description: text("description"),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const cyclePredictions = sqliteTable("cycle_predictions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  cycleNumber: integer("cycle_number").notNull().unique(),
+  periodStartDay: text("period_start_day"),
+  ovulationDay: text("ovulation_day"),
+  nextPeriodDay: text("next_period_day"),
+  cycleLength: integer("cycle_length"),
+  confidence: real("confidence"),
+  createdAt: integer("created_at").notNull(),
+});

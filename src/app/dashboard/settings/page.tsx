@@ -8,7 +8,6 @@ import { eq } from "drizzle-orm";
 import { OuraConnectButton } from "./oura-connect-button";
 import { DisconnectButton } from "./disconnect-button";
 import { BackfillButton, ManualSyncButton } from "./sync-buttons";
-import { AnalyzeAllButton } from "./analyze-button";
 import { DetectionConfig } from "./detection-config";
 import { BipolarTypeSelector } from "./bipolar-type-selector";
 import { MedicationSettings } from "./medication-settings";
@@ -112,7 +111,7 @@ export default async function SettingsPage() {
               </p>
               {tokenExpiry && (
                 <p className="text-sm text-muted-foreground">
-                  Token expires: {tokenExpiry.toLocaleString()}
+                  Token expires: {tokenExpiry.toLocaleString("en-US", { timeZone: "America/New_York" })}
                 </p>
               )}
               {isExpired && <OuraConnectButton label="Reconnect Oura" />}
@@ -135,7 +134,6 @@ export default async function SettingsPage() {
           <CardContent className="space-y-4">
             <BackfillButton />
             <ManualSyncButton />
-            <AnalyzeAllButton />
           </CardContent>
         </Card>
       )}

@@ -57,6 +57,13 @@
       "when": 1772774146322,
       "tag": "0007_remarkable_george_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1772838155542,
+      "tag": "0008_strong_shatterstar",
+      "breakpoints": true
     }
   ]
 }

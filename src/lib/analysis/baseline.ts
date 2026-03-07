@@ -28,9 +28,15 @@ export function coefficientOfVariation(values: number[]): number {
 
 export function minutesFromMidnight(isoDatetime: string): number {
   const d = new Date(isoDatetime);
-  let minutes = d.getHours() * 60 + d.getMinutes();
-  // If after noon, treat as negative (e.g., 11 PM = -60 minutes before midnight)
-  // If before noon, treat as positive (e.g., 1 AM = 60 minutes after midnight)
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(d);
+  const hour = parseInt(parts.find((p) => p.type === "hour")!.value, 10);
+  const minute = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
+  let minutes = hour * 60 + minute;
   if (minutes > 720) minutes -= 1440;
   return minutes;
 }

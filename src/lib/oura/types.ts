@@ -135,3 +135,53 @@ export interface OuraSession {
   heart_rate: { average: number | null } | null;
   heart_rate_variability: { average: number | null } | null;
 }
+
+export interface OuraEnhancedTag {
+  id: string;
+  day: string;
+  tag_type_code: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  comment: string | null;
+}
+
+export interface OuraRestModePeriod {
+  id: string;
+  start_day: string | null;
+  end_day: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  episodes: unknown[] | null;
+}
+
+export interface OuraDailyCardiovascularAge {
+  day: string;
+  vascular_age: number | null;
+}
+
+export interface OuraVo2Max {
+  id: string;
+  day: string;
+  vo2_max: number | null;
+}
+
+export interface OuraSleepTime {
+  id: string;
+  day: string;
+  optimal_bedtime: {
+    day_tz: number | null;
+    end_offset: number | null;
+    start_offset: number | null;
+  } | null;
+  recommendation: string | null;
+  status: string | null;
+}
+
+export interface OuraPersonalInfo {
+  id: string;
+  age: number | null;
+  weight: number | null;
+  height: number | null;
+  biological_sex: string | null;
+  email: string | null;
+}
