@@ -19,7 +19,6 @@ import { BedtimeTrendChart } from "@/components/charts/bedtime-trend-chart";
 const TABS = [
   { id: "body", label: "Body" },
   { id: "tags", label: "Tags & Rest" },
-  { id: "location", label: "Location" },
   { id: "sleep-timing", label: "Sleep Timing" },
 ] as const;
 
@@ -42,11 +41,6 @@ interface PrivateTabsProps {
     endTime: string | null;
   }[];
   restPeriods: { startDay: string; endDay: string }[];
-  locationData: {
-    day: string;
-    city: string | null;
-    description: string | null;
-  }[];
   cycleData: {
     cycleNumber: number;
     periodStartDay: string | null;
@@ -84,7 +78,6 @@ export function PrivateTabs(props: PrivateTabsProps) {
 
       {activeTab === "body" && <BodyTab {...props} />}
       {activeTab === "tags" && <TagsTab tagData={props.tagData} restPeriods={props.restPeriods} />}
-      {activeTab === "location" && <LocationTab locationData={props.locationData} />}
       {activeTab === "sleep-timing" && <SleepTimingTab bedtimeData={props.bedtimeData} />}
     </div>
   );
@@ -101,6 +94,10 @@ function BodyTab({
   const ovulationDays = cycleData
     .map((c) => c.ovulationDay)
     .filter((d): d is string => d != null);
+
+  const validTempData = temperatureData.filter((d) => d.temperatureDelta != null);
+  const hasSleepData = temperatureData.length > 0;
+  const hasValidTemp = validTempData.length > 0;
 
   return (
     <div className="space-y-6">
@@ -140,7 +137,7 @@ function BodyTab({
         </Card>
       )}
 
-      {latestCycle && (
+      {latestCycle ? (
         <Card>
           <CardHeader>
             <CardTitle>Cycle Prediction</CardTitle>
@@ -186,11 +183,34 @@ function BodyTab({
             </p>
           </CardContent>
         </Card>
-      )}
+      ) : hasSleepData ? (
+        <Card>
+          <CardContent className="py-6">
+            <p className="text-sm text-muted-foreground">
+              {!hasValidTemp
+                ? "Temperature data not available from your Oura ring. Your ring may not report temperature deviations yet — this typically requires a few weeks of consistent wear."
+                : validTempData.length < 30
+                  ? `Not enough temperature data for cycle detection (${validTempData.length}/30 days needed). Keep wearing your ring nightly to build up data.`
+                  : "No thermal shifts detected in available data. This can happen with medication, irregular sleep, or travel."}
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
-      {temperatureData.length > 0 && (
+      {hasValidTemp ? (
         <CycleTemperatureChart data={temperatureData} ovulationDays={ovulationDays} />
-      )}
+      ) : hasSleepData ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Temperature Trend</CardTitle>
+          </CardHeader>
+          <CardContent className="py-6">
+            <p className="text-sm text-muted-foreground">
+              Temperature data not available from your Oura ring. This data usually appears after a few weeks of consistent nightly wear.
+            </p>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {cycleData.length > 1 && (
         <CycleLengthChart
@@ -251,8 +271,8 @@ function TagsTab({
                   </div>
                   <span className="text-muted-foreground">
                     {tag.day}
-                    {tag.startTime && ` ${tag.startTime.slice(11, 16)}`}
-                    {tag.endTime && ` - ${tag.endTime.slice(11, 16)}`}
+                    {tag.startTime && ` ${new Date(tag.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}`}
+                    {tag.endTime && ` - ${new Date(tag.endTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}`}
                   </span>
                 </div>
               ))}
@@ -277,105 +297,6 @@ function TagsTab({
           </CardContent>
         </Card>
       )}
-    </div>
-  );
-}
-
-function LocationTab({
-  locationData,
-}: {
-  locationData: PrivateTabsProps["locationData"];
-}) {
-  const [day, setDay] = useState(() => new Date().toISOString().slice(0, 10));
-  const [city, setCity] = useState("");
-  const [description, setDescription] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [locations, setLocations] = useState(locationData);
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/location", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ day, city: city || null, description: description || null }),
-      });
-      if (res.ok) {
-        const existing = locations.findIndex((l) => l.day === day);
-        const entry = { day, city: city || null, description: description || null };
-        if (existing >= 0) {
-          const updated = [...locations];
-          updated[existing] = entry;
-          setLocations(updated);
-        } else {
-          setLocations([entry, ...locations].sort((a, b) => b.day.localeCompare(a.day)));
-        }
-        setCity("");
-        setDescription("");
-      }
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Log Location</CardTitle>
-          <CardDescription>Track where you are each day</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <input
-              type="date"
-              value={day}
-              onChange={(e) => setDay(e.target.value)}
-              className="border rounded px-3 py-2 text-sm bg-background"
-            />
-            <input
-              type="text"
-              placeholder="City"
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              className="border rounded px-3 py-2 text-sm bg-background"
-            />
-            <input
-              type="text"
-              placeholder="Description (optional)"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              className="border rounded px-3 py-2 text-sm bg-background"
-            />
-          </div>
-          <Button onClick={handleSave} disabled={saving} size="sm">
-            {saving ? "Saving..." : "Save"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Location History</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {locations.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No locations logged yet.</p>
-          ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {locations.map((loc) => (
-                <div key={loc.day} className="flex justify-between text-sm border-b pb-2">
-                  <span className="font-medium">{loc.day}</span>
-                  <span className="text-muted-foreground">
-                    {loc.city}
-                    {loc.description && ` — ${loc.description}`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

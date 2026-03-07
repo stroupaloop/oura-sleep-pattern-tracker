@@ -10,7 +10,6 @@ import {
   personalInfo,
   enhancedTags,
   restModePeriods,
-  dailyLocation,
   cyclePredictions,
   sleepPeriods,
 } from "@/lib/db/schema";
@@ -32,7 +31,6 @@ export default async function PrivatePage() {
     personalInfoData,
     tagData,
     restModeData,
-    locationData,
     cycleData,
     tempData,
   ] = await Promise.all([
@@ -57,12 +55,11 @@ export default async function PrivatePage() {
       .from(enhancedTags)
       .where(gte(enhancedTags.day, cutoff))
       .orderBy(desc(enhancedTags.day)),
-    db.select().from(restModePeriods).orderBy(desc(restModePeriods.startDay)),
     db
       .select()
-      .from(dailyLocation)
-      .orderBy(desc(dailyLocation.day))
-      .limit(50),
+      .from(restModePeriods)
+      .where(gte(restModePeriods.startDay, cutoff))
+      .orderBy(desc(restModePeriods.startDay)),
     db
       .select()
       .from(cyclePredictions)
@@ -86,15 +83,23 @@ export default async function PrivatePage() {
     let actualMinutes: number | null = null;
     if (t.bedtimeStart) {
       const d = new Date(t.bedtimeStart);
-      let mins = d.getHours() * 60 + d.getMinutes();
+      const parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: "America/New_York",
+        hour: "numeric",
+        minute: "numeric",
+        hour12: false,
+      }).formatToParts(d);
+      const h = parseInt(parts.find((p) => p.type === "hour")!.value, 10);
+      const m = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
+      let mins = h * 60 + m;
       if (mins < 720) mins += 1440;
       actualMinutes = mins;
     }
     return {
       day: t.day,
       actualBedtime: actualMinutes,
-      optimalStart: st?.optimalBedtimeStart ? Number(st.optimalBedtimeStart) : null,
-      optimalEnd: st?.optimalBedtimeEnd ? Number(st.optimalBedtimeEnd) : null,
+      optimalStart: st?.optimalBedtimeStart ? Number(st.optimalBedtimeStart) / 60 : null,
+      optimalEnd: st?.optimalBedtimeEnd ? Number(st.optimalBedtimeEnd) / 60 : null,
     };
   });
 
@@ -107,7 +112,6 @@ export default async function PrivatePage() {
         personalInfo={person ? { age: person.age, height: person.height, weight: person.weight, biologicalSex: person.biologicalSex } : null}
         tagData={tagData.map((t) => ({ day: t.day, tagTypeCode: t.tagTypeCode, comment: t.comment, startTime: t.startTime, endTime: t.endTime }))}
         restPeriods={restModeData.map((r) => ({ startDay: r.startDay ?? "", endDay: r.endDay ?? "" }))}
-        locationData={locationData.map((l) => ({ day: l.day, city: l.city, description: l.description }))}
         cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, ovulationDay: c.ovulationDay, nextPeriodDay: c.nextPeriodDay, cycleLength: c.cycleLength, confidence: c.confidence }))}
         temperatureData={tempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDelta }))}
         bedtimeData={bedtimeData}

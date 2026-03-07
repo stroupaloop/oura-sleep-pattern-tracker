@@ -81,6 +81,11 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
     db.select().from(restModePeriods),
   ]);
 
+  const nonNullCount = tempRows.filter((r) => r.temperatureDelta != null).length;
+  console.log(
+    `[cycle] Sleep periods queried: ${tempRows.length}, with temperatureDelta: ${nonNullCount}, rest periods: ${restRows.length}`
+  );
+
   const excludedDays = new Set<string>();
   for (const rest of restRows) {
     if (rest.startDay && rest.endDay) {
@@ -97,14 +102,21 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
     .filter((r) => r.temperatureDelta != null)
     .map((r) => ({ day: r.day, temperatureDelta: r.temperatureDelta! }));
 
-  if (temps.length < 30) return [];
+  if (temps.length < 30) {
+    console.log(`[cycle] Insufficient temperature data: ${temps.length}/30 required. Returning empty.`);
+    return [];
+  }
 
   const rawValues = temps.map((t) => t.temperatureDelta);
   const smoothed = movingAverage(rawValues, 5);
 
   const shiftIndices = detectThermalShifts(temps, smoothed, excludedDays);
+  console.log(`[cycle] Thermal shifts detected: ${shiftIndices.length}`);
 
-  if (shiftIndices.length === 0) return [];
+  if (shiftIndices.length === 0) {
+    console.log("[cycle] No thermal shifts found. Returning empty.");
+    return [];
+  }
 
   const cycles: DetectedCycle[] = [];
   const lutealLengths: number[] = [];
@@ -192,6 +204,7 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
     }
   }
 
+  console.log(`[cycle] Cycles computed: ${cycles.length}`);
   return cycles;
 }
 
