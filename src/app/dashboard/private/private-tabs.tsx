@@ -15,6 +15,7 @@ import { CycleTemperatureChart } from "@/components/charts/cycle-temperature-cha
 import { CycleLengthChart } from "@/components/charts/cycle-length-chart";
 import { RestModeTimeline } from "@/components/charts/rest-mode-timeline";
 import { BedtimeTrendChart } from "@/components/charts/bedtime-trend-chart";
+import { CycleCalendar } from "@/components/charts/cycle-calendar";
 
 const TABS = [
   { id: "body", label: "Body" },
@@ -159,12 +160,22 @@ function BodyTab({
                   <p className="font-medium">{latestCycle.ovulationDay}</p>
                 </div>
               )}
-              {latestCycle.nextPeriodDay && (
-                <div>
-                  <span className="text-muted-foreground">Next Period (est.)</span>
-                  <p className="font-medium">{latestCycle.nextPeriodDay}</p>
-                </div>
-              )}
+              {latestCycle.nextPeriodDay && (() => {
+                const todayStr = new Date().toISOString().slice(0, 10);
+                const isPast = latestCycle.nextPeriodDay < todayStr;
+                return (
+                  <div>
+                    <span className="text-muted-foreground">
+                      {isPast ? "Next Period (overdue)" : "Next Period (est.)"}
+                    </span>
+                    <p className={`font-medium ${isPast ? "text-amber-400" : ""}`}>
+                      {isPast
+                        ? `Overdue — expected ${latestCycle.nextPeriodDay}`
+                        : latestCycle.nextPeriodDay}
+                    </p>
+                  </div>
+                );
+              })()}
               {latestCycle.cycleLength != null && (
                 <div>
                   <span className="text-muted-foreground">Cycle Length</span>
@@ -196,6 +207,8 @@ function BodyTab({
           </CardContent>
         </Card>
       ) : null}
+
+      {cycleData.length > 0 && <CycleCalendar cycleData={cycleData} />}
 
       {hasValidTemp ? (
         <CycleTemperatureChart data={temperatureData} ovulationDays={ovulationDays} />
@@ -246,6 +259,18 @@ function TagsTab({
     day,
     hasTag: true,
   }));
+
+  if (tagData.length === 0 && restPeriods.length === 0) {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <p className="text-sm text-muted-foreground text-center">
+            No tags or rest mode data found. Try running a data sync from Settings to pull historical data.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">

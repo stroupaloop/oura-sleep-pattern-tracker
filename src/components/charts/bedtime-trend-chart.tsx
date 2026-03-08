@@ -1,18 +1,9 @@
 "use client";
 
 import {
-  ComposedChart,
-  Line,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
-import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -33,79 +24,126 @@ function formatMinutesAsTime(minutes: number): string {
   const adjusted = minutes < 0 ? minutes + 1440 : minutes;
   const h = Math.floor(adjusted / 60) % 24;
   const m = adjusted % 60;
-  return `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 || 12;
+  return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
+}
+
+function getDotColor(actual: number, optStart: number, optEnd: number): string {
+  if (actual >= optStart && actual <= optEnd) return "bg-green-400";
+  const diff = actual < optStart
+    ? optStart - actual
+    : actual - optEnd;
+  if (diff <= 30) return "bg-amber-400";
+  return "bg-red-400";
+}
+
+function getDotLabel(actual: number, optStart: number, optEnd: number): string {
+  if (actual >= optStart && actual <= optEnd) return "On time";
+  const diff = actual < optStart
+    ? optStart - actual
+    : actual - optEnd;
+  if (diff <= 30) return "Slightly off";
+  return "Way off";
 }
 
 export function BedtimeTrendChart({
   data,
-  days = 90,
+  days = 30,
 }: BedtimeTrendChartProps) {
-  const sliced = data.slice(-days);
+  const sliced = data.slice(-days).filter((d) => d.actualBedtime != null);
+
+  if (sliced.length === 0) return null;
+
+  const allMinutes = sliced.flatMap((d) => [
+    d.actualBedtime!,
+    d.optimalStart ?? d.actualBedtime!,
+    d.optimalEnd ?? d.actualBedtime!,
+  ]);
+  const rangeMin = Math.min(...allMinutes) - 30;
+  const rangeMax = Math.max(...allMinutes) + 30;
+  const rangeSpan = rangeMax - rangeMin;
+
+  const tickCount = 5;
+  const ticks: number[] = [];
+  for (let i = 0; i <= tickCount; i++) {
+    ticks.push(Math.round(rangeMin + (rangeSpan / tickCount) * i));
+  }
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Bedtime Trend</CardTitle>
+        <CardTitle>Sleep Timing</CardTitle>
+        <CardDescription>Bedtime vs. optimal window (last {days} days)</CardDescription>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={sliced}>
-            <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
-            <XAxis
-              dataKey="day"
-              tickFormatter={(d) => d.slice(5)}
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              reversed
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
-              tickFormatter={formatMinutesAsTime}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "oklch(0.205 0 0)",
-                borderColor: "oklch(1 0 0 / 10%)",
-                borderRadius: "0.5rem",
-                color: "oklch(0.985 0 0)",
-              }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={(value: any, name: any) => [
-                formatMinutesAsTime(Number(value)),
-                String(name),
-              ]}
-              labelFormatter={(label) => `Date: ${label}`}
-            />
-            <Area
-              type="monotone"
-              dataKey="optimalStart"
-              stroke="none"
-              fill="transparent"
-              activeDot={false}
-              name="Optimal Start"
-            />
-            <Area
-              type="monotone"
-              dataKey="optimalEnd"
-              stroke="none"
-              fill="#a78bfa"
-              fillOpacity={0.15}
-              activeDot={false}
-              name="Optimal End"
-            />
-            <Line
-              type="monotone"
-              dataKey="actualBedtime"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dot={false}
-              connectNulls
-              name="Actual Bedtime"
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
+        <div className="relative">
+          <div className="flex justify-between text-[10px] text-muted-foreground mb-2 pl-14">
+            {ticks.map((t) => (
+              <span key={t}>{formatMinutesAsTime(t)}</span>
+            ))}
+          </div>
+
+          <div className="space-y-0.5">
+            {sliced.reverse().map((point) => {
+              const actual = point.actualBedtime!;
+              const optStart = point.optimalStart ?? actual;
+              const optEnd = point.optimalEnd ?? actual;
+
+              const windowLeft = ((optStart - rangeMin) / rangeSpan) * 100;
+              const windowWidth = ((optEnd - optStart) / rangeSpan) * 100;
+              const dotLeft = ((actual - rangeMin) / rangeSpan) * 100;
+
+              const dotColor = getDotColor(actual, optStart, optEnd);
+              const label = getDotLabel(actual, optStart, optEnd);
+
+              return (
+                <div
+                  key={point.day}
+                  className="flex items-center gap-2 group"
+                >
+                  <span className="text-[10px] text-muted-foreground w-12 shrink-0 text-right">
+                    {point.day.slice(5)}
+                  </span>
+                  <div className="relative flex-1 h-5">
+                    <div className="absolute inset-y-0 left-0 right-0 bg-muted/30 rounded-sm" />
+                    <div
+                      className="absolute inset-y-0 bg-violet-500/15 rounded-sm"
+                      style={{
+                        left: `${Math.max(0, windowLeft)}%`,
+                        width: `${Math.min(100 - windowLeft, windowWidth)}%`,
+                      }}
+                    />
+                    <div
+                      className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${dotColor} transition-transform group-hover:scale-150`}
+                      style={{ left: `${Math.max(0, Math.min(98, dotLeft))}%` }}
+                      title={`${formatMinutesAsTime(actual)} — ${label}`}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-4 justify-center mt-4 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <span className="w-3 h-3 rounded-sm bg-violet-500/15" />
+              Optimal window
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
+              On time
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+              Slightly off
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+              Way off
+            </div>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

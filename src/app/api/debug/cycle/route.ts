@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth, isSensitiveUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { sleepPeriods, cyclePredictions, dailyReadiness } from "@/lib/db/schema";
+import { sleepPeriods, cyclePredictions, dailyReadiness, enhancedTags, restModePeriods } from "@/lib/db/schema";
 import { eq, gte, and, isNotNull, count, max } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 
@@ -13,7 +13,7 @@ export async function GET() {
 
   const cutoff = format(subDays(new Date(), 365), "yyyy-MM-dd");
 
-  const [totalSleep, withTemp, readinessTotal, readinessWithTemp, cycleRows, lastSync] =
+  const [totalSleep, withTemp, readinessTotal, readinessWithTemp, cycleRows, lastSync, tagCount, restCount] =
     await Promise.all([
       db
         .select({ count: count() })
@@ -46,6 +46,8 @@ export async function GET() {
       db
         .select({ latest: max(cyclePredictions.createdAt) })
         .from(cyclePredictions),
+      db.select({ count: count() }).from(enhancedTags),
+      db.select({ count: count() }).from(restModePeriods),
     ]);
 
   return NextResponse.json({
@@ -57,5 +59,7 @@ export async function GET() {
     lastCyclePredictionAt: lastSync[0]?.latest
       ? new Date(lastSync[0].latest * 1000).toISOString()
       : null,
+    enhancedTagsCount: tagCount[0]?.count ?? 0,
+    restModePeriodsCount: restCount[0]?.count ?? 0,
   });
 }

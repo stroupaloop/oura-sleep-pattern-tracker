@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
         },
       });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, savedAt: new Date(now * 1000).toISOString() });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },

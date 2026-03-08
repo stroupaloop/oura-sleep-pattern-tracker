@@ -4,13 +4,6 @@ import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 
-const EPISODE_STATES = [
-  { value: "none", label: "None" },
-  { value: "depressive", label: "Depressive" },
-  { value: "hypomanic", label: "Hypo/Manic" },
-  { value: "mixed", label: "Mixed" },
-];
-
 const MOODS = [
   { value: -3, label: "Depressed", color: "bg-blue-600" },
   { value: -2, label: "Low", color: "bg-blue-500" },
@@ -111,12 +104,14 @@ export function DailyLogCard({
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [notes, setNotes] = useState("");
   const [showMore, setShowMore] = useState(false);
-  const [savedIndicator, setSavedIndicator] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const showSaved = useCallback(() => {
-    setSavedIndicator(true);
-    setTimeout(() => setSavedIndicator(false), 1500);
+    const now = new Date();
+    setLastSavedAt(
+      now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+    );
   }, []);
 
   async function fetchDayData(day: string) {
@@ -133,6 +128,12 @@ export function DailyLogCard({
       setEpisodeState(moodData?.episodeState ?? null);
       setSelectedTags(parseTags(moodData?.tags));
       setNotes(moodData?.notes ?? "");
+      if (moodData?.createdAt) {
+        const d = new Date(moodData.createdAt * 1000);
+        setLastSavedAt(d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }));
+      } else {
+        setLastSavedAt(null);
+      }
 
       const newMap: Record<number, boolean> = {};
       if (medData.logs) {
@@ -281,9 +282,9 @@ export function DailyLogCard({
             >
               <ChevronRight className="w-4 h-4" />
             </button>
-            {savedIndicator && (
-              <span className="text-xs text-green-400 ml-2 animate-pulse">
-                Saved
+            {lastSavedAt && (
+              <span className="text-xs text-muted-foreground ml-2">
+                Saved {lastSavedAt}
               </span>
             )}
           </div>
@@ -352,28 +353,25 @@ export function DailyLogCard({
           </div>
         )}
 
-        <div>
-          <p className="text-xs text-muted-foreground mb-1.5">Episode</p>
-          <div className="flex gap-1.5 flex-wrap">
-            {EPISODE_STATES.map((ep) => {
-              const isSelected = episodeState === ep.value;
-              return (
-                <button
-                  key={ep.value}
-                  onClick={() => saveEpisode(ep.value)}
-                  disabled={loading}
-                  className={`px-3 py-1 text-xs rounded-full transition-all ${
-                    isSelected
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {ep.label}
-                </button>
-              );
-            })}
+        {moodScore != null && (moodScore <= -2 || moodScore >= 2) && (
+          <div>
+            <button
+              onClick={() =>
+                saveEpisode(moodScore <= -2 ? "depressive" : "hypomanic")
+              }
+              disabled={loading}
+              className={`px-3 py-1 text-xs rounded-full transition-all ${
+                episodeState === (moodScore <= -2 ? "depressive" : "hypomanic")
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {moodScore <= -2
+                ? "Log as depressive episode?"
+                : "Log as hypo/manic episode?"}
+            </button>
           </div>
-        </div>
+        )}
 
         <button
           onClick={() => setShowMore(!showMore)}
@@ -413,7 +411,7 @@ export function DailyLogCard({
                 onBlur={saveNotes}
                 disabled={loading}
                 className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
-                rows={2}
+                rows={4}
               />
             </div>
           </div>

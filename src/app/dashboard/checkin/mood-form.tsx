@@ -391,7 +391,7 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
                     className="mt-3 w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground"
-                    rows={2}
+                    rows={4}
                   />
                 </CardContent>
               </Card>
