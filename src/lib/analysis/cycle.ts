@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { sleepPeriods, restModePeriods, cyclePredictions } from "@/lib/db/schema";
-import { eq, gte, and, lte } from "drizzle-orm";
+import { dailyReadiness, restModePeriods, cyclePredictions } from "@/lib/db/schema";
+import { gte, and, isNotNull } from "drizzle-orm";
 import { format, subDays, differenceInDays, addDays, parseISO } from "date-fns";
 
 interface TempPoint {
@@ -72,18 +72,22 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
   const [tempRows, restRows] = await Promise.all([
     db
       .select({
-        day: sleepPeriods.day,
-        temperatureDelta: sleepPeriods.temperatureDelta,
+        day: dailyReadiness.day,
+        temperatureDelta: dailyReadiness.temperatureDeviation,
       })
-      .from(sleepPeriods)
-      .where(and(gte(sleepPeriods.day, cutoff), eq(sleepPeriods.type, "long_sleep")))
-      .orderBy(sleepPeriods.day),
+      .from(dailyReadiness)
+      .where(
+        and(
+          gte(dailyReadiness.day, cutoff),
+          isNotNull(dailyReadiness.temperatureDeviation)
+        )
+      )
+      .orderBy(dailyReadiness.day),
     db.select().from(restModePeriods),
   ]);
 
-  const nonNullCount = tempRows.filter((r) => r.temperatureDelta != null).length;
   console.log(
-    `[cycle] Sleep periods queried: ${tempRows.length}, with temperatureDelta: ${nonNullCount}, rest periods: ${restRows.length}`
+    `[cycle] Readiness rows with temperatureDeviation: ${tempRows.length}, rest periods: ${restRows.length}`
   );
 
   const excludedDays = new Set<string>();
@@ -98,9 +102,10 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
     }
   }
 
-  const temps: TempPoint[] = tempRows
-    .filter((r) => r.temperatureDelta != null)
-    .map((r) => ({ day: r.day, temperatureDelta: r.temperatureDelta! }));
+  const temps: TempPoint[] = tempRows.map((r) => ({
+    day: r.day,
+    temperatureDelta: r.temperatureDelta!,
+  }));
 
   if (temps.length < 30) {
     console.log(`[cycle] Insufficient temperature data: ${temps.length}/30 required. Returning empty.`);

@@ -12,8 +12,9 @@ import {
   restModePeriods,
   cyclePredictions,
   sleepPeriods,
+  dailyReadiness,
 } from "@/lib/db/schema";
-import { desc, gte, eq, and } from "drizzle-orm";
+import { desc, gte, eq, and, isNotNull } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { PrivateTabs } from "./private-tabs";
 
@@ -32,7 +33,8 @@ export default async function PrivatePage() {
     tagData,
     restModeData,
     cycleData,
-    tempData,
+    sleepData,
+    readinessTempData,
   ] = await Promise.all([
     db
       .select()
@@ -68,17 +70,24 @@ export default async function PrivatePage() {
     db
       .select({
         day: sleepPeriods.day,
-        temperatureDelta: sleepPeriods.temperatureDelta,
         bedtimeStart: sleepPeriods.bedtimeStart,
       })
       .from(sleepPeriods)
       .where(and(gte(sleepPeriods.day, cutoff), eq(sleepPeriods.type, "long_sleep")))
       .orderBy(sleepPeriods.day),
+    db
+      .select({
+        day: dailyReadiness.day,
+        temperatureDeviation: dailyReadiness.temperatureDeviation,
+      })
+      .from(dailyReadiness)
+      .where(gte(dailyReadiness.day, cutoff))
+      .orderBy(dailyReadiness.day),
   ]);
 
   const person = personalInfoData[0] ?? null;
 
-  const bedtimeData = tempData.map((t) => {
+  const bedtimeData = sleepData.map((t) => {
     const st = sleepTimeData.find((s) => s.day === t.day);
     let actualMinutes: number | null = null;
     if (t.bedtimeStart) {
@@ -113,7 +122,7 @@ export default async function PrivatePage() {
         tagData={tagData.map((t) => ({ day: t.day, tagTypeCode: t.tagTypeCode, comment: t.comment, startTime: t.startTime, endTime: t.endTime }))}
         restPeriods={restModeData.map((r) => ({ startDay: r.startDay ?? "", endDay: r.endDay ?? "" }))}
         cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, ovulationDay: c.ovulationDay, nextPeriodDay: c.nextPeriodDay, cycleLength: c.cycleLength, confidence: c.confidence }))}
-        temperatureData={tempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDelta }))}
+        temperatureData={readinessTempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDeviation }))}
         bedtimeData={bedtimeData}
       />
     </div>
