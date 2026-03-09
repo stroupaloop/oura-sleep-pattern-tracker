@@ -253,7 +253,14 @@ export function DailyLogCard({
     <Card>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-base">Daily Log</CardTitle>
+          <div className="flex items-center gap-2">
+            <CardTitle className="text-base">Daily Log</CardTitle>
+            {lastSavedAt && (
+              <span className="text-xs text-muted-foreground">
+                Saved {lastSavedAt}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-1 text-sm">
             <button
               onClick={() => navigateDay(-1)}
@@ -282,11 +289,6 @@ export function DailyLogCard({
             >
               <ChevronRight className="w-4 h-4" />
             </button>
-            {lastSavedAt && (
-              <span className="text-xs text-muted-foreground ml-2">
-                Saved {lastSavedAt}
-              </span>
-            )}
           </div>
         </div>
       </CardHeader>

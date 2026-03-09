@@ -217,6 +217,19 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
       : 14;
     if (last.ovulationDay) {
       last.nextPeriodDay = format(addDays(parseISO(last.ovulationDay), avgLuteal), "yyyy-MM-dd");
+
+      const nextPeriodDate = parseISO(last.nextPeriodDay);
+      const today = new Date();
+      if (nextPeriodDate <= today) {
+        cycles.push({
+          cycleNumber: cycles.length + 1,
+          periodStartDay: last.nextPeriodDay,
+          ovulationDay: null,
+          nextPeriodDay: null,
+          cycleLength: null,
+          confidence: 0.2,
+        });
+      }
     }
   }
 
