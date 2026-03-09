@@ -239,12 +239,8 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-center gap-2">
-        {lastSavedAt && (
-          <span className="text-xs text-muted-foreground mr-1">
-            Saved {lastSavedAt}
-          </span>
-        )}
+      <div className="flex flex-col items-center gap-1">
+        <div className="flex items-center gap-2">
         <button
           onClick={() => navigateDay(-1)}
           className="p-1.5 rounded hover:bg-muted transition-colors"
@@ -272,6 +268,12 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
         >
           <ChevronRight className="w-5 h-5" />
         </button>
+        </div>
+        {lastSavedAt && (
+          <span className="text-xs text-muted-foreground">
+            Saved {lastSavedAt}
+          </span>
+        )}
       </div>
 
       {saved ? (
