@@ -58,6 +58,27 @@ function pct(part: number | null, total: number | null): string {
   return `${Math.round((part / total) * 100)}%`;
 }
 
+type Status = "good" | "fair" | "poor";
+
+function getStatus(value: number | null, good: [number, number], fair: [number, number]): Status | null {
+  if (value == null) return null;
+  if (value >= good[0] && value <= good[1]) return "good";
+  if (value >= fair[0] && value <= fair[1]) return "fair";
+  return "poor";
+}
+
+const STATUS_STYLE: Record<Status, { color: string; label: string }> = {
+  good: { color: "text-green-400", label: "Healthy" },
+  fair: { color: "text-amber-400", label: "Fair" },
+  poor: { color: "text-red-400", label: "Low" },
+};
+
+function StatusBadge({ status }: { status: Status | null }) {
+  if (!status) return null;
+  const s = STATUS_STYLE[status];
+  return <span className={`text-[10px] ${s.color}`}>{s.label}</span>;
+}
+
 function MetricNote({ label, note }: { label: string; note: string }) {
   return (
     <p className="text-xs text-amber-400/80 mt-1">
@@ -72,91 +93,134 @@ export function NightCardContent({ night, score, analysis }: { night: NightData;
 
   return (
     <>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 text-sm">
-        <div>
-          <p className="text-muted-foreground">Total Sleep</p>
-          <p className="font-medium text-lg">
-            {formatDuration(night.totalSleepDuration)}
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Efficiency</p>
-          <p className="font-medium text-lg">
-            {night.efficiency ? `${night.efficiency}%` : "--"}
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Latency</p>
-          <p className="font-medium text-lg">
-            {night.latency ? `${Math.round(night.latency / 60)}min` : "--"}
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Restless</p>
-          <p className="font-medium text-lg">
-            {night.restlessPeriods ?? "--"}
-          </p>
-        </div>
-      </div>
+      {(() => {
+        const totalHrs = night.totalSleepDuration ? night.totalSleepDuration / 3600 : null;
+        const deepPct = night.deepSleepDuration && night.totalSleepDuration
+          ? (night.deepSleepDuration / night.totalSleepDuration) * 100 : null;
+        const remPct = night.remSleepDuration && night.totalSleepDuration
+          ? (night.remSleepDuration / night.totalSleepDuration) * 100 : null;
+        const latencyMin = night.latency ? night.latency / 60 : null;
+        const tempAbs = night.temperatureDelta != null ? Math.abs(night.temperatureDelta) : null;
 
-      <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 text-sm">
-        <div>
-          <p className="text-muted-foreground">Deep</p>
-          <p className="font-medium">
-            {formatDuration(night.deepSleepDuration)}{" "}
-            <span className="text-muted-foreground">
-              ({pct(night.deepSleepDuration, night.totalSleepDuration)})
-            </span>
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">REM</p>
-          <p className="font-medium">
-            {formatDuration(night.remSleepDuration)}{" "}
-            <span className="text-muted-foreground">
-              ({pct(night.remSleepDuration, night.totalSleepDuration)})
-            </span>
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Light</p>
-          <p className="font-medium">
-            {formatDuration(night.lightSleepDuration)}{" "}
-            <span className="text-muted-foreground">
-              ({pct(night.lightSleepDuration, night.totalSleepDuration)})
-            </span>
-          </p>
-        </div>
-      </div>
+        const sleepStatus = getStatus(totalHrs, [7, 24], [6, 7]);
+        const effStatus = getStatus(night.efficiency, [85, 100], [75, 85]);
+        const latencyStatus = latencyMin != null
+          ? (latencyMin <= 15 ? "good" : latencyMin <= 30 ? "fair" : "poor") as Status
+          : null;
+        const deepStatus = getStatus(deepPct, [15, 50], [10, 15]);
+        const remStatus = getStatus(remPct, [20, 50], [15, 20]);
+        const tempStatus = tempAbs != null
+          ? (tempAbs <= 0.5 ? "good" : tempAbs <= 1 ? "fair" : "poor") as Status
+          : null;
 
-      <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 text-sm">
-        <div>
-          <p className="text-muted-foreground">Avg HR</p>
-          <p className="font-medium">
-            {night.averageHeartRate?.toFixed(0) ?? "--"} bpm
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Lowest HR</p>
-          <p className="font-medium">
-            {night.lowestHeartRate ?? "--"} bpm
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">HRV</p>
-          <p className="font-medium">
-            {night.averageHrv?.toFixed(0) ?? "--"} ms
-          </p>
-        </div>
-        <div>
-          <p className="text-muted-foreground">Temp Delta</p>
-          <p className="font-medium">
-            {night.temperatureDelta != null
-              ? `${night.temperatureDelta > 0 ? "+" : ""}${night.temperatureDelta.toFixed(2)}°`
-              : "--"}
-          </p>
-        </div>
-      </div>
+        return (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 text-sm">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-muted-foreground">Total Sleep</p>
+                  <StatusBadge status={sleepStatus} />
+                </div>
+                <p className="font-medium text-lg">
+                  {formatDuration(night.totalSleepDuration)}
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-muted-foreground">Efficiency</p>
+                  <StatusBadge status={effStatus} />
+                </div>
+                <p className="font-medium text-lg">
+                  {night.efficiency ? `${night.efficiency}%` : "--"}
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-muted-foreground">Latency</p>
+                  <StatusBadge status={latencyStatus} />
+                </div>
+                <p className="font-medium text-lg">
+                  {latencyMin ? `${Math.round(latencyMin)}min` : "--"}
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Restless</p>
+                <p className="font-medium text-lg">
+                  {night.restlessPeriods ?? "--"}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 text-sm">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-muted-foreground">Deep</p>
+                  <StatusBadge status={deepStatus} />
+                </div>
+                <p className="font-medium">
+                  {formatDuration(night.deepSleepDuration)}{" "}
+                  <span className="text-muted-foreground">
+                    ({pct(night.deepSleepDuration, night.totalSleepDuration)})
+                  </span>
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-muted-foreground">REM</p>
+                  <StatusBadge status={remStatus} />
+                </div>
+                <p className="font-medium">
+                  {formatDuration(night.remSleepDuration)}{" "}
+                  <span className="text-muted-foreground">
+                    ({pct(night.remSleepDuration, night.totalSleepDuration)})
+                  </span>
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Light</p>
+                <p className="font-medium">
+                  {formatDuration(night.lightSleepDuration)}{" "}
+                  <span className="text-muted-foreground">
+                    ({pct(night.lightSleepDuration, night.totalSleepDuration)})
+                  </span>
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Avg HR</p>
+                <p className="font-medium">
+                  {night.averageHeartRate?.toFixed(0) ?? "--"} bpm
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Lowest HR</p>
+                <p className="font-medium">
+                  {night.lowestHeartRate ?? "--"} bpm
+                </p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">HRV</p>
+                <p className="font-medium">
+                  {night.averageHrv?.toFixed(0) ?? "--"} ms
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <p className="text-muted-foreground">Temp Delta</p>
+                  <StatusBadge status={tempStatus} />
+                </div>
+                <p className="font-medium">
+                  {night.temperatureDelta != null
+                    ? `${night.temperatureDelta > 0 ? "+" : ""}${night.temperatureDelta.toFixed(2)}°`
+                    : "--"}
+                </p>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {analysis?.isAnomaly && (
         <div className="mt-3 space-y-1 border-t pt-3">

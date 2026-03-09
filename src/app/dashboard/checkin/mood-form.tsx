@@ -54,6 +54,7 @@ interface ExistingMood {
   notes: string | null;
   tags: string | null;
   episodeState: string | null;
+  createdAt?: number | null;
 }
 
 interface MoodFormProps {
@@ -110,10 +111,16 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loadingDay, setLoadingDay] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(
+    existingMood?.createdAt
+      ? new Date(existingMood.createdAt * 1000).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+      : null
+  );
 
   const loadDayData = useCallback(async (day: string) => {
     setLoadingDay(true);
     setSaved(false);
+    setLastSavedAt(null);
     try {
       const [moodRes, medRes] = await Promise.all([
         fetch(`/api/mood?day=${day}`),
@@ -137,6 +144,11 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
           moodData.anxietyScore !== null ||
           moodData.sleepSubjective !== null
         );
+        if (moodData.createdAt) {
+          setLastSavedAt(
+            new Date(moodData.createdAt * 1000).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+          );
+        }
       } else {
         setMoodScore(null);
         setEpisodeState(null);
@@ -214,6 +226,9 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
       }
 
       setSaved(true);
+      setLastSavedAt(
+        new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+      );
     } finally {
       setSaving(false);
     }
@@ -225,6 +240,11 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-center gap-2">
+        {lastSavedAt && (
+          <span className="text-xs text-muted-foreground mr-1">
+            Saved {lastSavedAt}
+          </span>
+        )}
         <button
           onClick={() => navigateDay(-1)}
           className="p-1.5 rounded hover:bg-muted transition-colors"
