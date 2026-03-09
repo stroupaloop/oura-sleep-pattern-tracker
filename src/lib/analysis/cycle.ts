@@ -215,20 +215,46 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
     const avgLuteal = lutealLengths.length > 0
       ? Math.round(lutealLengths.reduce((a, b) => a + b, 0) / lutealLengths.length)
       : 14;
+
+    const cycleLengths = cycles
+      .map((c) => c.cycleLength)
+      .filter((l): l is number => l != null && l >= 20 && l <= 45);
+    const avgCycleLength = cycleLengths.length > 0
+      ? Math.round(cycleLengths.reduce((a, b) => a + b, 0) / cycleLengths.length)
+      : 28;
+
     if (last.ovulationDay) {
       last.nextPeriodDay = format(addDays(parseISO(last.ovulationDay), avgLuteal), "yyyy-MM-dd");
+    }
 
-      const nextPeriodDate = parseISO(last.nextPeriodDay);
+    const anchorStr = last.periodStartDay ?? last.nextPeriodDay;
+
+    const FORWARD_CYCLES = 3;
+    if (anchorStr) {
+      let cursor: Date = parseISO(anchorStr);
       const today = new Date();
-      if (nextPeriodDate <= today) {
+      const maxFuture = addDays(today, 90);
+
+      for (let f = 0; f < FORWARD_CYCLES; f++) {
+        const nextStart: Date = addDays(cursor, avgCycleLength);
+        if (nextStart > maxFuture) break;
+
+        const prevCycle = cycles[cycles.length - 1];
+        if (prevCycle && !prevCycle.nextPeriodDay) {
+          prevCycle.nextPeriodDay = format(nextStart, "yyyy-MM-dd");
+        }
+
+        const estOvulation: Date = addDays(nextStart, avgCycleLength - avgLuteal);
         cycles.push({
           cycleNumber: cycles.length + 1,
-          periodStartDay: last.nextPeriodDay,
-          ovulationDay: null,
+          periodStartDay: format(nextStart, "yyyy-MM-dd"),
+          ovulationDay: estOvulation <= maxFuture ? format(estOvulation, "yyyy-MM-dd") : null,
           nextPeriodDay: null,
-          cycleLength: null,
-          confidence: 0.2,
+          cycleLength: avgCycleLength,
+          confidence: 0.15,
         });
+
+        cursor = nextStart;
       }
     }
   }

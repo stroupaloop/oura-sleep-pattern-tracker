@@ -174,16 +174,13 @@ function getTodayBanner(phaseMap: Map<string, DayPhase>, cycleData: CycleEntry[]
   const config = PHASE_CONFIG[todayPhase.phase];
   let banner = `Day ${todayPhase.dayInPhase} of ${config.label.toLowerCase()} phase`;
 
-  const latest = cycleData[0];
-  if (latest?.nextPeriodDay) {
-    const nextPeriod = parseISO(latest.nextPeriodDay);
-    const today = new Date();
-    if (isAfter(nextPeriod, today)) {
-      banner += ` · Next period ~${format(nextPeriod, "MMM d")}`;
-    } else {
-      const daysOverdue = differenceInDays(today, nextPeriod);
-      banner += ` · Period expected ${daysOverdue}d ago`;
-    }
+  const today = new Date();
+  const futurePeriods = cycleData
+    .filter((c) => c.periodStartDay && isAfter(parseISO(c.periodStartDay), today))
+    .sort((a, b) => a.periodStartDay!.localeCompare(b.periodStartDay!));
+
+  if (futurePeriods.length > 0) {
+    banner += ` · Next period ~${format(parseISO(futurePeriods[0].periodStartDay!), "MMM d")}`;
   }
 
   return banner;
@@ -222,6 +219,17 @@ export function CycleCalendar({ cycleData }: CycleCalendarProps) {
     if (starts.length === 0) return null;
     return parseISO(starts.reduce((a, b) => (a < b ? a : b)));
   }, [cycleData]);
+
+  const latestDate = useMemo(() => {
+    const allDays = cycleData.flatMap((c) => [c.periodStartDay, c.ovulationDay, c.nextPeriodDay]);
+    const valid = allDays.filter((d): d is string => d != null);
+    if (valid.length === 0) return null;
+    return parseISO(valid.reduce((a, b) => (a > b ? a : b)));
+  }, [cycleData]);
+
+  const canGoForward = latestDate
+    ? startOfMonth(viewDate) < startOfMonth(latestDate)
+    : false;
 
   const canGoBack = earliestDate
     ? startOfMonth(viewDate) > startOfMonth(earliestDate)
@@ -278,7 +286,7 @@ export function CycleCalendar({ cycleData }: CycleCalendarProps) {
           </div>
           <button
             onClick={() => setViewDate(addMonths(viewDate, 1))}
-            disabled={isCurrentMonth}
+            disabled={!canGoForward}
             className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-30"
             aria-label="Next month"
           >
