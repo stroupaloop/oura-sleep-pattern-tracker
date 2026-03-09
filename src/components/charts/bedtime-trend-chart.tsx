@@ -55,6 +55,8 @@ export function BedtimeTrendChart({
 
   if (sliced.length === 0) return null;
 
+  const hasAnyOptimal = sliced.some((d) => d.optimalStart != null && d.optimalEnd != null);
+
   const allMinutes = sliced.flatMap((d) => [
     d.actualBedtime!,
     ...(d.optimalStart != null ? [d.optimalStart] : []),
@@ -74,7 +76,11 @@ export function BedtimeTrendChart({
     <Card>
       <CardHeader>
         <CardTitle>Sleep Timing</CardTitle>
-        <CardDescription>Bedtime vs. optimal window (last {days} days)</CardDescription>
+        <CardDescription>
+          {hasAnyOptimal
+            ? `Bedtime vs. optimal window (last ${days} days)`
+            : `Bedtime trend (last ${days} days — optimal window not available from Oura)`}
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="relative">
@@ -91,6 +97,12 @@ export function BedtimeTrendChart({
               const dotLeft = ((actual - rangeMin) / rangeSpan) * 100;
 
               if (!hasOptimal) {
+                const dotClass = hasAnyOptimal
+                  ? "bg-muted-foreground/40"
+                  : "bg-primary/60";
+                const dotTitle = hasAnyOptimal
+                  ? `${formatMinutesAsTime(actual)} — No data`
+                  : formatMinutesAsTime(actual);
                 return (
                   <div key={point.day} className="flex items-center gap-2 group">
                     <span className="text-[10px] text-muted-foreground w-12 shrink-0 text-right">
@@ -99,9 +111,9 @@ export function BedtimeTrendChart({
                     <div className="relative flex-1 h-5">
                       <div className="absolute inset-y-0 left-0 right-0 bg-muted/30 rounded-sm" />
                       <div
-                        className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-muted-foreground/40 transition-transform group-hover:scale-150"
+                        className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${dotClass} transition-transform group-hover:scale-150`}
                         style={{ left: `${Math.max(0, Math.min(98, dotLeft))}%` }}
-                        title={`${formatMinutesAsTime(actual)} — No data`}
+                        title={dotTitle}
                       />
                     </div>
                   </div>
@@ -144,26 +156,35 @@ export function BedtimeTrendChart({
           </div>
 
           <div className="flex items-center gap-4 justify-center mt-4 text-[10px] text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-violet-500/15" />
-              Optimal window
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
-              On time
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-              Slightly off
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-              Way off
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />
-              No data
-            </div>
+            {hasAnyOptimal ? (
+              <>
+                <div className="flex items-center gap-1">
+                  <span className="w-3 h-3 rounded-sm bg-violet-500/15" />
+                  Optimal window
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
+                  On time
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
+                  Slightly off
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
+                  Way off
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />
+                  No data
+                </div>
+              </>
+            ) : (
+              <div className="flex items-center gap-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-primary/60" />
+                Actual bedtime
+              </div>
+            )}
           </div>
         </div>
       </CardContent>

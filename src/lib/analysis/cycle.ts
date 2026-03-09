@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { dailyReadiness, restModePeriods, cyclePredictions } from "@/lib/db/schema";
-import { gte, and, isNotNull } from "drizzle-orm";
+import { gte, gt, and, isNotNull } from "drizzle-orm";
 import { format, subDays, differenceInDays, addDays, parseISO } from "date-fns";
 
 interface TempPoint {
@@ -131,7 +131,11 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
     const ovDay = temps[ovIdx].day;
 
     let periodStart: string | null = null;
-    if (c > 0) {
+    let irregularGap = false;
+    if (c === 0) {
+      periodStart = format(addDays(parseISO(ovDay), -14), "yyyy-MM-dd");
+      irregularGap = true;
+    } else {
       const prevOvIdx = shiftIndices[c - 1];
       const prevOvDay = temps[prevOvIdx].day;
       const gapDays = differenceInDays(parseISO(ovDay), parseISO(prevOvDay));
@@ -141,6 +145,9 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
           ? Math.round(lutealLengths.reduce((a, b) => a + b, 0) / lutealLengths.length)
           : 14;
         periodStart = format(addDays(parseISO(prevOvDay), estLuteal), "yyyy-MM-dd");
+      } else {
+        periodStart = format(addDays(parseISO(ovDay), -14), "yyyy-MM-dd");
+        irregularGap = true;
       }
     }
 
@@ -187,6 +194,10 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
 
     if (cycleLength != null && cycleLength >= 24 && cycleLength <= 35) {
       confidence = Math.min(1, confidence + 0.1);
+    }
+
+    if (irregularGap) {
+      confidence = Math.min(confidence, 0.3);
     }
 
     cycles.push({
@@ -241,6 +252,9 @@ export async function runCyclePredictions(): Promise<{ cyclesDetected: number }>
           },
         });
     }
+
+    await db.delete(cyclePredictions)
+      .where(gt(cyclePredictions.cycleNumber, cycles.length));
   }
 
   return { cyclesDetected: cycles.length };
