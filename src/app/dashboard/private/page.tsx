@@ -8,13 +8,11 @@ import {
   vo2Max,
   sleepTime,
   personalInfo,
-  enhancedTags,
-  restModePeriods,
   cyclePredictions,
   sleepPeriods,
   dailyReadiness,
 } from "@/lib/db/schema";
-import { desc, gte, eq, and, isNotNull } from "drizzle-orm";
+import { desc, gte, eq, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { PrivateTabs } from "./private-tabs";
 
@@ -30,8 +28,6 @@ export default async function PrivatePage() {
     vo2Data,
     sleepTimeData,
     personalInfoData,
-    tagData,
-    restModeData,
     cycleData,
     sleepData,
     readinessTempData,
@@ -52,16 +48,6 @@ export default async function PrivatePage() {
       .where(gte(sleepTime.day, cutoff))
       .orderBy(sleepTime.day),
     db.select().from(personalInfo).limit(1),
-    db
-      .select()
-      .from(enhancedTags)
-      .where(gte(enhancedTags.day, cutoff))
-      .orderBy(desc(enhancedTags.day)),
-    db
-      .select()
-      .from(restModePeriods)
-      .where(gte(restModePeriods.startDay, cutoff))
-      .orderBy(desc(restModePeriods.startDay)),
     db
       .select()
       .from(cyclePredictions)
@@ -87,6 +73,14 @@ export default async function PrivatePage() {
 
   const person = personalInfoData[0] ?? null;
 
+  function normalizeOffsetMinutes(offsetSeconds: string | null | undefined): number | null {
+    if (!offsetSeconds) return null;
+    let mins = Number(offsetSeconds) / 60;
+    if (mins < 0) mins += 1440;
+    if (mins < 720) mins += 1440;
+    return mins;
+  }
+
   const bedtimeData = sleepData.map((t) => {
     const st = sleepTimeData.find((s) => s.day === t.day);
     let actualMinutes: number | null = null;
@@ -107,8 +101,8 @@ export default async function PrivatePage() {
     return {
       day: t.day,
       actualBedtime: actualMinutes,
-      optimalStart: st?.optimalBedtimeStart ? Number(st.optimalBedtimeStart) / 60 : null,
-      optimalEnd: st?.optimalBedtimeEnd ? Number(st.optimalBedtimeEnd) / 60 : null,
+      optimalStart: normalizeOffsetMinutes(st?.optimalBedtimeStart),
+      optimalEnd: normalizeOffsetMinutes(st?.optimalBedtimeEnd),
     };
   });
 
@@ -119,8 +113,6 @@ export default async function PrivatePage() {
         cvAgeData={cvAgeData.map((c) => ({ day: c.day, vascularAge: c.vascularAge }))}
         vo2Data={vo2Data.map((v) => ({ day: v.day, vo2Max: v.vo2Max }))}
         personalInfo={person ? { age: person.age, height: person.height, weight: person.weight, biologicalSex: person.biologicalSex } : null}
-        tagData={tagData.map((t) => ({ day: t.day, tagTypeCode: t.tagTypeCode, comment: t.comment, startTime: t.startTime, endTime: t.endTime }))}
-        restPeriods={restModeData.map((r) => ({ startDay: r.startDay ?? "", endDay: r.endDay ?? "" }))}
         cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, ovulationDay: c.ovulationDay, nextPeriodDay: c.nextPeriodDay, cycleLength: c.cycleLength, confidence: c.confidence }))}
         temperatureData={readinessTempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDeviation }))}
         bedtimeData={bedtimeData}

@@ -13,13 +13,12 @@ import { CardiovascularAgeChart } from "@/components/charts/cardiovascular-age-c
 import { Vo2MaxChart } from "@/components/charts/vo2-max-chart";
 import { CycleTemperatureChart } from "@/components/charts/cycle-temperature-chart";
 import { CycleLengthChart } from "@/components/charts/cycle-length-chart";
-import { RestModeTimeline } from "@/components/charts/rest-mode-timeline";
+
 import { BedtimeTrendChart } from "@/components/charts/bedtime-trend-chart";
 import { CycleCalendar } from "@/components/charts/cycle-calendar";
 
 const TABS = [
   { id: "body", label: "Body" },
-  { id: "tags", label: "Tags & Rest" },
   { id: "sleep-timing", label: "Sleep Timing" },
 ] as const;
 
@@ -34,14 +33,6 @@ interface PrivateTabsProps {
     weight: number | null;
     biologicalSex: string | null;
   } | null;
-  tagData: {
-    day: string;
-    tagTypeCode: string | null;
-    comment: string | null;
-    startTime: string | null;
-    endTime: string | null;
-  }[];
-  restPeriods: { startDay: string; endDay: string }[];
   cycleData: {
     cycleNumber: number;
     periodStartDay: string | null;
@@ -78,7 +69,6 @@ export function PrivateTabs(props: PrivateTabsProps) {
       </div>
 
       {activeTab === "body" && <BodyTab {...props} />}
-      {activeTab === "tags" && <TagsTab tagData={props.tagData} restPeriods={props.restPeriods} />}
       {activeTab === "sleep-timing" && <SleepTimingTab bedtimeData={props.bedtimeData} />}
     </div>
   );
@@ -242,86 +232,6 @@ function BodyTab({
       )}
 
       {vo2Data.length > 0 && <Vo2MaxChart data={vo2Data} />}
-    </div>
-  );
-}
-
-function TagsTab({
-  tagData,
-  restPeriods,
-}: {
-  tagData: PrivateTabsProps["tagData"];
-  restPeriods: PrivateTabsProps["restPeriods"];
-}) {
-  const tagDays = new Set(tagData.map((t) => t.day));
-  const allDays = Array.from(tagDays).sort();
-  const timelineData = allDays.map((day) => ({
-    day,
-    hasTag: true,
-  }));
-
-  if (tagData.length === 0 && restPeriods.length === 0) {
-    return (
-      <Card>
-        <CardContent className="py-8">
-          <p className="text-sm text-muted-foreground text-center">
-            No tags or rest mode data found. Try running a data sync from Settings to pull historical data.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-6">
-      {restPeriods.length > 0 && (
-        <RestModeTimeline data={timelineData} restPeriods={restPeriods} />
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Enhanced Tags</CardTitle>
-          <CardDescription>Tags synced from Oura (last 90 days)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {tagData.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No tags found.</p>
-          ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {tagData.map((tag, i) => (
-                <div key={i} className="flex flex-col sm:flex-row sm:justify-between gap-1 text-sm border-b pb-2">
-                  <div>
-                    <span className="font-medium">{tag.tagTypeCode ?? "tag"}</span>
-                    {tag.comment && <span className="text-muted-foreground ml-2">{tag.comment}</span>}
-                  </div>
-                  <span className="text-muted-foreground">
-                    {tag.day}
-                    {tag.startTime && ` ${new Date(tag.startTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}`}
-                    {tag.endTime && ` - ${new Date(tag.endTime).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" })}`}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {restPeriods.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Rest Mode Periods</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {restPeriods.map((period, i) => (
-                <div key={i} className="text-sm border-b pb-2">
-                  {period.startDay} to {period.endDay}
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </div>
   );
 }

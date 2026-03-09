@@ -4,17 +4,20 @@ import { useState, useMemo } from "react";
 import {
   startOfWeek,
   endOfWeek,
+  startOfMonth,
+  endOfMonth,
   eachDayOfInterval,
-  subWeeks,
   format,
   addDays,
+  addMonths,
+  subMonths,
   differenceInDays,
   isAfter,
-  isBefore,
-  isSameDay,
+  isSameMonth,
   isToday,
   parseISO,
 } from "date-fns";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 
 const MENSTRUAL_DAYS = 5;
@@ -204,19 +207,36 @@ function getNextEvent(phaseMap: Map<string, DayPhase>, dayKey: string): string |
 
 export function CycleCalendar({ cycleData }: CycleCalendarProps) {
   const today = new Date();
-  const gridStart = startOfWeek(subWeeks(today, 4), { weekStartsOn: 1 });
-  const gridEnd = endOfWeek(today, { weekStartsOn: 1 });
+  const [viewDate, setViewDate] = useState(today);
+  const [selectedDay, setSelectedDay] = useState<string | null>(null);
+
+  const phaseMap = useMemo(() => buildPhaseMap(cycleData), [cycleData]);
+  const banner = useMemo(() => getTodayBanner(phaseMap, cycleData), [phaseMap, cycleData]);
+
+  const isCurrentMonth = isSameMonth(viewDate, today);
+
+  const earliestDate = useMemo(() => {
+    const starts = cycleData
+      .map((c) => c.periodStartDay)
+      .filter((d): d is string => d != null);
+    if (starts.length === 0) return null;
+    return parseISO(starts.reduce((a, b) => (a < b ? a : b)));
+  }, [cycleData]);
+
+  const canGoBack = earliestDate
+    ? startOfMonth(viewDate) > startOfMonth(earliestDate)
+    : false;
+
+  const monthStart = startOfMonth(viewDate);
+  const monthEnd = endOfMonth(viewDate);
+  const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+  const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
   const allDays = eachDayOfInterval({ start: gridStart, end: gridEnd });
 
   const weeks: Date[][] = [];
   for (let i = 0; i < allDays.length; i += 7) {
     weeks.push(allDays.slice(i, i + 7));
   }
-
-  const phaseMap = useMemo(() => buildPhaseMap(cycleData), [cycleData]);
-  const banner = useMemo(() => getTodayBanner(phaseMap, cycleData), [phaseMap, cycleData]);
-
-  const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
   if (cycleData.length === 0) {
     return (
@@ -234,7 +254,39 @@ export function CycleCalendar({ cycleData }: CycleCalendarProps) {
   return (
     <Card>
       <CardContent className="pt-6 space-y-4">
-        {banner && (
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => setViewDate(subMonths(viewDate, 1))}
+            disabled={!canGoBack}
+            className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-30"
+            aria-label="Previous month"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">
+              {format(viewDate, "MMMM yyyy")}
+            </span>
+            {!isCurrentMonth && (
+              <button
+                onClick={() => setViewDate(today)}
+                className="text-xs px-2 py-0.5 rounded-md bg-muted hover:bg-muted/80 transition-colors text-muted-foreground"
+              >
+                Today
+              </button>
+            )}
+          </div>
+          <button
+            onClick={() => setViewDate(addMonths(viewDate, 1))}
+            disabled={isCurrentMonth}
+            className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-30"
+            aria-label="Next month"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {isCurrentMonth && banner && (
           <div className="text-sm font-medium text-center px-2 py-2 rounded-md bg-muted/50">
             {banner}
           </div>
@@ -255,9 +307,22 @@ export function CycleCalendar({ cycleData }: CycleCalendarProps) {
               week.map((day) => {
                 const key = format(day, "yyyy-MM-dd");
                 const phase = phaseMap.get(key);
-                const isFuture = isAfter(day, today);
+                const isAdjacent = !isSameMonth(day, viewDate);
                 const isSelected = selectedDay === key;
                 const isTodayCell = isToday(day);
+
+                if (isAdjacent) {
+                  return (
+                    <div
+                      key={key}
+                      className="relative aspect-square rounded-md p-1 flex flex-col items-center justify-center opacity-30"
+                    >
+                      <span className="text-[10px] text-muted-foreground leading-none">
+                        {format(day, "d")}
+                      </span>
+                    </div>
+                  );
+                }
 
                 return (
                   <button
@@ -295,7 +360,9 @@ export function CycleCalendar({ cycleData }: CycleCalendarProps) {
               <span className={`font-medium ${PHASE_CONFIG[selectedPhase.phase].text}`}>
                 {PHASE_CONFIG[selectedPhase.phase].label}
               </span>
-              <span className="text-xs text-muted-foreground">{selectedDay}</span>
+              <span className="text-xs text-muted-foreground">
+                {format(parseISO(selectedDay), "EEE, MMM d")}
+              </span>
             </div>
             <p className="text-muted-foreground">
               Day {selectedPhase.dayInPhase} of {selectedPhase.totalPhaseDays}

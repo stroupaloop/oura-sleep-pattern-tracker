@@ -57,8 +57,8 @@ export function BedtimeTrendChart({
 
   const allMinutes = sliced.flatMap((d) => [
     d.actualBedtime!,
-    d.optimalStart ?? d.actualBedtime!,
-    d.optimalEnd ?? d.actualBedtime!,
+    ...(d.optimalStart != null ? [d.optimalStart] : []),
+    ...(d.optimalEnd != null ? [d.optimalEnd] : []),
   ]);
   const rangeMin = Math.min(...allMinutes) - 30;
   const rangeMax = Math.max(...allMinutes) + 30;
@@ -87,13 +87,31 @@ export function BedtimeTrendChart({
           <div className="space-y-0.5">
             {sliced.reverse().map((point) => {
               const actual = point.actualBedtime!;
-              const optStart = point.optimalStart ?? actual;
-              const optEnd = point.optimalEnd ?? actual;
-
-              const windowLeft = ((optStart - rangeMin) / rangeSpan) * 100;
-              const windowWidth = ((optEnd - optStart) / rangeSpan) * 100;
+              const hasOptimal = point.optimalStart != null && point.optimalEnd != null;
               const dotLeft = ((actual - rangeMin) / rangeSpan) * 100;
 
+              if (!hasOptimal) {
+                return (
+                  <div key={point.day} className="flex items-center gap-2 group">
+                    <span className="text-[10px] text-muted-foreground w-12 shrink-0 text-right">
+                      {point.day.slice(5)}
+                    </span>
+                    <div className="relative flex-1 h-5">
+                      <div className="absolute inset-y-0 left-0 right-0 bg-muted/30 rounded-sm" />
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-muted-foreground/40 transition-transform group-hover:scale-150"
+                        style={{ left: `${Math.max(0, Math.min(98, dotLeft))}%` }}
+                        title={`${formatMinutesAsTime(actual)} — No data`}
+                      />
+                    </div>
+                  </div>
+                );
+              }
+
+              const optStart = point.optimalStart!;
+              const optEnd = point.optimalEnd!;
+              const windowLeft = ((optStart - rangeMin) / rangeSpan) * 100;
+              const windowWidth = ((optEnd - optStart) / rangeSpan) * 100;
               const dotColor = getDotColor(actual, optStart, optEnd);
               const label = getDotLabel(actual, optStart, optEnd);
 
@@ -141,6 +159,10 @@ export function BedtimeTrendChart({
             <div className="flex items-center gap-1">
               <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
               Way off
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />
+              No data
             </div>
           </div>
         </div>
