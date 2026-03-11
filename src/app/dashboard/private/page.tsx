@@ -5,6 +5,7 @@ import { auth, isSensitiveUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import {
   dailyCardiovascularAge,
+  dailyHeartrate,
   vo2Max,
   sleepTime,
   personalInfo,
@@ -31,6 +32,7 @@ export default async function PrivatePage() {
     cycleData,
     sleepData,
     readinessTempData,
+    hrData,
   ] = await Promise.all([
     db
       .select()
@@ -69,6 +71,11 @@ export default async function PrivatePage() {
       .from(dailyReadiness)
       .where(gte(dailyReadiness.day, cutoff))
       .orderBy(dailyReadiness.day),
+    db
+      .select()
+      .from(dailyHeartrate)
+      .where(gte(dailyHeartrate.day, cutoff))
+      .orderBy(dailyHeartrate.day),
   ]);
 
   const person = personalInfoData[0] ?? null;
@@ -116,6 +123,7 @@ export default async function PrivatePage() {
         cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, ovulationDay: c.ovulationDay, nextPeriodDay: c.nextPeriodDay, cycleLength: c.cycleLength, confidence: c.confidence }))}
         temperatureData={readinessTempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDeviation }))}
         bedtimeData={bedtimeData}
+        hrData={hrData.map((h) => ({ day: h.day, restingBpm: h.restingBpm, awakeBpm: h.awakeBpm, minBpm: h.minBpm, maxBpm: h.maxBpm }))}
       />
     </div>
   );

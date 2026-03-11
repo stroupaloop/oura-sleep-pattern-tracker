@@ -238,11 +238,14 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
       for (let f = 0; f < FORWARD_CYCLES; f++) {
         const nextStart: Date = addDays(cursor, avgCycleLength);
         if (nextStart > maxFuture) break;
+        cursor = nextStart;
 
         const prevCycle = cycles[cycles.length - 1];
         if (prevCycle && !prevCycle.nextPeriodDay) {
           prevCycle.nextPeriodDay = format(nextStart, "yyyy-MM-dd");
         }
+
+        if (nextStart <= today) continue;
 
         const estOvulation: Date = addDays(nextStart, avgCycleLength - avgLuteal);
         cycles.push({
@@ -253,8 +256,6 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
           cycleLength: avgCycleLength,
           confidence: 0.15,
         });
-
-        cursor = nextStart;
       }
     }
   }

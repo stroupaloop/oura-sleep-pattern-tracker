@@ -451,6 +451,18 @@ export const dailyLocation = sqliteTable("daily_location", {
   createdAt: integer("created_at").notNull(),
 });
 
+export const dailyHeartrate = sqliteTable("daily_heartrate", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  day: text("day").notNull().unique(),
+  avgBpm: real("avg_bpm"),
+  minBpm: integer("min_bpm"),
+  maxBpm: integer("max_bpm"),
+  restingBpm: real("resting_bpm"),
+  awakeBpm: real("awake_bpm"),
+  sampleCount: integer("sample_count"),
+  createdAt: integer("created_at").notNull(),
+});
+
 export const cyclePredictions = sqliteTable("cycle_predictions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   cycleNumber: integer("cycle_number").notNull().unique(),

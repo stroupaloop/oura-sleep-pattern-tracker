@@ -64,6 +64,13 @@
       "when": 1772838155542,
       "tag": "0008_strong_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1773178099179,
+      "tag": "0009_military_frog_thor",
+      "breakpoints": true
     }
   ]
 }

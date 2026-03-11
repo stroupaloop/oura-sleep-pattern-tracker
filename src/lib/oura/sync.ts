@@ -13,6 +13,7 @@ import {
   enhancedTags,
   restModePeriods,
   dailyCardiovascularAge,
+  dailyHeartrate,
   vo2Max,
   sleepTime,
   personalInfo,
@@ -34,6 +35,7 @@ import type {
   OuraVo2Max,
   OuraSleepTime,
   OuraPersonalInfo,
+  OuraHeartrateSample,
 } from "./types";
 import { sql } from "drizzle-orm";
 
@@ -342,6 +344,53 @@ export async function syncDateRange(
         });
     }
     totalRecords += sessionData.length;
+
+    const hrSamples = await ouraFetch<OuraHeartrateSample>(
+      "v2/usercollection/heartrate",
+      { start_datetime: `${startDate}T00:00:00`, end_datetime: `${endDate}T23:59:59` }
+    ).catch(() => [] as OuraHeartrateSample[]);
+
+    if (hrSamples.length > 0) {
+      const byDay = new Map<string, OuraHeartrateSample[]>();
+      for (const s of hrSamples) {
+        const day = s.timestamp.slice(0, 10);
+        const arr = byDay.get(day);
+        if (arr) arr.push(s);
+        else byDay.set(day, [s]);
+      }
+
+      for (const [day, samples] of byDay) {
+        const bpms = samples.map((s) => s.bpm);
+        const restSamples = samples.filter((s) => s.source === "rest");
+        const awakeSamples = samples.filter((s) => s.source === "awake");
+        const avg = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
+
+        await db
+          .insert(dailyHeartrate)
+          .values({
+            day,
+            avgBpm: Math.round(avg(bpms) * 10) / 10,
+            minBpm: Math.min(...bpms),
+            maxBpm: Math.max(...bpms),
+            restingBpm: restSamples.length > 0 ? Math.round(avg(restSamples.map((s) => s.bpm)) * 10) / 10 : null,
+            awakeBpm: awakeSamples.length > 0 ? Math.round(avg(awakeSamples.map((s) => s.bpm)) * 10) / 10 : null,
+            sampleCount: samples.length,
+            createdAt: now,
+          })
+          .onConflictDoUpdate({
+            target: dailyHeartrate.day,
+            set: {
+              avgBpm: sql`excluded.avg_bpm`,
+              minBpm: sql`excluded.min_bpm`,
+              maxBpm: sql`excluded.max_bpm`,
+              restingBpm: sql`excluded.resting_bpm`,
+              awakeBpm: sql`excluded.awake_bpm`,
+              sampleCount: sql`excluded.sample_count`,
+            },
+          });
+      }
+      totalRecords += byDay.size;
+    }
 
     await db.insert(syncLog).values({
       syncType,

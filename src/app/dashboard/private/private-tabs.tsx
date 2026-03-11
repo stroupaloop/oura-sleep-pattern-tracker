@@ -16,6 +16,7 @@ import { CycleLengthChart } from "@/components/charts/cycle-length-chart";
 
 import { BedtimeTrendChart } from "@/components/charts/bedtime-trend-chart";
 import { CycleCalendar } from "@/components/charts/cycle-calendar";
+import { RestingHrChart } from "@/components/charts/resting-hr-chart";
 
 const TABS = [
   { id: "body", label: "Body" },
@@ -47,6 +48,13 @@ interface PrivateTabsProps {
     actualBedtime: number | null;
     optimalStart: number | null;
     optimalEnd: number | null;
+  }[];
+  hrData: {
+    day: string;
+    restingBpm: number | null;
+    awakeBpm: number | null;
+    minBpm: number | null;
+    maxBpm: number | null;
   }[];
 }
 
@@ -80,6 +88,7 @@ function BodyTab({
   personalInfo,
   cycleData,
   temperatureData,
+  hrData,
 }: PrivateTabsProps) {
   const latestCycle = cycleData[0];
   const ovulationDays = cycleData
@@ -232,6 +241,8 @@ function BodyTab({
       )}
 
       {vo2Data.length > 0 && <Vo2MaxChart data={vo2Data} />}
+
+      {hrData.length > 0 && <RestingHrChart data={hrData} />}
     </div>
   );
 }

@@ -177,6 +177,12 @@ export interface OuraSleepTime {
   status: string | null;
 }
 
+export interface OuraHeartrateSample {
+  bpm: number;
+  source: string;
+  timestamp: string;
+}
+
 export interface OuraPersonalInfo {
   id: string;
   age: number | null;
