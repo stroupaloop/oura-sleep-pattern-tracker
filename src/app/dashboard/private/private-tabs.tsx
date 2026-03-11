@@ -14,6 +14,7 @@ import { Vo2MaxChart } from "@/components/charts/vo2-max-chart";
 import { CycleTemperatureChart } from "@/components/charts/cycle-temperature-chart";
 import { CycleLengthChart } from "@/components/charts/cycle-length-chart";
 
+import { getTodayET } from "@/lib/date-utils";
 import { BedtimeTrendChart } from "@/components/charts/bedtime-trend-chart";
 import { CycleCalendar } from "@/components/charts/cycle-calendar";
 import { RestingHrChart } from "@/components/charts/resting-hr-chart";
@@ -160,7 +161,7 @@ function BodyTab({
                 </div>
               )}
               {latestCycle.nextPeriodDay && (() => {
-                const todayStr = new Date().toISOString().slice(0, 10);
+                const todayStr = getTodayET();
                 const isPast = latestCycle.nextPeriodDay < todayStr;
                 return (
                   <div>

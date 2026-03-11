@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { getTodayET } from "@/lib/date-utils";
 
 const MOODS = [
   { value: -3, label: "Depressed", color: "bg-blue-600" },
@@ -42,9 +43,9 @@ interface DailyLogCardProps {
 }
 
 function formatDisplayDate(dateStr: string): string {
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
-  const yesterday = new Date(today);
+  const todayStr = getTodayET();
+  const [ty, tm, td] = todayStr.split("-").map(Number);
+  const yesterday = new Date(ty, tm - 1, td);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
@@ -149,7 +150,7 @@ export function DailyLogCard({
 
   function navigateDay(delta: number) {
     const newDay = shiftDay(selectedDay, delta);
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getTodayET();
     if (newDay > todayStr) return;
     setSelectedDay(newDay);
     fetchDayData(newDay);
@@ -158,7 +159,7 @@ export function DailyLogCard({
   function handleDateInput(e: React.ChangeEvent<HTMLInputElement>) {
     const newDay = e.target.value;
     if (!newDay) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getTodayET();
     if (newDay > todayStr) return;
     setSelectedDay(newDay);
     fetchDayData(newDay);
@@ -245,7 +246,7 @@ export function DailyLogCard({
     showSaved();
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayET();
   const isToday = selectedDay === todayStr;
   const dayMeds = medsForDay(medications, selectedDay);
 

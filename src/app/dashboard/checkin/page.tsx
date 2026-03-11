@@ -3,11 +3,11 @@ export const dynamic = "force-dynamic";
 import { db } from "@/lib/db";
 import { dailyMood, medications } from "@/lib/db/schema";
 import { eq, and, or, lte, isNull } from "drizzle-orm";
-import { format } from "date-fns";
 import { MoodForm } from "./mood-form";
+import { getTodayET } from "@/lib/date-utils";
 
 export default async function CheckinPage() {
-  const today = format(new Date(), "yyyy-MM-dd");
+  const today = getTodayET();
 
   const [existingMood, activeMeds] = await Promise.all([
     db

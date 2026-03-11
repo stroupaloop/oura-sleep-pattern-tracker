@@ -14,6 +14,7 @@ import {
 } from "@/lib/db/schema";
 import { desc, sql, and, gte, ne, eq } from "drizzle-orm";
 import { format, subDays } from "date-fns";
+import { getTodayET } from "@/lib/date-utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -113,7 +114,8 @@ export default async function DashboardPage() {
     .orderBy(desc(dailySleep.day))
     .limit(30);
 
-  const fourteenDaysAgo = format(subDays(new Date(), 14), "yyyy-MM-dd");
+  const todayDate = new Date(getTodayET() + "T12:00:00");
+  const fourteenDaysAgo = format(subDays(todayDate, 14), "yyyy-MM-dd");
   const recentEpisodes = await db
     .select({
       id: episodeAssessments.id,
@@ -134,7 +136,7 @@ export default async function DashboardPage() {
     )
     .orderBy(desc(episodeAssessments.day));
 
-  const today = format(new Date(), "yyyy-MM-dd");
+  const today = getTodayET();
   const todayMood = await db
     .select({ moodScore: dailyMood.moodScore, episodeState: dailyMood.episodeState })
     .from(dailyMood)
@@ -177,7 +179,7 @@ export default async function DashboardPage() {
 
   const confidenceData = await computeDataConfidence(30);
 
-  const thirtyDaysAgo = format(subDays(new Date(), 30), "yyyy-MM-dd");
+  const thirtyDaysAgo = format(subDays(todayDate, 30), "yyyy-MM-dd");
   const recentAnalysis = await db
     .select({
       day: dailyAnalysis.day,

@@ -15,6 +15,7 @@ import {
 } from "@/lib/db/schema";
 import { desc, gte, eq, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
+import { getTodayET } from "@/lib/date-utils";
 import { PrivateTabs } from "./private-tabs";
 
 export default async function PrivatePage() {
@@ -22,7 +23,7 @@ export default async function PrivatePage() {
   if (!session?.user) redirect("/login");
   if (!isSensitiveUser(session.user.email)) redirect("/dashboard");
 
-  const cutoff = format(subDays(new Date(), 90), "yyyy-MM-dd");
+  const cutoff = format(subDays(new Date(getTodayET() + "T12:00:00"), 90), "yyyy-MM-dd");
 
   const [
     cvAgeData,
@@ -75,7 +76,8 @@ export default async function PrivatePage() {
       .select()
       .from(dailyHeartrate)
       .where(gte(dailyHeartrate.day, cutoff))
-      .orderBy(dailyHeartrate.day),
+      .orderBy(dailyHeartrate.day)
+      .catch(() => [] as { id: number; day: string; avgBpm: number | null; minBpm: number | null; maxBpm: number | null; restingBpm: number | null; awakeBpm: number | null; sampleCount: number | null; createdAt: number }[]),
   ]);
 
   const person = personalInfoData[0] ?? null;

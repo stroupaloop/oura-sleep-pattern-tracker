@@ -10,6 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { getTodayET } from "@/lib/date-utils";
 
 const MOOD_OPTIONS = [
   { value: -3, label: "Very Low", color: "bg-blue-600" },
@@ -64,9 +65,9 @@ interface MoodFormProps {
 }
 
 function formatDisplayDate(dateStr: string): string {
-  const today = new Date();
-  const todayStr = today.toISOString().slice(0, 10);
-  const yesterday = new Date(today);
+  const todayStr = getTodayET();
+  const [ty, tm, td] = todayStr.split("-").map(Number);
+  const yesterday = new Date(ty, tm - 1, td);
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
@@ -178,7 +179,7 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
 
   function navigateDay(delta: number) {
     const newDay = shiftDay(selectedDay, delta);
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getTodayET();
     if (newDay > todayStr) return;
     setSelectedDay(newDay);
     loadDayData(newDay);
@@ -187,7 +188,7 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
   function handleDateInput(e: React.ChangeEvent<HTMLInputElement>) {
     const newDay = e.target.value;
     if (!newDay) return;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = getTodayET();
     if (newDay > todayStr) return;
     setSelectedDay(newDay);
     loadDayData(newDay);
@@ -234,7 +235,7 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
     }
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = getTodayET();
   const isToday = selectedDay === todayStr;
 
   return (

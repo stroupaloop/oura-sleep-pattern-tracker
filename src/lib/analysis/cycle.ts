@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { dailyReadiness, restModePeriods, cyclePredictions } from "@/lib/db/schema";
 import { gte, gt, and, isNotNull } from "drizzle-orm";
 import { format, subDays, differenceInDays, addDays, parseISO } from "date-fns";
+import { getTodayET } from "@/lib/date-utils";
 
 interface TempPoint {
   day: string;
@@ -67,7 +68,8 @@ function detectThermalShifts(
 }
 
 export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
-  const cutoff = format(subDays(new Date(), 365), "yyyy-MM-dd");
+  const todayDate = new Date(getTodayET() + "T12:00:00");
+  const cutoff = format(subDays(todayDate, 365), "yyyy-MM-dd");
 
   const [tempRows, restRows] = await Promise.all([
     db
@@ -232,7 +234,7 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
     const FORWARD_CYCLES = 3;
     if (anchorStr) {
       let cursor: Date = parseISO(anchorStr);
-      const today = new Date();
+      const today = todayDate;
       const maxFuture = addDays(today, 90);
 
       for (let f = 0; f < FORWARD_CYCLES; f++) {

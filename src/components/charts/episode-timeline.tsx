@@ -43,10 +43,12 @@ interface TimelinePoint {
 }
 
 function getBarColor(point: TimelinePoint): string {
+  if (point.tier === "alert") return "#ef4444";
+  if (point.tier === "warning") return "#f59e0b";
+  if (point.tier === "watch") return "#3b82f6";
+  if (point.tier && point.tier !== "none") return "#a855f7";
   if (!point.isAnomaly) return "oklch(0.708 0 0 / 30%)";
-  if (point.direction === "hyper") return "#f59e0b";
-  if (point.direction === "hypo") return "#3b82f6";
-  return "#a855f7";
+  return "oklch(0.708 0 0 / 50%)";
 }
 
 interface TooltipPayloadItem {
