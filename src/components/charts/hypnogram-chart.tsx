@@ -157,7 +157,8 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
 
             {hr5min && hrData.length > 1 && (
               <svg
-                className="absolute inset-0 pointer-events-none"
+                className="absolute left-0 top-0 pointer-events-none z-10"
+                style={{ width: "100%", height: chartHeight }}
                 viewBox={`0 0 ${data.length} ${chartHeight}`}
                 preserveAspectRatio="none"
               >
@@ -165,7 +166,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
                   fill="none"
                   stroke="#ef4444"
                   strokeWidth="2"
-                  strokeOpacity="0.5"
+                  strokeOpacity="0.7"
                   vectorEffect="non-scaling-stroke"
                   points={data
                     .map((d, i) => {
