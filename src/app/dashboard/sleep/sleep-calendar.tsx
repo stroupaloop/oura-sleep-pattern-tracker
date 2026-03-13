@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { getTodayET } from "@/lib/date-utils";
 import {
   startOfWeek,
   endOfWeek,
@@ -37,7 +38,7 @@ interface SleepCalendarProps {
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export function SleepCalendar({ nights, scores, analyses }: SleepCalendarProps) {
-  const today = new Date();
+  const today = new Date(getTodayET() + "T12:00:00");
   const gridStart = startOfWeek(subWeeks(today, 4), { weekStartsOn: 1 });
   const gridEnd = endOfWeek(today, { weekStartsOn: 1 });
   const allDays = eachDayOfInterval({ start: gridStart, end: gridEnd });

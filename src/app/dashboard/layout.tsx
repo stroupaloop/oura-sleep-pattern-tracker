@@ -2,6 +2,9 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { auth, isSensitiveUser } from "@/lib/auth";
 import { MobileNav } from "@/components/mobile-nav";
+import { db } from "@/lib/db";
+import { syncLog } from "@/lib/db/schema";
+import { desc } from "drizzle-orm";
 
 export default async function DashboardLayout({
   children,
@@ -13,6 +16,22 @@ export default async function DashboardLayout({
 
   const sensitive = isSensitiveUser(session.user.email);
 
+  const lastSyncRow = await db
+    .select({ createdAt: syncLog.createdAt })
+    .from(syncLog)
+    .orderBy(desc(syncLog.createdAt))
+    .limit(1)
+    .catch(() => []);
+  const lastSyncTime = lastSyncRow[0]
+    ? new Date(lastSyncRow[0].createdAt * 1000).toLocaleString("en-US", {
+        timeZone: "America/New_York",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
   return (
     <div className="min-h-screen flex flex-col">
       <header className="border-b px-4 md:px-6 py-3 flex items-center justify-between">
@@ -22,6 +41,11 @@ export default async function DashboardLayout({
             🦥 Slothie&apos;s Bipolar Tracker
           </Link>
         </div>
+        {lastSyncTime && (
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            Synced {lastSyncTime}
+          </span>
+        )}
       </header>
       <main className="flex-1 p-4 md:p-6">{children}</main>
       <footer className="border-t px-4 md:px-6 py-3 text-xs text-muted-foreground">

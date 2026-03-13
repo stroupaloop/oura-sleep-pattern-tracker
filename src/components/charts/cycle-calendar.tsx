@@ -19,6 +19,7 @@ import {
 } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { getTodayET } from "@/lib/date-utils";
 
 const MENSTRUAL_DAYS = 5;
 
@@ -57,7 +58,7 @@ const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function buildPhaseMap(cycleData: CycleEntry[]): Map<string, DayPhase> {
   const map = new Map<string, DayPhase>();
-  const today = new Date();
+  const today = new Date(getTodayET() + "T12:00:00");
   const sorted = [...cycleData]
     .filter((c) => c.periodStartDay)
     .sort((a, b) => a.periodStartDay!.localeCompare(b.periodStartDay!));
@@ -167,14 +168,14 @@ function buildPhaseMap(cycleData: CycleEntry[]): Map<string, DayPhase> {
 }
 
 function getTodayBanner(phaseMap: Map<string, DayPhase>, cycleData: CycleEntry[]): string | null {
-  const todayKey = format(new Date(), "yyyy-MM-dd");
+  const todayKey = getTodayET();
   const todayPhase = phaseMap.get(todayKey);
   if (!todayPhase) return null;
 
   const config = PHASE_CONFIG[todayPhase.phase];
   let banner = `Day ${todayPhase.dayInPhase} of ${config.label.toLowerCase()} phase`;
 
-  const today = new Date();
+  const today = new Date(todayKey + "T12:00:00");
   const futurePeriods = cycleData
     .filter((c) => c.periodStartDay && isAfter(parseISO(c.periodStartDay), today))
     .sort((a, b) => a.periodStartDay!.localeCompare(b.periodStartDay!));
@@ -203,7 +204,7 @@ function getNextEvent(phaseMap: Map<string, DayPhase>, dayKey: string): string |
 }
 
 export function CycleCalendar({ cycleData }: CycleCalendarProps) {
-  const today = new Date();
+  const today = new Date(getTodayET() + "T12:00:00");
   const [viewDate, setViewDate] = useState(today);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
