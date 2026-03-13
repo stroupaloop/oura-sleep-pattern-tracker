@@ -123,7 +123,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
             ))}
           </div>
 
-          <div className="relative flex-1 overflow-hidden rounded-md">
+          <div className="relative flex-1 rounded-md" style={{ overflow: "visible" }}>
             {STAGES.map((s, rowIdx) => (
               <div
                 key={s.key}
@@ -155,30 +155,34 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
               );
             })}
 
-            {hr5min && hrData.length > 1 && (
-              <svg
-                className="absolute left-0 top-0 pointer-events-none z-10"
-                style={{ width: "100%", height: chartHeight }}
-                viewBox={`0 0 ${data.length} ${chartHeight}`}
-                preserveAspectRatio="none"
-              >
-                <polyline
-                  fill="none"
-                  stroke="#ef4444"
-                  strokeWidth="2"
-                  strokeOpacity="0.7"
-                  vectorEffect="non-scaling-stroke"
-                  points={data
-                    .map((d, i) => {
-                      if (d.hr == null) return null;
-                      const y = chartHeight - ((d.hr - hrMin) / hrRange) * chartHeight;
-                      return `${i},${y}`;
-                    })
-                    .filter(Boolean)
-                    .join(" ")}
-                />
-              </svg>
-            )}
+            {hr5min && hrData.length > 1 && (() => {
+              const pts = data
+                .map((d, i) => {
+                  if (d.hr == null) return null;
+                  const x = (i / (data.length - 1)) * 100;
+                  const y = ((d.hr - hrMin) / hrRange) * 100;
+                  return { x, y: 100 - y };
+                })
+                .filter((p): p is { x: number; y: number } => p != null);
+              const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+              return (
+                <svg
+                  className="absolute left-0 top-0 pointer-events-none"
+                  style={{ width: "100%", height: chartHeight, zIndex: 10 }}
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                >
+                  <path
+                    d={pathD}
+                    fill="none"
+                    stroke="#ef4444"
+                    strokeWidth="2"
+                    strokeOpacity="0.7"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                </svg>
+              );
+            })()}
 
             {tooltip && (
               <div
