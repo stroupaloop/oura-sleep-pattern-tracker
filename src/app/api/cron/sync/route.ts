@@ -4,6 +4,7 @@ import { reprocessAll } from "@/lib/analysis/reprocess";
 import { runCyclePredictions } from "@/lib/analysis/cycle";
 import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { format, subDays } from "date-fns";
+import { getTodayET } from "@/lib/date-utils";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -13,9 +14,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const today = new Date();
-  const startDate = format(subDays(today, 2), "yyyy-MM-dd");
-  const endDate = format(today, "yyyy-MM-dd");
+  const todayStr = getTodayET();
+  const todayDate = new Date(todayStr + "T12:00:00");
+  const startDate = format(subDays(todayDate, 2), "yyyy-MM-dd");
+  const endDate = todayStr;
 
   try {
     const syncResult = await syncDateRange(startDate, endDate, "cron");
