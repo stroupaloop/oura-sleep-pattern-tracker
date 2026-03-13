@@ -247,7 +247,8 @@ export async function computeCyclePredictions(): Promise<DetectedCycle[]> {
           prevCycle.nextPeriodDay = format(nextStart, "yyyy-MM-dd");
         }
 
-        if (nextStart <= today) continue;
+        const cycleEnd = addDays(nextStart, avgCycleLength);
+        if (cycleEnd <= today) continue;
 
         const estOvulation: Date = addDays(nextStart, avgCycleLength - avgLuteal);
         cycles.push({
