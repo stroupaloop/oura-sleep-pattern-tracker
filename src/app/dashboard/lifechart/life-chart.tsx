@@ -5,6 +5,7 @@ import {
   Area,
   BarChart,
   Bar,
+  Cell,
   LineChart,
   Line,
   XAxis,
@@ -37,6 +38,8 @@ interface MoodRow {
   day: string;
   moodScore: number;
   tags: string | null;
+  notes: string | null;
+  episodeState: string | null;
 }
 
 interface EpisodeRow {
@@ -82,11 +85,18 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
 
   const moodData = allDays.map((day) => {
     const m = moodMap.get(day);
+    let tags: string[] = [];
+    if (m?.tags) {
+      try { tags = JSON.parse(m.tags); } catch { /* empty */ }
+    }
     return {
       day,
       moodScore: m?.moodScore ?? null,
       color: m ? moodColor(m.moodScore) : "#374151",
       hasMood: !!m,
+      notes: m?.notes ?? null,
+      tags,
+      episodeState: m?.episodeState ?? null,
     };
   });
 
@@ -134,17 +144,34 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
                 content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
                   const p = payload[0].payload;
-                  return (
+                  if (!p.hasMood) return (
                     <div className="rounded border border-border bg-card px-2 py-1 text-xs shadow-md">
-                      <p>{p.day}</p>
-                      <p>{p.hasMood ? `Mood: ${p.moodScore}` : "No mood logged"}</p>
+                      <p className="text-muted-foreground">{p.day} — No mood logged</p>
+                    </div>
+                  );
+                  const scoreLabel = p.moodScore > 0 ? `+${p.moodScore}` : `${p.moodScore}`;
+                  return (
+                    <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs shadow-md max-w-[220px]">
+                      <p className="font-medium">{p.day}</p>
+                      <p style={{ color: p.color }} className="font-bold">
+                        Mood: {scoreLabel}
+                      </p>
+                      {p.episodeState && p.episodeState !== "none" && (
+                        <p className="text-muted-foreground capitalize">Episode: {p.episodeState}</p>
+                      )}
+                      {p.tags.length > 0 && (
+                        <p className="text-muted-foreground">{p.tags.join(", ")}</p>
+                      )}
+                      {p.notes && (
+                        <p className="text-muted-foreground mt-1 italic leading-tight">&ldquo;{p.notes}&rdquo;</p>
+                      )}
                     </div>
                   );
                 }}
               />
               <Bar dataKey="moodScore" fill="#6b7280" radius={[2, 2, 0, 0]}>
                 {moodData.map((d, i) => (
-                  <rect key={i} fill={d.color} />
+                  <Cell key={i} fill={d.color} />
                 ))}
               </Bar>
             </BarChart>

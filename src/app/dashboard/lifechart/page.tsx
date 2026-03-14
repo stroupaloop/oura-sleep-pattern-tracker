@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { dailyAnalysis, dailyMood, episodeAssessments } from "@/lib/db/schema";
 import { gte, ne, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
+import { getTodayET } from "@/lib/date-utils";
 import { LifeChart } from "./life-chart";
 import { TimeRangeSelector } from "./time-range-selector";
 
@@ -15,7 +16,7 @@ interface Props {
 export default async function LifeChartPage({ searchParams }: Props) {
   const params = await searchParams;
   const rangeDays = Number(params.range) || 90;
-  const startDate = format(subDays(new Date(), rangeDays), "yyyy-MM-dd");
+  const startDate = format(subDays(new Date(getTodayET() + "T12:00:00"), rangeDays), "yyyy-MM-dd");
 
   const [analysis, moods, episodes] = await Promise.all([
     db
@@ -38,6 +39,8 @@ export default async function LifeChartPage({ searchParams }: Props) {
         day: dailyMood.day,
         moodScore: dailyMood.moodScore,
         tags: dailyMood.tags,
+        notes: dailyMood.notes,
+        episodeState: dailyMood.episodeState,
       })
       .from(dailyMood)
       .where(gte(dailyMood.day, startDate))
