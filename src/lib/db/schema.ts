@@ -489,3 +489,22 @@ export const cyclePredictions = sqliteTable("cycle_predictions", {
   confidence: real("confidence"),
   createdAt: integer("created_at").notNull(),
 });
+
+export const healthSignals = sqliteTable(
+  "health_signals",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    day: text("day").notNull(),
+    signalType: text("signal_type").notNull(),
+    status: text("status").notNull(),
+    confidence: real("confidence").notNull(),
+    indicators: text("indicators"),
+    summary: text("summary"),
+    details: text("details"),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("health_signal_day_type").on(table.day, table.signalType),
+  ]
+);

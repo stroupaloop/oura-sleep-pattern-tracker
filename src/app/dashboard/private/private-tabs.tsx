@@ -19,6 +19,7 @@ import { BedtimeTrendChart } from "@/components/charts/bedtime-trend-chart";
 import { CycleCalendar } from "@/components/charts/cycle-calendar";
 import { RestingHrChart } from "@/components/charts/resting-hr-chart";
 import { HourlyHrChart } from "@/components/charts/hourly-hr-chart";
+import { HealthSignalsCard, type HealthSignalData } from "@/components/health-signals-card";
 import type { HourlyHrPoint } from "@/lib/hr-anomalies";
 
 const TABS = [
@@ -60,6 +61,7 @@ interface PrivateTabsProps {
     maxBpm: number | null;
   }[];
   hourlyHrData: HourlyHrPoint[];
+  healthSignals: HealthSignalData[];
 }
 
 export function PrivateTabs(props: PrivateTabsProps) {
@@ -94,6 +96,7 @@ function BodyTab({
   temperatureData,
   hrData,
   hourlyHrData,
+  healthSignals: healthSignalsProp,
 }: PrivateTabsProps) {
   const latestCycle = cycleData[0];
   const ovulationDays = cycleData
@@ -106,6 +109,8 @@ function BodyTab({
 
   return (
     <div className="space-y-6">
+      <HealthSignalsCard signals={healthSignalsProp} />
+
       {personalInfo && (
         <Card>
           <CardHeader>

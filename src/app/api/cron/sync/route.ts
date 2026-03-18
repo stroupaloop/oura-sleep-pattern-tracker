@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { syncDateRange, syncSensitiveDateRange } from "@/lib/oura/sync";
 import { reprocessAll } from "@/lib/analysis/reprocess";
 import { runCyclePredictions } from "@/lib/analysis/cycle";
+import { runHealthSignalDetection } from "@/lib/analysis/health-signals";
 import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { format, subDays } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
@@ -33,6 +34,11 @@ export async function GET(request: NextRequest) {
     const bipolarType = await loadBipolarType();
     const analysisResult = await reprocessAll(config, startDate, endDate, bipolarType);
 
+    const healthResult = await runHealthSignalDetection().catch((err) => {
+      console.error("Health signal detection (non-fatal):", err);
+      return { signals: 0 };
+    });
+
     return NextResponse.json({
       success: true,
       records: syncResult.records,
@@ -41,6 +47,7 @@ export async function GET(request: NextRequest) {
         daysProcessed: analysisResult.daysProcessed,
         episodes: analysisResult.episodes,
       },
+      healthSignals: healthResult.signals,
       startDate,
       endDate,
     });

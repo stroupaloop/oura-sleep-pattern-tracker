@@ -13,6 +13,7 @@ import {
   cyclePredictions,
   sleepPeriods,
   dailyReadiness,
+  healthSignals,
 } from "@/lib/db/schema";
 import { desc, gte, eq, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
@@ -94,6 +95,20 @@ export default async function PrivatePage() {
       .orderBy(hourlyHeartrate.day, hourlyHeartrate.hour),
   ]);
 
+  const healthSignalData = await db
+    .select({
+      day: healthSignals.day,
+      signalType: healthSignals.signalType,
+      status: healthSignals.status,
+      confidence: healthSignals.confidence,
+      indicators: healthSignals.indicators,
+      summary: healthSignals.summary,
+    })
+    .from(healthSignals)
+    .where(gte(healthSignals.day, format(subDays(new Date(getTodayET() + "T12:00:00"), 30), "yyyy-MM-dd")))
+    .orderBy(desc(healthSignals.day))
+    .catch(() => [] as { day: string; signalType: string; status: string; confidence: number; indicators: string | null; summary: string | null }[]);
+
   const person = personalInfoData[0] ?? null;
 
   function normalizeOffsetMinutes(offsetSeconds: string | null | undefined): number | null {
@@ -141,6 +156,14 @@ export default async function PrivatePage() {
         bedtimeData={bedtimeData}
         hrData={hrData.map((h) => ({ day: h.day, restingBpm: h.restingBpm, awakeBpm: h.awakeBpm, minBpm: h.minBpm, maxBpm: h.maxBpm }))}
         hourlyHrData={hourlyHrData}
+        healthSignals={healthSignalData.map((s) => ({
+          day: s.day,
+          signalType: s.signalType,
+          status: s.status,
+          confidence: s.confidence,
+          indicators: s.indicators ? JSON.parse(s.indicators) : [],
+          summary: s.summary ?? "",
+        }))}
       />
     </div>
   );
