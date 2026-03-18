@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import {
   dailyCardiovascularAge,
   dailyHeartrate,
+  hourlyHeartrate,
   vo2Max,
   sleepTime,
   personalInfo,
@@ -34,6 +35,7 @@ export default async function PrivatePage() {
     sleepData,
     readinessTempData,
     hrData,
+    hourlyHrData,
   ] = await Promise.all([
     db
       .select()
@@ -78,6 +80,18 @@ export default async function PrivatePage() {
       .where(gte(dailyHeartrate.day, cutoff))
       .orderBy(dailyHeartrate.day)
       .catch(() => [] as { id: number; day: string; avgBpm: number | null; minBpm: number | null; maxBpm: number | null; restingBpm: number | null; awakeBpm: number | null; sampleCount: number | null; createdAt: number }[]),
+    db
+      .select({
+        day: hourlyHeartrate.day,
+        hour: hourlyHeartrate.hour,
+        avgBpm: hourlyHeartrate.avgBpm,
+        minBpm: hourlyHeartrate.minBpm,
+        maxBpm: hourlyHeartrate.maxBpm,
+        source: hourlyHeartrate.source,
+      })
+      .from(hourlyHeartrate)
+      .where(gte(hourlyHeartrate.day, format(subDays(new Date(getTodayET() + "T12:00:00"), 14), "yyyy-MM-dd")))
+      .orderBy(hourlyHeartrate.day, hourlyHeartrate.hour),
   ]);
 
   const person = personalInfoData[0] ?? null;
@@ -126,6 +140,7 @@ export default async function PrivatePage() {
         temperatureData={readinessTempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDeviation }))}
         bedtimeData={bedtimeData}
         hrData={hrData.map((h) => ({ day: h.day, restingBpm: h.restingBpm, awakeBpm: h.awakeBpm, minBpm: h.minBpm, maxBpm: h.maxBpm }))}
+        hourlyHrData={hourlyHrData}
       />
     </div>
   );

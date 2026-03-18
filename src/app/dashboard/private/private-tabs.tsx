@@ -18,6 +18,8 @@ import { getTodayET } from "@/lib/date-utils";
 import { BedtimeTrendChart } from "@/components/charts/bedtime-trend-chart";
 import { CycleCalendar } from "@/components/charts/cycle-calendar";
 import { RestingHrChart } from "@/components/charts/resting-hr-chart";
+import { HourlyHrChart } from "@/components/charts/hourly-hr-chart";
+import type { HourlyHrPoint } from "@/lib/hr-anomalies";
 
 const TABS = [
   { id: "body", label: "Body" },
@@ -57,6 +59,7 @@ interface PrivateTabsProps {
     minBpm: number | null;
     maxBpm: number | null;
   }[];
+  hourlyHrData: HourlyHrPoint[];
 }
 
 export function PrivateTabs(props: PrivateTabsProps) {
@@ -90,6 +93,7 @@ function BodyTab({
   cycleData,
   temperatureData,
   hrData,
+  hourlyHrData,
 }: PrivateTabsProps) {
   const latestCycle = cycleData[0];
   const ovulationDays = cycleData
@@ -242,6 +246,8 @@ function BodyTab({
       )}
 
       {vo2Data.length > 0 && <Vo2MaxChart data={vo2Data} />}
+
+      {hourlyHrData.length > 0 && <HourlyHrChart data={hourlyHrData} />}
 
       {hrData.length > 0 && <RestingHrChart data={hrData} />}
     </div>

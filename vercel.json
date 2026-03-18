@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/sync",
       "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/cron/hr-sync",
+      "schedule": "0 3,9,21 * * *"
     }
   ]
 }

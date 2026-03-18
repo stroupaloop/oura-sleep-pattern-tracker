@@ -14,6 +14,7 @@ import {
   restModePeriods,
   dailyCardiovascularAge,
   dailyHeartrate,
+  hourlyHeartrate,
   vo2Max,
   sleepTime,
   personalInfo,
@@ -390,6 +391,59 @@ export async function syncDateRange(
           });
       }
       totalRecords += byDay.size;
+
+      const byDayHour = new Map<string, OuraHeartrateSample[]>();
+      for (const s of hrSamples) {
+        const etParts = new Intl.DateTimeFormat("en-US", {
+          timeZone: "America/New_York",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "numeric",
+          hour12: false,
+        }).formatToParts(new Date(s.timestamp));
+        const etYear = etParts.find((p) => p.type === "year")!.value;
+        const etMonth = etParts.find((p) => p.type === "month")!.value;
+        const etDay = etParts.find((p) => p.type === "day")!.value;
+        const etHour = parseInt(etParts.find((p) => p.type === "hour")!.value, 10);
+        const key = `${etYear}-${etMonth}-${etDay}|${etHour}`;
+        const arr = byDayHour.get(key);
+        if (arr) arr.push(s);
+        else byDayHour.set(key, [s]);
+      }
+
+      for (const [key, samples] of byDayHour) {
+        const [dayStr, hourStr] = key.split("|");
+        const bpms = samples.map((s) => s.bpm);
+        const avgBpm = Math.round((bpms.reduce((a, b) => a + b, 0) / bpms.length) * 10) / 10;
+        const sources = samples.map((s) => s.source);
+        const restCount = sources.filter((s) => s === "rest").length;
+        const awakeCount = sources.filter((s) => s === "awake").length;
+        const dominantSource = restCount > awakeCount ? "rest" : awakeCount > restCount ? "awake" : "mixed";
+
+        await db
+          .insert(hourlyHeartrate)
+          .values({
+            day: dayStr,
+            hour: parseInt(hourStr, 10),
+            avgBpm,
+            minBpm: Math.min(...bpms),
+            maxBpm: Math.max(...bpms),
+            sampleCount: samples.length,
+            source: dominantSource,
+            createdAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [hourlyHeartrate.day, hourlyHeartrate.hour],
+            set: {
+              avgBpm: sql`excluded.avg_bpm`,
+              minBpm: sql`excluded.min_bpm`,
+              maxBpm: sql`excluded.max_bpm`,
+              sampleCount: sql`excluded.sample_count`,
+              source: sql`excluded.source`,
+            },
+          });
+      }
     }
 
     await db.insert(syncLog).values({
