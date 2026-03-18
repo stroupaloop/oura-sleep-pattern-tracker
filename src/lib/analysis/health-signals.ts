@@ -279,19 +279,21 @@ async function detectAcuteIllness(
       continue;
     }
 
-    const dayHrv = recentHrv.find((r) => r.day === day.day);
+    const dayHrv = recentHrv.find((r) => r.day === day.day)
+      ?? hrvData.find((r) => r.day === format(subDays(new Date(day.day + "T12:00:00"), 1), "yyyy-MM-dd"));
     if (dayHrv && hrvMean) {
       const hrvDrop = (hrvMean - dayHrv.hrv!) / hrvMean;
-      if (hrvDrop > 0.2) {
+      if (hrvDrop > 0.15) {
         confidence += 0.25;
-        indicators.push(`HRV dropped ${Math.round(hrvDrop * 100)}% (${Math.round(dayHrv.hrv!)} vs baseline ${Math.round(hrvMean)})`);
+        const label = dayHrv.day !== day.day ? ` (from ${dayHrv.day} sleep)` : "";
+        indicators.push(`HRV dropped ${Math.round(hrvDrop * 100)}% (${Math.round(dayHrv.hrv!)} vs baseline ${Math.round(hrvMean)})${label}`);
       }
     }
 
     const dayTemp = recentTemp.find((r) => r.day === day.day);
     if (dayTemp && tempMean != null) {
       const tempElev = dayTemp.tempDev! - tempMean;
-      if (tempElev > 0.3) {
+      if (tempElev > 0.2) {
         confidence += 0.2;
         indicators.push(`Temperature +${tempElev.toFixed(2)}°C above baseline`);
       }
