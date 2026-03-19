@@ -37,6 +37,9 @@ interface AnalysisRow {
 interface MoodRow {
   day: string;
   moodScore: number;
+  energyScore: number | null;
+  irritabilityScore: number | null;
+  anxietyScore: number | null;
   tags: string | null;
   notes: string | null;
   episodeState: string | null;
@@ -92,6 +95,9 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
     return {
       day,
       moodScore: m?.moodScore ?? null,
+      energyScore: m?.energyScore ?? null,
+      irritabilityScore: m?.irritabilityScore ?? null,
+      anxietyScore: m?.anxietyScore ?? null,
       color: m ? moodColor(m.moodScore) : "#374151",
       hasMood: !!m,
       notes: m?.notes ?? null,
@@ -178,6 +184,41 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {moodData.some((d) => d.energyScore != null || d.irritabilityScore != null || d.anxietyScore != null) && (
+        <Card>
+          <CardHeader className="py-3 px-4">
+            <CardTitle className="text-sm">Energy / Irritability / Anxiety</CardTitle>
+          </CardHeader>
+          <CardContent className="px-4 pb-2">
+            <ResponsiveContainer width="100%" height={100}>
+              <LineChart data={moodData} syncId={syncId}>
+                <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 5%)" />
+                <XAxis dataKey="day" hide />
+                <YAxis domain={[0, 10]} fontSize={10} tick={{ fill: "oklch(0.708 0 0)" }} />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length) return null;
+                    const p = payload[0].payload;
+                    return (
+                      <div className="rounded border border-border bg-card px-2 py-1 text-xs shadow-md">
+                        <p>{p.day}</p>
+                        {p.energyScore != null && <p style={{ color: "#fbbf24" }}>Energy: {p.energyScore}</p>}
+                        {p.irritabilityScore != null && <p style={{ color: "#f87171" }}>Irritability: {p.irritabilityScore}</p>}
+                        {p.anxietyScore != null && <p style={{ color: "#a78bfa" }}>Anxiety: {p.anxietyScore}</p>}
+                      </div>
+                    );
+                  }}
+                />
+                <Legend wrapperStyle={{ fontSize: 10 }} />
+                <Line type="monotone" dataKey="energyScore" stroke="#fbbf24" strokeWidth={1.5} dot={false} name="Energy" connectNulls />
+                <Line type="monotone" dataKey="irritabilityScore" stroke="#f87171" strokeWidth={1.5} dot={false} name="Irritability" connectNulls />
+                <Line type="monotone" dataKey="anxietyScore" stroke="#a78bfa" strokeWidth={1.5} dot={false} name="Anxiety" connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="py-3 px-4">

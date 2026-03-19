@@ -12,6 +12,7 @@ import {
   Legend,
   Area,
   AreaChart,
+  ReferenceDot,
 } from "recharts";
 import {
   Card,
@@ -29,6 +30,9 @@ interface ActivityPoint {
   stressHigh: number | null;
   recoveryHigh: number | null;
   resilienceLevel: string | null;
+  workoutCount?: number;
+  workoutCalories?: number;
+  workoutTypes?: string[];
 }
 
 interface ActivityRecoveryChartProps {
@@ -60,6 +64,14 @@ function ActivityTooltipContent({ active, payload }: { active?: boolean; payload
       {p.stressHigh != null && <p style={{ color: "#f87171" }}>Stress: {p.stressHigh} min</p>}
       {p.recoveryHigh != null && <p style={{ color: "#a78bfa" }}>Recovery: {p.recoveryHigh} min</p>}
       {p.resilienceLevel && <p className="text-muted-foreground">Resilience: {p.resilienceLevel}</p>}
+      {(p.workoutCount ?? 0) > 0 && (
+        <>
+          <p style={{ color: "#fb923c" }}>Workouts: {p.workoutCount} ({p.workoutCalories?.toFixed(0) ?? 0} cal)</p>
+          {p.workoutTypes && p.workoutTypes.length > 0 && (
+            <p className="text-muted-foreground text-xs">{p.workoutTypes.join(", ")}</p>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -143,6 +155,21 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                 name="Active Min"
                 connectNulls
               />
+              {data.map((d, i) =>
+                (d.workoutCount ?? 0) > 0 ? (
+                  <ReferenceDot
+                    key={i}
+                    x={d.day}
+                    y={d.steps ?? 0}
+                    yAxisId="steps"
+                    r={4}
+                    fill="#fb923c"
+                    stroke="#fb923c"
+                    strokeWidth={1}
+                    fillOpacity={0.8}
+                  />
+                ) : null
+              )}
             </ComposedChart>
           </ResponsiveContainer>
         </CardContent>

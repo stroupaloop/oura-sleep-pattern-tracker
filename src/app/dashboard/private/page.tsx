@@ -14,6 +14,8 @@ import {
   sleepPeriods,
   dailyReadiness,
   healthSignals,
+  dailyAnalysis,
+  dailyMood,
 } from "@/lib/db/schema";
 import { desc, gte, eq, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
@@ -95,6 +97,38 @@ export default async function PrivatePage() {
       .orderBy(hourlyHeartrate.day, hourlyHeartrate.hour),
   ]);
 
+  const [cyclePhaseAnalysis, cyclePhaseMoods] = await Promise.all([
+    db
+      .select({
+        day: dailyAnalysis.day,
+        totalSleepMinutes: dailyAnalysis.totalSleepMinutes,
+        efficiency: dailyAnalysis.efficiency,
+        avgHrv: dailyAnalysis.avgHrv,
+        temperatureDelta: dailyAnalysis.temperatureDelta,
+      })
+      .from(dailyAnalysis)
+      .where(gte(dailyAnalysis.day, cutoff))
+      .orderBy(dailyAnalysis.day),
+    db
+      .select({
+        day: dailyMood.day,
+        moodScore: dailyMood.moodScore,
+      })
+      .from(dailyMood)
+      .where(gte(dailyMood.day, cutoff))
+      .orderBy(dailyMood.day),
+  ]);
+
+  const moodByDay = new Map(cyclePhaseMoods.map((m) => [m.day, m.moodScore]));
+  const cyclePhaseDaily = cyclePhaseAnalysis.map((a) => ({
+    day: a.day,
+    sleepHours: a.totalSleepMinutes ? a.totalSleepMinutes / 60 : null,
+    efficiency: a.efficiency,
+    avgHrv: a.avgHrv,
+    moodScore: moodByDay.get(a.day) ?? null,
+    temperatureDelta: a.temperatureDelta,
+  }));
+
   const healthSignalData = await db
     .select({
       day: healthSignals.day,
@@ -164,6 +198,7 @@ export default async function PrivatePage() {
           indicators: s.indicators ? JSON.parse(s.indicators) : [],
           summary: s.summary ?? "",
         }))}
+        cyclePhaseDaily={cyclePhaseDaily}
       />
     </div>
   );

@@ -28,6 +28,7 @@ import { SleepTrendChart } from "@/components/charts/sleep-trend-chart";
 import { ScoreRing } from "@/components/charts/score-ring";
 import { HypnogramChart } from "@/components/charts/hypnogram-chart";
 import { SleepCompositionBar } from "@/components/charts/sleep-composition-bar";
+import { ScoreBreakdown } from "@/components/charts/score-breakdown";
 import { ResearchTooltip } from "@/components/research-tooltip";
 import { DailyLogCard } from "@/components/daily-log-card";
 import { ConfidenceIndicator } from "@/components/confidence-indicator";
@@ -399,6 +400,36 @@ export default async function DashboardPage() {
             </p>
           </CardContent>
         </Card>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
+        <ScoreBreakdown
+          title="Sleep Score Breakdown"
+          day={score?.day ?? undefined}
+          contributors={[
+            { name: "Deep Sleep", score: score?.contributorDeepSleep ?? null },
+            { name: "Efficiency", score: score?.contributorEfficiency ?? null },
+            { name: "Latency", score: score?.contributorLatency ?? null },
+            { name: "REM Sleep", score: score?.contributorRemSleep ?? null },
+            { name: "Restfulness", score: score?.contributorRestfulness ?? null },
+            { name: "Timing", score: score?.contributorTiming ?? null },
+            { name: "Total Sleep", score: score?.contributorTotalSleep ?? null },
+          ]}
+        />
+        <ScoreBreakdown
+          title="Readiness Breakdown"
+          day={readiness?.day ?? undefined}
+          contributors={[
+            { name: "Activity Balance", score: readiness?.contributorActivityBalance ?? null },
+            { name: "Body Temp", score: readiness?.contributorBodyTemperature ?? null },
+            { name: "HRV Balance", score: readiness?.contributorHrvBalance ?? null },
+            { name: "Prev Day Activity", score: readiness?.contributorPreviousDayActivity ?? null },
+            { name: "Previous Night", score: readiness?.contributorPreviousNight ?? null },
+            { name: "Recovery Index", score: readiness?.contributorRecoveryIndex ?? null },
+            { name: "Resting HR", score: readiness?.contributorRestingHeartRate ?? null },
+            { name: "Sleep Balance", score: readiness?.contributorSleepBalance ?? null },
+          ]}
+        />
       </div>
 
       {lastNightHypnogram && lastNightBedtimeStart && (

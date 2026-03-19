@@ -38,6 +38,9 @@ export default async function LifeChartPage({ searchParams }: Props) {
       .select({
         day: dailyMood.day,
         moodScore: dailyMood.moodScore,
+        energyScore: dailyMood.energyScore,
+        irritabilityScore: dailyMood.irritabilityScore,
+        anxietyScore: dailyMood.anxietyScore,
         tags: dailyMood.tags,
         notes: dailyMood.notes,
         episodeState: dailyMood.episodeState,

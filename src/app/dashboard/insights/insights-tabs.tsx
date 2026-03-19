@@ -38,6 +38,29 @@ interface AnalysisRow {
   anomalyScore: number | null;
   anomalyDirection: string | null;
   isAnomaly: number | null;
+  totalSleepMinutes: number | null;
+  moodScore: number | null;
+  energyScore: number | null;
+  irritabilityScore: number | null;
+  anxietyScore: number | null;
+}
+
+interface WorkoutRow {
+  day: string;
+  activity: string | null;
+  calories: number | null;
+  distance: number | null;
+  intensity: string | null;
+  startDatetime: string | null;
+  endDatetime: string | null;
+}
+
+interface MoodRow {
+  day: string;
+  moodScore: number;
+  energyScore: number | null;
+  irritabilityScore: number | null;
+  anxietyScore: number | null;
 }
 
 interface EpisodeRow {
@@ -50,9 +73,11 @@ interface EpisodeRow {
 interface InsightsTabsProps {
   analysis: AnalysisRow[];
   episodes: EpisodeRow[];
+  workouts: WorkoutRow[];
+  moods: MoodRow[];
 }
 
-export function InsightsTabs({ analysis, episodes }: InsightsTabsProps) {
+export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("circadian");
 
   const episodeMap = new Map(episodes.map((e) => [e.day, e]));
@@ -69,14 +94,29 @@ export function InsightsTabs({ analysis, episodes }: InsightsTabsProps) {
     };
   });
 
-  const activityData = analysis.map((a) => ({
-    day: a.day,
-    steps: a.steps,
-    activeMinutes: a.activeMinutes,
-    stressHigh: a.stressHigh,
-    recoveryHigh: a.recoveryHigh,
-    resilienceLevel: a.resilienceLevel,
-  }));
+  const workoutsByDay = new Map<string, { count: number; calories: number; types: string[] }>();
+  for (const w of workouts) {
+    const existing = workoutsByDay.get(w.day) ?? { count: 0, calories: 0, types: [] };
+    existing.count++;
+    if (w.calories) existing.calories += w.calories;
+    if (w.activity && !existing.types.includes(w.activity)) existing.types.push(w.activity);
+    workoutsByDay.set(w.day, existing);
+  }
+
+  const activityData = analysis.map((a) => {
+    const w = workoutsByDay.get(a.day);
+    return {
+      day: a.day,
+      steps: a.steps,
+      activeMinutes: a.activeMinutes,
+      stressHigh: a.stressHigh,
+      recoveryHigh: a.recoveryHigh,
+      resilienceLevel: a.resilienceLevel,
+      workoutCount: w?.count ?? 0,
+      workoutCalories: w?.calories ?? 0,
+      workoutTypes: w?.types ?? [],
+    };
+  });
 
   const variabilityData = analysis.map((a) => ({
     day: a.day,
@@ -91,6 +131,8 @@ export function InsightsTabs({ analysis, episodes }: InsightsTabsProps) {
     hrCV: a.withinNightHrCV,
     fragmentation: a.hypnogramFragmentation,
   }));
+
+  const moodMap = new Map(moods.map((m) => [m.day, m]));
 
   const correlationPairs = [
     {
@@ -144,6 +186,70 @@ export function InsightsTabs({ analysis, episodes }: InsightsTabsProps) {
             day: a.day,
             x: a.withinNightHrvCV!,
             y: ep?.confidence ?? 0,
+            anomalyDirection: a.isAnomaly ? a.anomalyDirection : null,
+          };
+        }),
+    },
+    {
+      title: "Mood vs HRV",
+      xLabel: "Mood (-3 to +3)",
+      yLabel: "HRV (ms)",
+      data: analysis
+        .filter((a) => a.avgHrv != null && moodMap.has(a.day))
+        .map((a) => ({
+          day: a.day,
+          x: moodMap.get(a.day)!.moodScore,
+          y: a.avgHrv!,
+          anomalyDirection: a.isAnomaly ? a.anomalyDirection : null,
+        })),
+    },
+    {
+      title: "Mood vs Sleep Duration",
+      xLabel: "Mood (-3 to +3)",
+      yLabel: "Sleep (h)",
+      data: analysis
+        .filter((a) => a.totalSleepMinutes != null && moodMap.has(a.day))
+        .map((a) => ({
+          day: a.day,
+          x: moodMap.get(a.day)!.moodScore,
+          y: +(a.totalSleepMinutes! / 60).toFixed(1),
+          anomalyDirection: a.isAnomaly ? a.anomalyDirection : null,
+        })),
+    },
+    {
+      title: "Irritability vs Deep Sleep %",
+      xLabel: "Irritability (0-10)",
+      yLabel: "Deep Sleep %",
+      data: analysis
+        .filter((a) => {
+          const m = moodMap.get(a.day);
+          return m?.irritabilityScore != null && a.efficiency != null;
+        })
+        .map((a) => {
+          const m = moodMap.get(a.day)!;
+          return {
+            day: a.day,
+            x: m.irritabilityScore!,
+            y: a.efficiency!,
+            anomalyDirection: a.isAnomaly ? a.anomalyDirection : null,
+          };
+        }),
+    },
+    {
+      title: "Anxiety vs HRV",
+      xLabel: "Anxiety (0-10)",
+      yLabel: "HRV (ms)",
+      data: analysis
+        .filter((a) => {
+          const m = moodMap.get(a.day);
+          return m?.anxietyScore != null && a.avgHrv != null;
+        })
+        .map((a) => {
+          const m = moodMap.get(a.day)!;
+          return {
+            day: a.day,
+            x: m.anxietyScore!,
+            y: a.avgHrv!,
             anomalyDirection: a.isAnomaly ? a.anomalyDirection : null,
           };
         }),

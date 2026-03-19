@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
-import { dailyAnalysis, episodeAssessments } from "@/lib/db/schema";
+import { dailyAnalysis, episodeAssessments, workouts, dailyMood } from "@/lib/db/schema";
 import { desc, gte, ne, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import Link from "next/link";
@@ -10,7 +10,7 @@ import { InsightsTabs } from "./insights-tabs";
 export default async function InsightsPage() {
   const ninetyDaysAgo = format(subDays(new Date(), 90), "yyyy-MM-dd");
 
-  const [analysis, episodes] = await Promise.all([
+  const [analysis, episodes, workoutData, moodData] = await Promise.all([
     db
       .select({
         day: dailyAnalysis.day,
@@ -33,6 +33,11 @@ export default async function InsightsPage() {
         anomalyScore: dailyAnalysis.anomalyScore,
         anomalyDirection: dailyAnalysis.anomalyDirection,
         isAnomaly: dailyAnalysis.isAnomaly,
+        totalSleepMinutes: dailyAnalysis.totalSleepMinutes,
+        moodScore: dailyAnalysis.moodScore,
+        energyScore: dailyAnalysis.energyScore,
+        irritabilityScore: dailyAnalysis.irritabilityScore,
+        anxietyScore: dailyAnalysis.anxietyScore,
       })
       .from(dailyAnalysis)
       .where(gte(dailyAnalysis.day, ninetyDaysAgo))
@@ -52,6 +57,30 @@ export default async function InsightsPage() {
         )
       )
       .orderBy(episodeAssessments.day),
+    db
+      .select({
+        day: workouts.day,
+        activity: workouts.activity,
+        calories: workouts.calories,
+        distance: workouts.distance,
+        intensity: workouts.intensity,
+        startDatetime: workouts.startDatetime,
+        endDatetime: workouts.endDatetime,
+      })
+      .from(workouts)
+      .where(gte(workouts.day, ninetyDaysAgo))
+      .orderBy(workouts.day),
+    db
+      .select({
+        day: dailyMood.day,
+        moodScore: dailyMood.moodScore,
+        energyScore: dailyMood.energyScore,
+        irritabilityScore: dailyMood.irritabilityScore,
+        anxietyScore: dailyMood.anxietyScore,
+      })
+      .from(dailyMood)
+      .where(gte(dailyMood.day, ninetyDaysAgo))
+      .orderBy(dailyMood.day),
   ]);
 
   return (
@@ -74,7 +103,7 @@ export default async function InsightsPage() {
           <p>No analysis data yet. Sync your Oura data and run analysis to see insights.</p>
         </div>
       ) : (
-        <InsightsTabs analysis={analysis} episodes={episodes} />
+        <InsightsTabs analysis={analysis} episodes={episodes} workouts={workoutData} moods={moodData} />
       )}
     </div>
   );

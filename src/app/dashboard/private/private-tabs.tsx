@@ -20,6 +20,7 @@ import { CycleCalendar } from "@/components/charts/cycle-calendar";
 import { RestingHrChart } from "@/components/charts/resting-hr-chart";
 import { HourlyHrChart } from "@/components/charts/hourly-hr-chart";
 import { HealthSignalsCard, type HealthSignalData } from "@/components/health-signals-card";
+import { CyclePhaseChart } from "@/components/charts/cycle-phase-chart";
 import type { HourlyHrPoint } from "@/lib/hr-anomalies";
 
 const TABS = [
@@ -62,6 +63,14 @@ interface PrivateTabsProps {
   }[];
   hourlyHrData: HourlyHrPoint[];
   healthSignals: HealthSignalData[];
+  cyclePhaseDaily: {
+    day: string;
+    sleepHours: number | null;
+    efficiency: number | null;
+    avgHrv: number | null;
+    moodScore: number | null;
+    temperatureDelta: number | null;
+  }[];
 }
 
 export function PrivateTabs(props: PrivateTabsProps) {
@@ -97,8 +106,19 @@ function BodyTab({
   hrData,
   hourlyHrData,
   healthSignals: healthSignalsProp,
+  cyclePhaseDaily,
 }: PrivateTabsProps) {
-  const latestCycle = cycleData[0];
+  const today = getTodayET();
+  const pastCycles = cycleData.filter(
+    (c) => c.periodStartDay && c.periodStartDay <= today
+  );
+  const futureCycles = cycleData.filter(
+    (c) => c.periodStartDay && c.periodStartDay > today
+  );
+  const latestCycle = pastCycles[0] ?? null;
+  const nextProjected = futureCycles.length > 0
+    ? futureCycles[futureCycles.length - 1]
+    : null;
   const ovulationDays = cycleData
     .map((c) => c.ovulationDay)
     .filter((d): d is string => d != null);
@@ -169,9 +189,10 @@ function BodyTab({
                   <p className="font-medium">{latestCycle.ovulationDay}</p>
                 </div>
               )}
-              {latestCycle.nextPeriodDay && (() => {
-                const todayStr = getTodayET();
-                const isPast = latestCycle.nextPeriodDay < todayStr;
+              {(() => {
+                const nextDate = nextProjected?.periodStartDay ?? latestCycle.nextPeriodDay;
+                if (!nextDate) return null;
+                const isPast = nextDate < today;
                 return (
                   <div>
                     <span className="text-muted-foreground">
@@ -179,8 +200,8 @@ function BodyTab({
                     </span>
                     <p className={`font-medium ${isPast ? "text-amber-400" : ""}`}>
                       {isPast
-                        ? `Overdue — expected ${latestCycle.nextPeriodDay}`
-                        : latestCycle.nextPeriodDay}
+                        ? `Overdue — expected ${nextDate}`
+                        : nextDate}
                     </p>
                   </div>
                 );
@@ -218,6 +239,18 @@ function BodyTab({
       ) : null}
 
       {cycleData.length > 0 && <CycleCalendar cycleData={cycleData} />}
+
+      {cycleData.length > 0 && cyclePhaseDaily.length > 0 && (
+        <CyclePhaseChart
+          dailyData={cyclePhaseDaily}
+          cycles={cycleData.map((c) => ({
+            periodStartDay: c.periodStartDay,
+            ovulationDay: c.ovulationDay,
+            nextPeriodDay: c.nextPeriodDay,
+            cycleLength: c.cycleLength,
+          }))}
+        />
+      )}
 
       {hasValidTemp ? (
         <CycleTemperatureChart data={temperatureData} ovulationDays={ovulationDays} />
