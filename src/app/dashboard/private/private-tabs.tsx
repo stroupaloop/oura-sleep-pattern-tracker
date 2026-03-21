@@ -25,7 +25,10 @@ import { WearActivityChart, type WearActivityDay } from "@/components/charts/wea
 import type { HourlyHrPoint } from "@/lib/hr-anomalies";
 
 const TABS = [
-  { id: "body", label: "Body" },
+  { id: "overview", label: "Overview" },
+  { id: "heart-rate", label: "Heart Rate" },
+  { id: "cycle", label: "Cycle" },
+  { id: "fitness", label: "Fitness" },
   { id: "sleep-timing", label: "Sleep Timing" },
 ] as const;
 
@@ -77,7 +80,7 @@ interface PrivateTabsProps {
 }
 
 export function PrivateTabs(props: PrivateTabsProps) {
-  const [activeTab, setActiveTab] = useState<TabId>("body");
+  const [activeTab, setActiveTab] = useState<TabId>("overview");
 
   return (
     <div className="space-y-4">
@@ -94,44 +97,19 @@ export function PrivateTabs(props: PrivateTabsProps) {
         ))}
       </div>
 
-      {activeTab === "body" && <BodyTab {...props} />}
+      {activeTab === "overview" && <OverviewTab {...props} />}
+      {activeTab === "heart-rate" && <HeartRateTab {...props} />}
+      {activeTab === "cycle" && <CycleTab {...props} />}
+      {activeTab === "fitness" && <FitnessTab {...props} />}
       {activeTab === "sleep-timing" && <SleepTimingTab bedtimeData={props.bedtimeData} />}
     </div>
   );
 }
 
-function BodyTab({
-  cvAgeData,
-  vo2Data,
+function OverviewTab({
   personalInfo,
-  cycleData,
-  temperatureData,
-  hrData,
-  hourlyHrData,
   healthSignals: healthSignalsProp,
-  cyclePhaseDaily,
-  wearActivityData,
-  wearActivityHrData,
 }: PrivateTabsProps) {
-  const today = getTodayET();
-  const pastCycles = cycleData.filter(
-    (c) => c.periodStartDay && c.periodStartDay <= today
-  );
-  const futureCycles = cycleData.filter(
-    (c) => c.periodStartDay && c.periodStartDay > today
-  );
-  const latestCycle = pastCycles[0] ?? null;
-  const nextProjected = futureCycles.length > 0
-    ? futureCycles[futureCycles.length - 1]
-    : null;
-  const ovulationDays = cycleData
-    .map((c) => c.ovulationDay)
-    .filter((d): d is string => d != null);
-
-  const validTempData = temperatureData.filter((d) => d.temperatureDelta != null);
-  const hasSleepData = temperatureData.length > 0;
-  const hasValidTemp = validTempData.length > 0;
-
   return (
     <div className="space-y-6">
       <HealthSignalsCard signals={healthSignalsProp} />
@@ -171,7 +149,65 @@ function BodyTab({
           </CardContent>
         </Card>
       )}
+    </div>
+  );
+}
 
+function HeartRateTab({
+  hrData,
+  hourlyHrData,
+  wearActivityData,
+  wearActivityHrData,
+}: PrivateTabsProps) {
+  return (
+    <div className="space-y-6">
+      {hourlyHrData.length > 0 && <HourlyHrChart data={hourlyHrData} />}
+
+      {wearActivityData.length > 0 && (
+        <WearActivityChart data={wearActivityData} hrData={wearActivityHrData} />
+      )}
+
+      {hrData.length > 0 && <RestingHrChart data={hrData} />}
+
+      {hourlyHrData.length === 0 && hrData.length === 0 && wearActivityData.length === 0 && (
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-sm text-muted-foreground text-center">
+              No heart rate data available. Sync your Oura data to see HR trends.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function CycleTab({
+  cycleData,
+  temperatureData,
+  cyclePhaseDaily,
+}: PrivateTabsProps) {
+  const today = getTodayET();
+  const pastCycles = cycleData.filter(
+    (c) => c.periodStartDay && c.periodStartDay <= today
+  );
+  const futureCycles = cycleData.filter(
+    (c) => c.periodStartDay && c.periodStartDay > today
+  );
+  const latestCycle = pastCycles[0] ?? null;
+  const nextProjected = futureCycles.length > 0
+    ? futureCycles[futureCycles.length - 1]
+    : null;
+  const ovulationDays = cycleData
+    .map((c) => c.ovulationDay)
+    .filter((d): d is string => d != null);
+
+  const validTempData = temperatureData.filter((d) => d.temperatureDelta != null);
+  const hasSleepData = temperatureData.length > 0;
+  const hasValidTemp = validTempData.length > 0;
+
+  return (
+    <div className="space-y-6">
       {latestCycle ? (
         <Card>
           <CardHeader>
@@ -241,7 +277,15 @@ function BodyTab({
             </p>
           </CardContent>
         </Card>
-      ) : null}
+      ) : (
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-sm text-muted-foreground text-center">
+              No cycle data available. Temperature data typically requires a few weeks of consistent nightly wear.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {cycleData.length > 0 && <CycleCalendar cycleData={cycleData} />}
 
@@ -280,7 +324,17 @@ function BodyTab({
             .reverse()}
         />
       )}
+    </div>
+  );
+}
 
+function FitnessTab({
+  cvAgeData,
+  vo2Data,
+  personalInfo,
+}: PrivateTabsProps) {
+  return (
+    <div className="space-y-6">
       {cvAgeData.length > 0 && (
         <CardiovascularAgeChart
           data={cvAgeData}
@@ -290,13 +344,15 @@ function BodyTab({
 
       {vo2Data.length > 0 && <Vo2MaxChart data={vo2Data} />}
 
-      {hourlyHrData.length > 0 && <HourlyHrChart data={hourlyHrData} />}
-
-      {wearActivityData.length > 0 && (
-        <WearActivityChart data={wearActivityData} hrData={wearActivityHrData} />
+      {cvAgeData.length === 0 && vo2Data.length === 0 && (
+        <Card>
+          <CardContent className="py-8">
+            <p className="text-sm text-muted-foreground text-center">
+              No fitness data available. Cardiovascular age and VO2 max data require consistent ring wear.
+            </p>
+          </CardContent>
+        </Card>
       )}
-
-      {hrData.length > 0 && <RestingHrChart data={hrData} />}
     </div>
   );
 }
