@@ -44,19 +44,33 @@ interface WearActivityChartProps {
   hrData: HrOverlay[];
 }
 
-const SOURCE_LABELS: Record<string, string> = {
+type IntensityZone = "rest" | "light" | "moderate" | "vigorous" | "peak";
+
+const ZONE_LABELS: Record<IntensityZone, string> = {
   rest: "Resting",
-  awake: "Awake",
-  mixed: "Mixed",
+  light: "Light",
+  moderate: "Moderate",
+  vigorous: "Vigorous",
+  peak: "Peak",
 };
 
-const SOURCE_COLORS: Record<string, string> = {
+const ZONE_COLORS: Record<IntensityZone, string> = {
   rest: "#3b82f6",
-  awake: "#34d399",
-  mixed: "#a78bfa",
+  light: "#60a5fa",
+  moderate: "#34d399",
+  vigorous: "#f59e0b",
+  peak: "#ef4444",
 };
 
 const NONWEAR_COLOR = "#6b7280";
+
+function getIntensityZone(avgBpm: number, restingBpm: number): IntensityZone {
+  if (avgBpm <= restingBpm * 1.1) return "rest";
+  if (avgBpm <= restingBpm * 1.3) return "light";
+  if (avgBpm <= restingBpm * 1.6) return "moderate";
+  if (avgBpm <= restingBpm * 1.85) return "vigorous";
+  return "peak";
+}
 
 function formatHour(h: number): string {
   if (h === 0) return "12a";
@@ -78,6 +92,7 @@ interface ChartPoint {
   label: string;
   avgBpm: number | null;
   source: string | null;
+  zone: IntensityZone | null;
   barValue: number;
   isNonWear: boolean;
 }
@@ -117,6 +132,19 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
     return values;
   }, [dayActivity]);
 
+  const restingBpm = useMemo(() => {
+    const restHrs = hrData.filter((h) => h.day === selectedDay && h.source === "rest" && h.avgBpm != null);
+    if (restHrs.length > 0) {
+      return Math.min(...restHrs.map((h) => h.avgBpm!));
+    }
+    const allHrs = hrData.filter((h) => h.day === selectedDay && h.avgBpm != null);
+    if (allHrs.length > 0) {
+      const sorted = allHrs.map((h) => h.avgBpm!).sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length * 0.25)];
+    }
+    return 60;
+  }, [hrData, selectedDay]);
+
   const chartData = useMemo((): ChartPoint[] => {
     return Array.from({ length: 24 }, (_, h) => {
       const hr = hrByHour.get(`${h}`);
@@ -135,16 +163,19 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
         }
       }
 
+      const zone = hasHr && !isNonWear ? getIntensityZone(hr.avgBpm!, restingBpm) : null;
+
       return {
         hour: h,
         label: formatHour(h),
         avgBpm: hr?.avgBpm ?? null,
         source: hr?.source ?? null,
+        zone,
         barValue: hasHr ? (hr.avgBpm ?? 0) : 1,
         isNonWear,
       };
     });
-  }, [hrByHour, class5minParsed]);
+  }, [hrByHour, class5minParsed, restingBpm]);
 
   const nonWearGaps = useMemo(() => {
     const gaps: { start: number; end: number }[] = [];
@@ -224,14 +255,15 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
         </div>
         <div className="flex flex-wrap items-center gap-3 mt-1 text-xs">
           <div className="flex gap-2 flex-wrap">
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: SOURCE_COLORS.rest }} />
-              Resting HR
-            </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: SOURCE_COLORS.awake }} />
-              Awake HR
-            </span>
+            {(["rest", "light", "moderate", "vigorous", "peak"] as IntensityZone[]).map((zone) => (
+              <span key={zone} className="flex items-center gap-1">
+                <span
+                  className="inline-block w-2.5 h-2.5 rounded-sm"
+                  style={{ backgroundColor: ZONE_COLORS[zone] }}
+                />
+                {ZONE_LABELS[zone]}
+              </span>
+            ))}
             <span className="flex items-center gap-1">
               <span className="inline-block w-2.5 h-2.5 rounded-sm bg-gray-500 opacity-30" />
               Non-wear
@@ -285,7 +317,11 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
                     ) : (
                       <>
                         {d.avgBpm != null && <p>HR: {d.avgBpm} bpm</p>}
-                        {d.source && <p className="text-muted-foreground">{SOURCE_LABELS[d.source] ?? d.source}</p>}
+                        {d.zone && (
+                          <p style={{ color: ZONE_COLORS[d.zone] }}>
+                            {ZONE_LABELS[d.zone]}
+                          </p>
+                        )}
                       </>
                     )}
                   </div>
@@ -311,7 +347,7 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
                   fill={
                     entry.isNonWear
                       ? NONWEAR_COLOR
-                      : SOURCE_COLORS[entry.source ?? "mixed"] ?? SOURCE_COLORS.mixed
+                      : ZONE_COLORS[entry.zone ?? "rest"]
                   }
                   fillOpacity={entry.isNonWear ? 0.15 : 0.7}
                 />
