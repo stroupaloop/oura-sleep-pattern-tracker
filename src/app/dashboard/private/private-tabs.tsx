@@ -21,6 +21,7 @@ import { RestingHrChart } from "@/components/charts/resting-hr-chart";
 import { HourlyHrChart } from "@/components/charts/hourly-hr-chart";
 import { HealthSignalsCard, type HealthSignalData } from "@/components/health-signals-card";
 import { CyclePhaseChart } from "@/components/charts/cycle-phase-chart";
+import { WearActivityChart, type WearActivityDay } from "@/components/charts/wear-activity-chart";
 import type { HourlyHrPoint } from "@/lib/hr-anomalies";
 
 const TABS = [
@@ -71,6 +72,8 @@ interface PrivateTabsProps {
     moodScore: number | null;
     temperatureDelta: number | null;
   }[];
+  wearActivityData: WearActivityDay[];
+  wearActivityHrData: { day: string; hour: number; avgBpm: number | null }[];
 }
 
 export function PrivateTabs(props: PrivateTabsProps) {
@@ -107,6 +110,8 @@ function BodyTab({
   hourlyHrData,
   healthSignals: healthSignalsProp,
   cyclePhaseDaily,
+  wearActivityData,
+  wearActivityHrData,
 }: PrivateTabsProps) {
   const today = getTodayET();
   const pastCycles = cycleData.filter(
@@ -286,6 +291,10 @@ function BodyTab({
       {vo2Data.length > 0 && <Vo2MaxChart data={vo2Data} />}
 
       {hourlyHrData.length > 0 && <HourlyHrChart data={hourlyHrData} />}
+
+      {wearActivityData.length > 0 && (
+        <WearActivityChart data={wearActivityData} hrData={wearActivityHrData} />
+      )}
 
       {hrData.length > 0 && <RestingHrChart data={hrData} />}
     </div>

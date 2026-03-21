@@ -7,6 +7,7 @@ import {
   dailyCardiovascularAge,
   dailyHeartrate,
   hourlyHeartrate,
+  dailyActivity,
   vo2Max,
   sleepTime,
   personalInfo,
@@ -96,6 +97,17 @@ export default async function PrivatePage() {
       .where(gte(hourlyHeartrate.day, format(subDays(new Date(getTodayET() + "T12:00:00"), 14), "yyyy-MM-dd")))
       .orderBy(hourlyHeartrate.day, hourlyHeartrate.hour),
   ]);
+
+  const wearActivityData = await db
+    .select({
+      day: dailyActivity.day,
+      class5min: dailyActivity.class5min,
+      nonWearTime: dailyActivity.nonWearTime,
+    })
+    .from(dailyActivity)
+    .where(gte(dailyActivity.day, format(subDays(new Date(getTodayET() + "T12:00:00"), 14), "yyyy-MM-dd")))
+    .orderBy(dailyActivity.day)
+    .catch(() => [] as { day: string; class5min: string | null; nonWearTime: number | null }[]);
 
   const [cyclePhaseAnalysis, cyclePhaseMoods] = await Promise.all([
     db
@@ -199,6 +211,16 @@ export default async function PrivatePage() {
           summary: s.summary ?? "",
         }))}
         cyclePhaseDaily={cyclePhaseDaily}
+        wearActivityData={wearActivityData.filter((d) => d.class5min != null).map((d) => ({
+          day: d.day,
+          class5min: d.class5min!,
+          nonWearTime: d.nonWearTime,
+        }))}
+        wearActivityHrData={hourlyHrData.map((h) => ({
+          day: h.day,
+          hour: h.hour,
+          avgBpm: h.avgBpm,
+        }))}
       />
     </div>
   );
