@@ -103,11 +103,16 @@ export default async function PrivatePage() {
       day: dailyActivity.day,
       class5min: dailyActivity.class5min,
       nonWearTime: dailyActivity.nonWearTime,
+      highActivityTime: dailyActivity.highActivityTime,
+      mediumActivityTime: dailyActivity.mediumActivityTime,
+      lowActivityTime: dailyActivity.lowActivityTime,
+      sedentaryTime: dailyActivity.sedentaryTime,
+      restingTime: dailyActivity.restingTime,
     })
     .from(dailyActivity)
     .where(gte(dailyActivity.day, format(subDays(new Date(getTodayET() + "T12:00:00"), 14), "yyyy-MM-dd")))
     .orderBy(dailyActivity.day)
-    .catch(() => [] as { day: string; class5min: string | null; nonWearTime: number | null }[]);
+    .catch(() => [] as { day: string; class5min: string | null; nonWearTime: number | null; highActivityTime: number | null; mediumActivityTime: number | null; lowActivityTime: number | null; sedentaryTime: number | null; restingTime: number | null }[]);
 
   const [cyclePhaseAnalysis, cyclePhaseMoods] = await Promise.all([
     db
@@ -211,16 +216,17 @@ export default async function PrivatePage() {
           summary: s.summary ?? "",
         }))}
         cyclePhaseDaily={cyclePhaseDaily}
-        wearActivityData={wearActivityData.filter((d) => d.class5min != null).map((d) => ({
+        wearActivityData={wearActivityData.map((d) => ({
           day: d.day,
-          class5min: d.class5min!,
+          class5min: d.class5min,
           nonWearTime: d.nonWearTime,
+          highActivityTime: d.highActivityTime,
+          mediumActivityTime: d.mediumActivityTime,
+          lowActivityTime: d.lowActivityTime,
+          sedentaryTime: d.sedentaryTime,
+          restingTime: d.restingTime,
         }))}
-        wearActivityHrData={hourlyHrData.map((h) => ({
-          day: h.day,
-          hour: h.hour,
-          avgBpm: h.avgBpm,
-        }))}
+        wearActivityHrData={hourlyHrData}
       />
     </div>
   );

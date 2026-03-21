@@ -21,7 +21,8 @@ import { RestingHrChart } from "@/components/charts/resting-hr-chart";
 import { HourlyHrChart } from "@/components/charts/hourly-hr-chart";
 import { HealthSignalsCard, type HealthSignalData } from "@/components/health-signals-card";
 import { CyclePhaseChart } from "@/components/charts/cycle-phase-chart";
-import { WearActivityChart, type WearActivityDay } from "@/components/charts/wear-activity-chart";
+import { WearActivityChart } from "@/components/charts/wear-activity-chart";
+import type { WearActivityDay } from "@/components/charts/wear-activity-chart";
 import type { HourlyHrPoint } from "@/lib/hr-anomalies";
 
 const TABS = [
@@ -76,7 +77,7 @@ interface PrivateTabsProps {
     temperatureDelta: number | null;
   }[];
   wearActivityData: WearActivityDay[];
-  wearActivityHrData: { day: string; hour: number; avgBpm: number | null }[];
+  wearActivityHrData: { day: string; hour: number; avgBpm: number | null; source: string | null }[];
 }
 
 export function PrivateTabs(props: PrivateTabsProps) {
@@ -163,9 +164,7 @@ function HeartRateTab({
     <div className="space-y-6">
       {hourlyHrData.length > 0 && <HourlyHrChart data={hourlyHrData} />}
 
-      {wearActivityData.length > 0 && (
-        <WearActivityChart data={wearActivityData} hrData={wearActivityHrData} />
-      )}
+      <WearActivityChart activityData={wearActivityData} hrData={wearActivityHrData} />
 
       {hrData.length > 0 && <RestingHrChart data={hrData} />}
 
