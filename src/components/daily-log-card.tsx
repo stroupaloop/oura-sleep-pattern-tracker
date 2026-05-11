@@ -81,6 +81,53 @@ function slotLabel(slot: Slot): string {
   return SLOTS.find((s) => s.value === slot)?.label ?? slot;
 }
 
+function slotPillClass(key: string): string {
+  switch (key) {
+    case "morning":
+      return "bg-amber-500/10 text-amber-400";
+    case "afternoon":
+      return "bg-orange-500/10 text-orange-400";
+    case "evening":
+      return "bg-indigo-500/10 text-indigo-300";
+    case "night":
+      return "bg-slate-500/20 text-slate-300";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+type DoseEntry = {
+  medId: number;
+  medName: string;
+  dosage: string | null;
+  slotKey: string;
+  pillLabel: string;
+};
+
+function buildDoses(meds: Medication[]): DoseEntry[] {
+  return meds.flatMap((med) => {
+    const slots = slotsForMed(med);
+    if (slots.length === 0) {
+      return [
+        {
+          medId: med.id,
+          medName: med.name,
+          dosage: med.dosage,
+          slotKey: AS_NEEDED_KEY,
+          pillLabel: "PRN",
+        },
+      ];
+    }
+    return slots.map((slot) => ({
+      medId: med.id,
+      medName: med.name,
+      dosage: med.dosage,
+      slotKey: slot,
+      pillLabel: slotLabel(slot).toUpperCase(),
+    }));
+  });
+}
+
 function formatDisplayDate(dateStr: string): string {
   const todayStr = getTodayET();
   const [ty, tm, td] = todayStr.split("-").map(Number);
@@ -246,7 +293,7 @@ export function DailyLogCard({
     showSaved();
   }
 
-  async function toggleMedSlot(medId: number, slot: Slot | typeof AS_NEEDED_KEY, currentState: boolean) {
+  async function toggleMedSlot(medId: number, slot: string, currentState: boolean) {
     const newState = !currentState;
     setMedStates((prev) => ({
       ...prev,
@@ -379,59 +426,36 @@ export function DailyLogCard({
         {dayMeds.length > 0 && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Medications</p>
-            <div className="space-y-2">
-              {dayMeds.map((med) => {
-                const slots = slotsForMed(med);
-                const checks = medStates[med.id] ?? {};
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-0.5">
+              {buildDoses(dayMeds).map((d) => {
+                const checked = medStates[d.medId]?.[d.slotKey] ?? false;
                 return (
-                  <div key={med.id} className="space-y-0.5">
-                    <div className="text-sm">
-                      {med.name}
-                      {med.dosage && (
-                        <span className="text-muted-foreground ml-1 text-xs">
-                          {med.dosage}
-                        </span>
-                      )}
-                      {slots.length === 0 && (
-                        <span className="text-muted-foreground ml-1 text-xs">(as needed)</span>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 pl-1">
-                      {slots.length === 0 ? (
-                        <label className="flex items-center gap-1.5 cursor-pointer py-0.5 text-sm">
-                          <input
-                            type="checkbox"
-                            checked={checks[AS_NEEDED_KEY] ?? false}
-                            onChange={() =>
-                              toggleMedSlot(med.id, AS_NEEDED_KEY, checks[AS_NEEDED_KEY] ?? false)
-                            }
-                            disabled={loading}
-                            className="rounded border-muted-foreground"
-                          />
-                          <span>Taken today</span>
-                        </label>
-                      ) : (
-                        slots.map((slot) => {
-                          const checked = checks[slot] ?? false;
-                          return (
-                            <label
-                              key={slot}
-                              className="flex items-center gap-1.5 cursor-pointer py-0.5 text-sm"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                onChange={() => toggleMedSlot(med.id, slot, checked)}
-                                disabled={loading}
-                                className="rounded border-muted-foreground"
-                              />
-                              <span>{slotLabel(slot)}</span>
-                            </label>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
+                  <label
+                    key={`${d.medId}-${d.slotKey}`}
+                    className="flex items-center gap-2 py-0.5 text-sm cursor-pointer min-w-0"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleMedSlot(d.medId, d.slotKey, checked)}
+                      disabled={loading}
+                      className="rounded border-muted-foreground shrink-0"
+                    />
+                    <span className="truncate">{d.medName}</span>
+                    {d.dosage && (
+                      <span
+                        className="text-muted-foreground text-xs truncate"
+                        title={d.dosage}
+                      >
+                        {d.dosage}
+                      </span>
+                    )}
+                    <span
+                      className={`ml-auto shrink-0 text-[10px] font-semibold tracking-wide px-1.5 py-0.5 rounded ${slotPillClass(d.slotKey)}`}
+                    >
+                      {d.pillLabel}
+                    </span>
+                  </label>
                 );
               })}
             </div>
