@@ -106,8 +106,16 @@ type DoseEntry = {
   pillLabel: string;
 };
 
+const SLOT_ORDER: Record<string, number> = {
+  morning: 0,
+  afternoon: 1,
+  evening: 2,
+  night: 3,
+  [AS_NEEDED_KEY]: 4,
+};
+
 function buildDoses(meds: MedicationItem[]): DoseEntry[] {
-  return meds.flatMap((med) => {
+  const doses = meds.flatMap((med) => {
     const slots = slotsForMed(med);
     if (slots.length === 0) {
       return [
@@ -127,6 +135,11 @@ function buildDoses(meds: MedicationItem[]): DoseEntry[] {
       slotKey: slot,
       pillLabel: slotLabel(slot).toUpperCase(),
     }));
+  });
+  return doses.sort((a, b) => {
+    const slotDiff = (SLOT_ORDER[a.slotKey] ?? 99) - (SLOT_ORDER[b.slotKey] ?? 99);
+    if (slotDiff !== 0) return slotDiff;
+    return a.medName.localeCompare(b.medName);
   });
 }
 
