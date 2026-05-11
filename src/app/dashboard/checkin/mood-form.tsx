@@ -83,6 +83,53 @@ function slotLabel(slot: Slot): string {
   return SLOTS.find((s) => s.value === slot)?.label ?? slot;
 }
 
+function slotPillClass(key: string): string {
+  switch (key) {
+    case "morning":
+      return "bg-amber-500/10 text-amber-400";
+    case "afternoon":
+      return "bg-orange-500/10 text-orange-400";
+    case "evening":
+      return "bg-indigo-500/10 text-indigo-300";
+    case "night":
+      return "bg-slate-500/20 text-slate-300";
+    default:
+      return "bg-muted text-muted-foreground";
+  }
+}
+
+type DoseEntry = {
+  medId: number;
+  medName: string;
+  dosage: string | null;
+  slotKey: string;
+  pillLabel: string;
+};
+
+function buildDoses(meds: MedicationItem[]): DoseEntry[] {
+  return meds.flatMap((med) => {
+    const slots = slotsForMed(med);
+    if (slots.length === 0) {
+      return [
+        {
+          medId: med.id,
+          medName: med.name,
+          dosage: med.dosage,
+          slotKey: AS_NEEDED_KEY,
+          pillLabel: "PRN",
+        },
+      ];
+    }
+    return slots.map((slot) => ({
+      medId: med.id,
+      medName: med.name,
+      dosage: med.dosage,
+      slotKey: slot,
+      pillLabel: slotLabel(slot).toUpperCase(),
+    }));
+  });
+}
+
 type MedCheckMap = Record<number, Record<string, boolean>>;
 
 interface ExistingMood {
@@ -503,57 +550,43 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
                     <CardTitle className="text-base">Medications</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
-                      {medications.map((med) => {
-                        const slots = slotsForMed(med);
-                        const checks = medChecks[med.id] ?? {};
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
+                      {buildDoses(medications).map((d) => {
+                        const checked = medChecks[d.medId]?.[d.slotKey] ?? false;
                         return (
-                          <div key={med.id} className="space-y-1">
-                            <div className="text-sm">
-                              <span>{med.name}</span>
-                              {med.dosage && (
-                                <span className="text-muted-foreground ml-1">{med.dosage}</span>
-                              )}
-                              {slots.length === 0 && (
-                                <span className="text-muted-foreground ml-1 text-xs">(as needed)</span>
-                              )}
-                            </div>
-                            <div className="flex flex-wrap gap-3 pl-1">
-                              {slots.length === 0 ? (
-                                <label className="flex items-center gap-2 text-sm">
-                                  <input
-                                    type="checkbox"
-                                    checked={checks[AS_NEEDED_KEY] ?? false}
-                                    onChange={(e) =>
-                                      setMedChecks((prev) => ({
-                                        ...prev,
-                                        [med.id]: { ...(prev[med.id] ?? {}), [AS_NEEDED_KEY]: e.target.checked },
-                                      }))
-                                    }
-                                    className="rounded"
-                                  />
-                                  <span>Taken today</span>
-                                </label>
-                              ) : (
-                                slots.map((slot) => (
-                                  <label key={slot} className="flex items-center gap-2 text-sm">
-                                    <input
-                                      type="checkbox"
-                                      checked={checks[slot] ?? false}
-                                      onChange={(e) =>
-                                        setMedChecks((prev) => ({
-                                          ...prev,
-                                          [med.id]: { ...(prev[med.id] ?? {}), [slot]: e.target.checked },
-                                        }))
-                                      }
-                                      className="rounded"
-                                    />
-                                    <span>{slotLabel(slot)}</span>
-                                  </label>
-                                ))
-                              )}
-                            </div>
-                          </div>
+                          <label
+                            key={`${d.medId}-${d.slotKey}`}
+                            className="flex items-center gap-2 py-1 text-sm cursor-pointer min-w-0"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={(e) =>
+                                setMedChecks((prev) => ({
+                                  ...prev,
+                                  [d.medId]: {
+                                    ...(prev[d.medId] ?? {}),
+                                    [d.slotKey]: e.target.checked,
+                                  },
+                                }))
+                              }
+                              className="rounded shrink-0"
+                            />
+                            <span className="truncate">{d.medName}</span>
+                            {d.dosage && (
+                              <span
+                                className="text-muted-foreground text-xs truncate"
+                                title={d.dosage}
+                              >
+                                {d.dosage}
+                              </span>
+                            )}
+                            <span
+                              className={`ml-auto shrink-0 text-[10px] font-semibold tracking-wide px-1.5 py-0.5 rounded ${slotPillClass(d.slotKey)}`}
+                            >
+                              {d.pillLabel}
+                            </span>
+                          </label>
                         );
                       })}
                     </div>

@@ -38,7 +38,7 @@ export default async function CheckinPage() {
   ]);
 
   return (
-    <div className="max-w-lg mx-auto space-y-4 md:space-y-6">
+    <div className="max-w-2xl mx-auto space-y-4 md:space-y-6">
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Daily Check-in</h1>
       </div>
