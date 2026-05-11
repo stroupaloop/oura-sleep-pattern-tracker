@@ -6,6 +6,7 @@ import {
   primaryKey,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { sql } from "drizzle-orm";
 
 // NextAuth required tables
 export const users = sqliteTable("user", {
@@ -183,6 +184,7 @@ export const medications = sqliteTable("medications", {
   name: text("name").notNull(),
   dosage: text("dosage"),
   frequency: text("frequency"),
+  doseSchedule: text("dose_schedule"),
   isActive: integer("is_active").default(1),
   startDate: text("start_date"),
   endDate: text("end_date"),
@@ -197,11 +199,14 @@ export const medicationLogs = sqliteTable(
       .notNull()
       .references(() => medications.id),
     day: text("day").notNull(),
+    slot: text("slot"),
     taken: integer("taken").notNull(),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [
-    uniqueIndex("medication_logs_med_day_uniq").on(table.medicationId, table.day),
+    uniqueIndex("medication_logs_med_day_slot_uniq")
+      .on(table.medicationId, table.day, table.slot)
+      .where(sql`${table.slot} IS NOT NULL`),
   ]
 );
 

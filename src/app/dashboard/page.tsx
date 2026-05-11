@@ -149,6 +149,8 @@ export default async function DashboardPage() {
       id: medications.id,
       name: medications.name,
       dosage: medications.dosage,
+      frequency: medications.frequency,
+      doseSchedule: medications.doseSchedule,
       startDate: medications.startDate,
       endDate: medications.endDate,
     })
@@ -159,13 +161,20 @@ export default async function DashboardPage() {
     const now = Math.floor(Date.now() / 1000);
     const defaults = ["Lithium", "Lamotrigine", "Wellbutrin", "Trazodone"];
     await db.insert(medications).values(
-      defaults.map((name) => ({ name, createdAt: now }))
+      defaults.map((name) => ({
+        name,
+        frequency: "daily",
+        doseSchedule: JSON.stringify(["morning"]),
+        createdAt: now,
+      }))
     );
     activeMeds = await db
       .select({
         id: medications.id,
         name: medications.name,
         dosage: medications.dosage,
+        frequency: medications.frequency,
+        doseSchedule: medications.doseSchedule,
         startDate: medications.startDate,
         endDate: medications.endDate,
       })
@@ -174,7 +183,11 @@ export default async function DashboardPage() {
   }
 
   const todayMedLogs = await db
-    .select({ medicationId: medicationLogs.medicationId, taken: medicationLogs.taken })
+    .select({
+      medicationId: medicationLogs.medicationId,
+      slot: medicationLogs.slot,
+      taken: medicationLogs.taken,
+    })
     .from(medicationLogs)
     .where(eq(medicationLogs.day, today));
 

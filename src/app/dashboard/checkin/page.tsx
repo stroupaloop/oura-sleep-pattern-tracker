@@ -21,6 +21,8 @@ export default async function CheckinPage() {
         id: medications.id,
         name: medications.name,
         dosage: medications.dosage,
+        frequency: medications.frequency,
+        doseSchedule: medications.doseSchedule,
         startDate: medications.startDate,
         endDate: medications.endDate,
       })

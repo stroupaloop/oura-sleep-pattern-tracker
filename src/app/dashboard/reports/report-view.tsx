@@ -35,6 +35,7 @@ interface ReportData {
     taken: number;
     total: number;
     rate: number;
+    asNeeded: boolean;
   }[];
   dataCompleteness: {
     ouraDays: number;
@@ -162,10 +163,21 @@ export function ReportView({ data }: { data: ReportData }) {
             <div className="space-y-2 text-sm">
               {data.medicationAdherence.map((med, i) => (
                 <div key={i} className="flex items-center justify-between">
-                  <span>{med.name}</span>
-                  <span className={med.rate >= 0.8 ? "text-green-400" : "text-amber-400"}>
-                    {med.taken}/{med.total} ({(med.rate * 100).toFixed(0)}%)
+                  <span>
+                    {med.name}
+                    {med.asNeeded && (
+                      <span className="text-muted-foreground ml-1 text-xs">(as needed)</span>
+                    )}
                   </span>
+                  {med.asNeeded ? (
+                    <span className="text-muted-foreground">
+                      {med.taken} taken
+                    </span>
+                  ) : (
+                    <span className={med.rate >= 0.8 ? "text-green-400" : "text-amber-400"}>
+                      {med.taken}/{med.total} doses ({(med.rate * 100).toFixed(0)}%)
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
