@@ -26,10 +26,21 @@ const TAGS = [
   "poor_sleep",
 ];
 
+const SLOTS = [
+  { value: "morning", label: "Morning" },
+  { value: "afternoon", label: "Afternoon" },
+  { value: "evening", label: "Evening" },
+  { value: "night", label: "Night" },
+] as const;
+type Slot = (typeof SLOTS)[number]["value"];
+const AS_NEEDED_KEY = "as_needed";
+
 interface Medication {
   id: number;
   name: string;
   dosage: string | null;
+  frequency: string | null;
+  doseSchedule: string | null;
   startDate?: string | null;
   endDate?: string | null;
 }
@@ -38,8 +49,36 @@ interface DailyLogCardProps {
   initialDay: string;
   medications: Medication[];
   initialMood: { moodScore: number } | null;
-  initialMedLogs: { medicationId: number; taken: number }[];
+  initialMedLogs: { medicationId: number; slot: string | null; taken: number }[];
   initialEpisodeState: string | null;
+}
+
+type MedCheckMap = Record<number, Record<string, boolean>>;
+
+function parseSchedule(raw: string | null | undefined): Slot[] {
+  if (!raw) return [];
+  try {
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((s): s is Slot =>
+      SLOTS.some((slot) => slot.value === s)
+    );
+  } catch {
+    return [];
+  }
+}
+
+function slotsForMed(med: Medication): Slot[] {
+  if (med.frequency === "as_needed") return [];
+  const parsed = parseSchedule(med.doseSchedule);
+  if (parsed.length > 0) return parsed;
+  return med.frequency === "twice_daily"
+    ? ["morning", "evening"]
+    : ["morning"];
+}
+
+function slotLabel(slot: Slot): string {
+  return SLOTS.find((s) => s.value === slot)?.label ?? slot;
 }
 
 function formatDisplayDate(dateStr: string): string {
@@ -92,10 +131,15 @@ export function DailyLogCard({
   const [moodScore, setMoodScore] = useState<number | null>(
     initialMood?.moodScore ?? null
   );
-  const [medStates, setMedStates] = useState<Record<number, boolean>>(() => {
-    const map: Record<number, boolean> = {};
+  const [medStates, setMedStates] = useState<MedCheckMap>(() => {
+    const map: MedCheckMap = {};
+    for (const med of medications) {
+      map[med.id] = {};
+    }
     for (const log of initialMedLogs) {
-      map[log.medicationId] = log.taken === 1;
+      const inner = map[log.medicationId] ?? (map[log.medicationId] = {});
+      const key = log.slot ?? AS_NEEDED_KEY;
+      inner[key] = log.taken === 1;
     }
     return map;
   });
@@ -136,10 +180,15 @@ export function DailyLogCard({
         setLastSavedAt(null);
       }
 
-      const newMap: Record<number, boolean> = {};
+      const newMap: MedCheckMap = {};
+      for (const med of medications) {
+        newMap[med.id] = {};
+      }
       if (medData.logs) {
         for (const log of medData.logs) {
-          newMap[log.medicationId] = log.taken === 1;
+          const inner = newMap[log.medicationId] ?? (newMap[log.medicationId] = {});
+          const key = log.slot ?? AS_NEEDED_KEY;
+          inner[key] = log.taken === 1;
         }
       }
       setMedStates(newMap);
@@ -197,15 +246,19 @@ export function DailyLogCard({
     showSaved();
   }
 
-  async function toggleMed(medId: number, currentState: boolean) {
+  async function toggleMedSlot(medId: number, slot: Slot | typeof AS_NEEDED_KEY, currentState: boolean) {
     const newState = !currentState;
-    setMedStates((prev) => ({ ...prev, [medId]: newState }));
+    setMedStates((prev) => ({
+      ...prev,
+      [medId]: { ...(prev[medId] ?? {}), [slot]: newState },
+    }));
     await fetch("/api/medications/log", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         medicationId: medId,
         day: selectedDay,
+        slot: slot === AS_NEEDED_KEY ? null : slot,
         taken: newState,
       }),
     });
@@ -326,30 +379,59 @@ export function DailyLogCard({
         {dayMeds.length > 0 && (
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Medications</p>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+            <div className="space-y-2">
               {dayMeds.map((med) => {
-                const checked = medStates[med.id] ?? false;
+                const slots = slotsForMed(med);
+                const checks = medStates[med.id] ?? {};
                 return (
-                  <label
-                    key={med.id}
-                    className="flex items-center gap-2 cursor-pointer py-0.5"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleMed(med.id, checked)}
-                      disabled={loading}
-                      className="rounded border-muted-foreground"
-                    />
-                    <span className="text-sm">
+                  <div key={med.id} className="space-y-0.5">
+                    <div className="text-sm">
                       {med.name}
                       {med.dosage && (
                         <span className="text-muted-foreground ml-1 text-xs">
                           {med.dosage}
                         </span>
                       )}
-                    </span>
-                  </label>
+                      {slots.length === 0 && (
+                        <span className="text-muted-foreground ml-1 text-xs">(as needed)</span>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 pl-1">
+                      {slots.length === 0 ? (
+                        <label className="flex items-center gap-1.5 cursor-pointer py-0.5 text-sm">
+                          <input
+                            type="checkbox"
+                            checked={checks[AS_NEEDED_KEY] ?? false}
+                            onChange={() =>
+                              toggleMedSlot(med.id, AS_NEEDED_KEY, checks[AS_NEEDED_KEY] ?? false)
+                            }
+                            disabled={loading}
+                            className="rounded border-muted-foreground"
+                          />
+                          <span>Taken today</span>
+                        </label>
+                      ) : (
+                        slots.map((slot) => {
+                          const checked = checks[slot] ?? false;
+                          return (
+                            <label
+                              key={slot}
+                              className="flex items-center gap-1.5 cursor-pointer py-0.5 text-sm"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleMedSlot(med.id, slot, checked)}
+                                disabled={loading}
+                                className="rounded border-muted-foreground"
+                              />
+                              <span>{slotLabel(slot)}</span>
+                            </label>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
                 );
               })}
             </div>

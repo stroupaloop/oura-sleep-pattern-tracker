@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Menu } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
+import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -63,7 +64,16 @@ export function MobileNav({ email, isSensitive }: { email?: string | null; isSen
           )}
         </nav>
         {email && (
-          <p className="text-sm text-muted-foreground mt-8 px-4">{email}</p>
+          <div className="mt-8 px-4 space-y-2 border-t pt-4">
+            <p className="text-sm text-muted-foreground">{email}</p>
+            <button
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+              Sign out
+            </button>
+          </div>
         )}
       </SheetContent>
     </Sheet>

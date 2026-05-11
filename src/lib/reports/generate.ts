@@ -35,6 +35,7 @@ export interface ReportData {
     taken: number;
     total: number;
     rate: number;
+    asNeeded: boolean;
   }[];
   dataCompleteness: {
     ouraDays: number;
@@ -114,14 +115,56 @@ export async function generateReport(
   const stepValues = analysisRows.filter((r) => r.steps).map((r) => r.steps!);
   const moodValues = moodRows.map((r) => r.moodScore);
 
+  const VALID_SLOTS = ["morning", "afternoon", "evening", "night"] as const;
+  function parseSchedule(raw: string | null): string[] {
+    if (!raw) return [];
+    try {
+      const arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      return arr.filter((s): s is string => typeof s === "string" && (VALID_SLOTS as readonly string[]).includes(s));
+    } catch {
+      return [];
+    }
+  }
+  function defaultScheduleFor(med: { frequency: string | null; doseSchedule: string | null }): string[] {
+    if (med.frequency === "as_needed") return [];
+    const parsed = parseSchedule(med.doseSchedule);
+    if (parsed.length > 0) return parsed;
+    return med.frequency === "twice_daily" ? ["morning", "evening"] : ["morning"];
+  }
+  function effectiveDateRange(med: { startDate: string | null; endDate: string | null }): { from: string; to: string } {
+    const from = med.startDate && med.startDate > startDate ? med.startDate : startDate;
+    const to = med.endDate && med.endDate < endDate ? med.endDate : endDate;
+    return { from, to };
+  }
+  function daysBetween(from: string, to: string): number {
+    if (from > to) return 0;
+    const ms = new Date(to).getTime() - new Date(from).getTime();
+    return Math.round(ms / 86400000) + 1;
+  }
+
   const medAdherence = medRows.map((med) => {
     const logs = medLogRows.filter((l) => l.medicationId === med.id);
     const taken = logs.filter((l) => l.taken === 1).length;
+    const slots = defaultScheduleFor(med);
+    if (slots.length === 0) {
+      return {
+        name: med.name,
+        taken,
+        total: logs.length,
+        rate: 0,
+        asNeeded: true,
+      };
+    }
+    const { from, to } = effectiveDateRange(med);
+    const days = daysBetween(from, to);
+    const expected = days * slots.length;
     return {
       name: med.name,
       taken,
-      total: logs.length,
-      rate: logs.length > 0 ? taken / logs.length : 0,
+      total: expected,
+      rate: expected > 0 ? Math.min(1, taken / expected) : 0,
+      asNeeded: false,
     };
   });
 

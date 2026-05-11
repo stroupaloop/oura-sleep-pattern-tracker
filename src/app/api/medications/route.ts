@@ -3,6 +3,34 @@ import { db } from "@/lib/db";
 import { medications } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
+const VALID_SLOTS = ["morning", "afternoon", "evening", "night"] as const;
+type Slot = (typeof VALID_SLOTS)[number];
+
+function normalizeSchedule(input: unknown, frequency?: string | null): string | null {
+  if (frequency === "as_needed") return null;
+  if (input === null) return null;
+  if (!Array.isArray(input)) {
+    throw new Error("doseSchedule must be an array of slot strings");
+  }
+  const cleaned: Slot[] = [];
+  for (const raw of input) {
+    if (typeof raw !== "string" || !VALID_SLOTS.includes(raw as Slot)) {
+      throw new Error(
+        `doseSchedule entries must be one of: ${VALID_SLOTS.join(", ")}`
+      );
+    }
+    if (!cleaned.includes(raw as Slot)) cleaned.push(raw as Slot);
+  }
+  cleaned.sort((a, b) => VALID_SLOTS.indexOf(a) - VALID_SLOTS.indexOf(b));
+  return JSON.stringify(cleaned);
+}
+
+function defaultScheduleForFrequency(frequency: string | null): string | null {
+  if (frequency === "as_needed") return null;
+  if (frequency === "twice_daily") return JSON.stringify(["morning", "evening"]);
+  return JSON.stringify(["morning"]);
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -28,10 +56,18 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { name, dosage, frequency, startDate } = body;
+    const { name, dosage, frequency, doseSchedule, startDate } = body;
 
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
+    }
+
+    const freq = frequency ?? "daily";
+    let schedule: string | null;
+    if (doseSchedule === undefined) {
+      schedule = defaultScheduleForFrequency(freq);
+    } else {
+      schedule = normalizeSchedule(doseSchedule, freq);
     }
 
     const now = Math.floor(Date.now() / 1000);
@@ -40,7 +76,8 @@ export async function POST(req: NextRequest) {
       .values({
         name,
         dosage: dosage ?? null,
-        frequency: frequency ?? "daily",
+        frequency: freq,
+        doseSchedule: schedule,
         isActive: 1,
         startDate: startDate ?? null,
         createdAt: now,
@@ -59,7 +96,7 @@ export async function POST(req: NextRequest) {
 export async function PUT(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, name, dosage, frequency, isActive, startDate, endDate } = body;
+    const { id, name, dosage, frequency, doseSchedule, isActive, startDate, endDate } = body;
 
     if (!id) {
       return NextResponse.json({ error: "id is required" }, { status: 400 });
@@ -69,6 +106,9 @@ export async function PUT(req: NextRequest) {
     if (name !== undefined) updates.name = name;
     if (dosage !== undefined) updates.dosage = dosage;
     if (frequency !== undefined) updates.frequency = frequency;
+    if (doseSchedule !== undefined) {
+      updates.doseSchedule = normalizeSchedule(doseSchedule, frequency);
+    }
     if (isActive !== undefined) updates.isActive = isActive;
     if (startDate !== undefined) updates.startDate = startDate;
     if (endDate !== undefined) updates.endDate = endDate;
