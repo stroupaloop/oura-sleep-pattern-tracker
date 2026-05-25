@@ -145,6 +145,36 @@ function buildDoses(meds: MedicationItem[]): DoseEntry[] {
 
 type MedCheckMap = Record<number, Record<string, boolean>>;
 
+interface MedLog {
+  medicationId: number;
+  slot: string | null;
+  taken: number;
+}
+
+function buildMedChecks(
+  meds: MedicationItem[],
+  logs: MedLog[],
+  isFreshDay: boolean
+): MedCheckMap {
+  const map: MedCheckMap = {};
+  for (const med of meds) {
+    const slots = slotsForMed(med);
+    const inner: Record<string, boolean> = {};
+    if (slots.length === 0) {
+      inner[AS_NEEDED_KEY] = false;
+    } else {
+      for (const s of slots) inner[s] = isFreshDay;
+    }
+    map[med.id] = inner;
+  }
+  for (const log of logs) {
+    if (!map[log.medicationId]) continue;
+    const key = log.slot ?? AS_NEEDED_KEY;
+    map[log.medicationId][key] = log.taken === 1;
+  }
+  return map;
+}
+
 interface ExistingMood {
   moodScore: number;
   energyScore: number | null;
@@ -161,6 +191,7 @@ interface MoodFormProps {
   initialDay: string;
   existingMood: ExistingMood | null;
   medications: MedicationItem[];
+  existingMedLogs: MedLog[];
 }
 
 function formatDisplayDate(dateStr: string): string {
@@ -194,7 +225,7 @@ function parseTags(tags: string | null): string[] {
   }
 }
 
-export function MoodForm({ initialDay, existingMood, medications }: MoodFormProps) {
+export function MoodForm({ initialDay, existingMood, medications, existingMedLogs }: MoodFormProps) {
   const [selectedDay, setSelectedDay] = useState(initialDay);
   const [moodScore, setMoodScore] = useState<number | null>(existingMood?.moodScore ?? null);
   const [energy, setEnergy] = useState(existingMood?.energyScore ?? 3);
@@ -204,23 +235,13 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
   const [episodeState, setEpisodeState] = useState<string | null>(existingMood?.episodeState ?? null);
   const [notes, setNotes] = useState(existingMood?.notes ?? "");
   const [selectedTags, setSelectedTags] = useState<string[]>(parseTags(existingMood?.tags ?? null));
-  const [medChecks, setMedChecks] = useState<MedCheckMap>(() => {
-    const map: MedCheckMap = {};
-    for (const m of medications) {
-      const slots = slotsForMed(m);
-      const inner: Record<string, boolean> = {};
-      if (slots.length === 0) {
-        inner[AS_NEEDED_KEY] = false;
-      } else {
-        for (const s of slots) inner[s] = true;
-      }
-      map[m.id] = inner;
-    }
-    return map;
-  });
+  const [medChecks, setMedChecks] = useState<MedCheckMap>(() =>
+    buildMedChecks(medications, existingMedLogs, !existingMood)
+  );
   const [showOptional, setShowOptional] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [loadingDay, setLoadingDay] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(
     existingMood?.createdAt
@@ -272,26 +293,7 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
         setShowOptional(false);
       }
 
-      const newMedMap: MedCheckMap = {};
-      const isFreshDay = !moodData;
-      for (const med of medications) {
-        const slots = slotsForMed(med);
-        const inner: Record<string, boolean> = {};
-        if (slots.length === 0) {
-          inner[AS_NEEDED_KEY] = false;
-        } else {
-          for (const s of slots) inner[s] = isFreshDay;
-        }
-        newMedMap[med.id] = inner;
-      }
-      if (medData?.logs) {
-        for (const log of medData.logs) {
-          if (!newMedMap[log.medicationId]) continue;
-          const key = log.slot ?? AS_NEEDED_KEY;
-          newMedMap[log.medicationId][key] = log.taken === 1;
-        }
-      }
-      setMedChecks(newMedMap);
+      setMedChecks(buildMedChecks(medications, medData?.logs ?? [], !moodData));
     } finally {
       setLoadingDay(false);
     }
@@ -317,8 +319,10 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
   async function handleSubmit() {
     if (moodScore === null) return;
     setSaving(true);
+    setError(null);
+    const failed: string[] = [];
     try {
-      await fetch("/api/mood", {
+      const moodRes = await fetch("/api/mood", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -333,41 +337,40 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
           episodeState: episodeState ?? undefined,
         }),
       });
+      if (!moodRes.ok) failed.push("mood");
+
+      async function saveMedLog(medId: number, slot: string | null, taken: boolean, label: string) {
+        const res = await fetch("/api/medications/log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ medicationId: medId, day: selectedDay, slot, taken }),
+        });
+        if (!res.ok) failed.push(label);
+      }
 
       for (const med of medications) {
         const slots = slotsForMed(med);
         const checks = medChecks[med.id] ?? {};
         if (slots.length === 0) {
-          await fetch("/api/medications/log", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              medicationId: med.id,
-              day: selectedDay,
-              slot: null,
-              taken: checks[AS_NEEDED_KEY] ?? false,
-            }),
-          });
+          await saveMedLog(med.id, null, checks[AS_NEEDED_KEY] ?? false, med.name);
         } else {
           for (const slot of slots) {
-            await fetch("/api/medications/log", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                medicationId: med.id,
-                day: selectedDay,
-                slot,
-                taken: checks[slot] ?? false,
-              }),
-            });
+            await saveMedLog(med.id, slot, checks[slot] ?? false, `${med.name} (${slotLabel(slot)})`);
           }
         }
+      }
+
+      if (failed.length > 0) {
+        setError(`Couldn't save: ${failed.join(", ")}. Please try again.`);
+        return;
       }
 
       setSaved(true);
       setLastSavedAt(
         new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
       );
+    } catch {
+      setError("Couldn't save — check your connection and try again.");
     } finally {
       setSaving(false);
     }
@@ -605,6 +608,12 @@ export function MoodForm({ initialDay, existingMood, medications }: MoodFormProp
                     </div>
                   </CardContent>
                 </Card>
+              )}
+
+              {error && (
+                <p className="text-sm text-red-400 text-center" role="alert">
+                  {error}
+                </p>
               )}
 
               <Button onClick={handleSubmit} disabled={saving || loadingDay} className="w-full">

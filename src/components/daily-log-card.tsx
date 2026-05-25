@@ -312,17 +312,26 @@ export function DailyLogCard({
       ...prev,
       [medId]: { ...(prev[medId] ?? {}), [slot]: newState },
     }));
-    await fetch("/api/medications/log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        medicationId: medId,
-        day: selectedDay,
-        slot: slot === AS_NEEDED_KEY ? null : slot,
-        taken: newState,
-      }),
-    });
-    showSaved();
+    try {
+      const res = await fetch("/api/medications/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          medicationId: medId,
+          day: selectedDay,
+          slot: slot === AS_NEEDED_KEY ? null : slot,
+          taken: newState,
+        }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      showSaved();
+    } catch {
+      // Revert the optimistic toggle so the UI reflects the unsaved state.
+      setMedStates((prev) => ({
+        ...prev,
+        [medId]: { ...(prev[medId] ?? {}), [slot]: currentState },
+      }));
+    }
   }
 
   async function toggleTag(tag: string) {

@@ -79,6 +79,7 @@ export async function POST(req: NextRequest) {
         })
         .onConflictDoUpdate({
           target: [medicationLogs.medicationId, medicationLogs.day, medicationLogs.slot],
+          targetWhere: sql`${medicationLogs.slot} IS NOT NULL`,
           set: {
             taken: sql`excluded.taken`,
           },
