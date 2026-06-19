@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,7 +9,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { MedicationDoseGroups } from "@/components/medication-dose-groups";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  AS_NEEDED_KEY,
+  doseSlotLabel,
+  slotsForMedication,
+} from "@/lib/medication-schedule";
 import { getTodayET } from "@/lib/date-utils";
 
 const MOOD_OPTIONS = [
@@ -40,107 +46,12 @@ const TAGS = [
   "poor_sleep",
 ];
 
-const SLOTS = [
-  { value: "morning", label: "Morning" },
-  { value: "afternoon", label: "Afternoon" },
-  { value: "evening", label: "Evening" },
-  { value: "night", label: "Night" },
-] as const;
-type Slot = (typeof SLOTS)[number]["value"];
-const AS_NEEDED_KEY = "as_needed";
-
 interface MedicationItem {
   id: number;
   name: string;
   dosage: string | null;
   frequency: string | null;
   doseSchedule: string | null;
-}
-
-function parseSchedule(raw: string | null | undefined): Slot[] {
-  if (!raw) return [];
-  try {
-    const arr = JSON.parse(raw);
-    if (!Array.isArray(arr)) return [];
-    return arr.filter((s): s is Slot =>
-      SLOTS.some((slot) => slot.value === s)
-    );
-  } catch {
-    return [];
-  }
-}
-
-function slotsForMed(med: MedicationItem): Slot[] {
-  if (med.frequency === "as_needed") return [];
-  const parsed = parseSchedule(med.doseSchedule);
-  if (parsed.length > 0) return parsed;
-  return med.frequency === "twice_daily"
-    ? ["morning", "evening"]
-    : ["morning"];
-}
-
-function slotLabel(slot: Slot): string {
-  return SLOTS.find((s) => s.value === slot)?.label ?? slot;
-}
-
-function slotPillClass(key: string): string {
-  switch (key) {
-    case "morning":
-      return "bg-amber-500/10 text-amber-400";
-    case "afternoon":
-      return "bg-orange-500/10 text-orange-400";
-    case "evening":
-      return "bg-indigo-500/10 text-indigo-300";
-    case "night":
-      return "bg-slate-500/20 text-slate-300";
-    default:
-      return "bg-muted text-muted-foreground";
-  }
-}
-
-type DoseEntry = {
-  medId: number;
-  medName: string;
-  dosage: string | null;
-  slotKey: string;
-  pillLabel: string;
-};
-
-const SLOT_ORDER: Record<string, number> = {
-  morning: 0,
-  afternoon: 1,
-  evening: 2,
-  night: 3,
-  [AS_NEEDED_KEY]: 4,
-};
-
-function buildDoses(meds: MedicationItem[]): DoseEntry[] {
-  const doses = meds.flatMap((med) => {
-    const slots = slotsForMed(med);
-    if (slots.length === 0) {
-      return [
-        {
-          medId: med.id,
-          medName: med.name,
-          dosage: med.dosage,
-          slotKey: AS_NEEDED_KEY,
-          pillLabel: "PRN",
-        },
-      ];
-    }
-    return slots.map((slot) => ({
-      medId: med.id,
-      medName: med.name,
-      dosage: med.dosage,
-      slotKey: slot,
-      pillLabel: slotLabel(slot).toUpperCase(),
-    }));
-  });
-  return doses.sort((a, b) => {
-    const slotDiff = (SLOT_ORDER[a.slotKey] ?? 99) - (SLOT_ORDER[b.slotKey] ?? 99);
-    if (slotDiff !== 0) return slotDiff;
-    return a.medName.localeCompare(b.medName);
-  });
 }
 
 type MedCheckMap = Record<number, Record<string, boolean>>;
@@ -158,7 +69,7 @@ function buildMedChecks(
 ): MedCheckMap {
   const map: MedCheckMap = {};
   for (const med of meds) {
-    const slots = slotsForMed(med);
+    const slots = slotsForMedication(med);
     const inner: Record<string, boolean> = {};
     if (slots.length === 0) {
       inner[AS_NEEDED_KEY] = false;
@@ -349,13 +260,13 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
       }
 
       for (const med of medications) {
-        const slots = slotsForMed(med);
+        const slots = slotsForMedication(med);
         const checks = medChecks[med.id] ?? {};
         if (slots.length === 0) {
           await saveMedLog(med.id, null, checks[AS_NEEDED_KEY] ?? false, med.name);
         } else {
           for (const slot of slots) {
-            await saveMedLog(med.id, slot, checks[slot] ?? false, `${med.name} (${slotLabel(slot)})`);
+            await saveMedLog(med.id, slot, checks[slot] ?? false, `${med.name} (${doseSlotLabel(slot)})`);
           }
         }
       }
@@ -566,46 +477,20 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
                     <CardTitle className="text-base">Medications</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1">
-                      {buildDoses(medications).map((d) => {
-                        const checked = medChecks[d.medId]?.[d.slotKey] ?? false;
-                        return (
-                          <label
-                            key={`${d.medId}-${d.slotKey}`}
-                            className="flex items-center gap-2 py-1 text-sm cursor-pointer min-w-0"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={(e) =>
-                                setMedChecks((prev) => ({
-                                  ...prev,
-                                  [d.medId]: {
-                                    ...(prev[d.medId] ?? {}),
-                                    [d.slotKey]: e.target.checked,
-                                  },
-                                }))
-                              }
-                              className="rounded shrink-0"
-                            />
-                            <span className="truncate">{d.medName}</span>
-                            {d.dosage && (
-                              <span
-                                className="text-muted-foreground text-xs truncate"
-                                title={d.dosage}
-                              >
-                                {d.dosage}
-                              </span>
-                            )}
-                            <span
-                              className={`ml-auto shrink-0 text-[10px] font-semibold tracking-wide px-1.5 py-0.5 rounded ${slotPillClass(d.slotKey)}`}
-                            >
-                              {d.pillLabel}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
+                    <MedicationDoseGroups
+                      medications={medications}
+                      checks={medChecks}
+                      disabled={saving || loadingDay}
+                      onCheckedChange={(dose, checked) =>
+                        setMedChecks((prev) => ({
+                          ...prev,
+                          [dose.medId]: {
+                            ...(prev[dose.medId] ?? {}),
+                            [dose.slotKey]: checked,
+                          },
+                        }))
+                      }
+                    />
                   </CardContent>
                 </Card>
               )}
