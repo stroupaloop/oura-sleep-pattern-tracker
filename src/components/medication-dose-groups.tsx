@@ -47,7 +47,7 @@ export function MedicationDoseGroups({
   if (groups.length === 0) return null;
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="space-y-3">
       {groups.map((group) => (
         <section key={group.key} className="min-w-0 space-y-1.5">
           <div className="flex items-center gap-2 border-b border-border/60 pb-1">
@@ -63,20 +63,20 @@ export function MedicationDoseGroups({
               return (
                 <label
                   key={`${dose.medId}-${dose.slotKey}`}
-                  className={`grid min-w-0 cursor-pointer grid-cols-[auto,minmax(0,1fr)] items-start gap-x-2 text-sm ${rowPadding}`}
+                  className={`flex min-w-0 cursor-pointer items-center gap-2 text-sm ${rowPadding}`}
                 >
                   <input
                     type="checkbox"
                     checked={checked}
                     onChange={(event) => onCheckedChange(dose, event.target.checked)}
                     disabled={disabled}
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-muted-foreground"
+                    className="h-4 w-4 shrink-0 rounded border-muted-foreground"
                   />
-                  <span className="min-w-0">
-                    <span className="block truncate">{dose.medName}</span>
+                  <span className="min-w-0 truncate">
+                    <span>{dose.medName}</span>
                     {dose.dosage && (
                       <span
-                        className="block truncate text-xs text-muted-foreground"
+                        className="ml-2 text-xs text-muted-foreground"
                         title={dose.dosage}
                       >
                         {dose.dosage}
