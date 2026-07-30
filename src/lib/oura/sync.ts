@@ -545,34 +545,51 @@ export async function syncSensitiveDateRange(
   try {
     const params = { start_date: startDate, end_date: endDate };
 
-    const [tagResult, restModeData, cvAgeData] = await Promise.all([
-      fetchOptionalOuraCollection("enhanced_tag", async () => {
-        const tags = await ouraFetch<OuraEnhancedTag>(
-          "v2/usercollection/enhanced_tag",
-          params
-        );
-        tags.forEach(getEnhancedTagDay);
-        return tags;
-      }),
+    const [restModeData, personalInfoData] = await Promise.all([
       ouraFetch<OuraRestModePeriod>(
         "v2/usercollection/rest_mode_period",
         params
       ),
-      ouraFetch<OuraDailyCardiovascularAge>(
-        "v2/usercollection/daily_cardiovascular_age",
-        params
-      ),
+      ouraFetchSingle<OuraPersonalInfo>("v2/usercollection/personal_info"),
     ]);
+
+    const [tagResult, cvAgeResult, vo2Result, sleepTimeResult] =
+      await Promise.all([
+        fetchOptionalOuraCollection("enhanced_tag", async () => {
+          const tags = await ouraFetch<OuraEnhancedTag>(
+            "v2/usercollection/enhanced_tag",
+            params,
+            { refreshUnauthorized: false }
+          );
+          tags.forEach(getEnhancedTagDay);
+          return tags;
+        }),
+        fetchOptionalOuraCollection("daily_cardiovascular_age", () =>
+          ouraFetch<OuraDailyCardiovascularAge>(
+            "v2/usercollection/daily_cardiovascular_age",
+            params,
+            { refreshUnauthorized: false }
+          )
+        ),
+        fetchOptionalOuraCollection("vO2_max", () =>
+          ouraFetch<OuraVo2Max>(OURA_ENDPOINTS.vo2Max, params, {
+            refreshUnauthorized: false,
+          })
+        ),
+        fetchOptionalOuraCollection("sleep_time", () =>
+          ouraFetch<OuraSleepTime>(OURA_ENDPOINTS.sleepTime, params, {
+            refreshUnauthorized: false,
+          })
+        ),
+      ]);
     const tagData = tagResult.data;
-    if (tagResult.warning) warnings.push(tagResult.warning);
-
-    const [vo2Data, sleepTimeData] = await Promise.all([
-      ouraFetch<OuraVo2Max>(OURA_ENDPOINTS.vo2Max, params),
-      ouraFetch<OuraSleepTime>(OURA_ENDPOINTS.sleepTime, params),
-    ]);
-
-    const personalInfoData = await ouraFetchSingle<OuraPersonalInfo>(
-      "v2/usercollection/personal_info"
+    const cvAgeData = cvAgeResult.data;
+    const vo2Data = vo2Result.data;
+    const sleepTimeData = sleepTimeResult.data;
+    warnings.push(
+      ...[tagResult, cvAgeResult, vo2Result, sleepTimeResult].flatMap(
+        (result) => (result.warning ? [result.warning] : [])
+      )
     );
 
     if (!tagResult.warning) {
@@ -634,68 +651,91 @@ export async function syncSensitiveDateRange(
     }
     totalRecords += restModeData.length;
 
-    for (const c of cvAgeData) {
-      await db
-        .insert(dailyCardiovascularAge)
-        .values({
-          day: c.day,
-          vascularAge: c.vascular_age,
-          createdAt: now,
-        })
-        .onConflictDoUpdate({
-          target: dailyCardiovascularAge.day,
-          set: {
-            vascularAge: sql`excluded.vascular_age`,
-          },
-        });
+    if (!cvAgeResult.warning) {
+      const writeResult = await runOptionalOuraTask(
+        "daily_cardiovascular_age",
+        async () => {
+          for (const c of cvAgeData) {
+            await db
+              .insert(dailyCardiovascularAge)
+              .values({
+                day: c.day,
+                vascularAge: c.vascular_age,
+                createdAt: now,
+              })
+              .onConflictDoUpdate({
+                target: dailyCardiovascularAge.day,
+                set: {
+                  vascularAge: sql`excluded.vascular_age`,
+                },
+              });
+          }
+          return cvAgeData.length;
+        }
+      );
+      if (writeResult.warning) warnings.push(writeResult.warning);
+      else totalRecords += writeResult.value ?? 0;
     }
-    totalRecords += cvAgeData.length;
 
-    for (const v of vo2Data) {
-      await db
-        .insert(vo2Max)
-        .values({
-          id: v.id,
-          day: v.day,
-          vo2Max: v.vo2_max,
-          createdAt: now,
-        })
-        .onConflictDoUpdate({
-          target: vo2Max.id,
-          set: {
-            day: sql`excluded.day`,
-            vo2Max: sql`excluded.vo2_max`,
-          },
-        });
+    if (!vo2Result.warning) {
+      const writeResult = await runOptionalOuraTask("vO2_max", async () => {
+        for (const v of vo2Data) {
+          await db
+            .insert(vo2Max)
+            .values({
+              id: v.id,
+              day: v.day,
+              vo2Max: v.vo2_max,
+              createdAt: now,
+            })
+            .onConflictDoUpdate({
+              target: vo2Max.id,
+              set: {
+                day: sql`excluded.day`,
+                vo2Max: sql`excluded.vo2_max`,
+              },
+            });
+        }
+        return vo2Data.length;
+      });
+      if (writeResult.warning) warnings.push(writeResult.warning);
+      else totalRecords += writeResult.value ?? 0;
     }
-    totalRecords += vo2Data.length;
 
-    for (const s of sleepTimeData) {
-      const startOffset = s.optimal_bedtime?.start_offset;
-      const endOffset = s.optimal_bedtime?.end_offset;
-      await db
-        .insert(sleepTime)
-        .values({
-          id: s.id,
-          day: s.day,
-          optimalBedtimeStart: startOffset != null ? String(startOffset) : null,
-          optimalBedtimeEnd: endOffset != null ? String(endOffset) : null,
-          recommendation: s.recommendation,
-          status: s.status,
-          createdAt: now,
-        })
-        .onConflictDoUpdate({
-          target: sleepTime.id,
-          set: {
-            day: sql`excluded.day`,
-            optimalBedtimeStart: sql`excluded.optimal_bedtime_start`,
-            optimalBedtimeEnd: sql`excluded.optimal_bedtime_end`,
-            recommendation: sql`excluded.recommendation`,
-            status: sql`excluded.status`,
-          },
-        });
+    if (!sleepTimeResult.warning) {
+      const writeResult = await runOptionalOuraTask("sleep_time", async () => {
+        for (const s of sleepTimeData) {
+          const startOffset = s.optimal_bedtime?.start_offset;
+          const endOffset = s.optimal_bedtime?.end_offset;
+          await db
+            .insert(sleepTime)
+            .values({
+              id: s.id,
+              day: s.day,
+              optimalBedtimeStart:
+                startOffset != null ? String(startOffset) : null,
+              optimalBedtimeEnd:
+                endOffset != null ? String(endOffset) : null,
+              recommendation: s.recommendation,
+              status: s.status,
+              createdAt: now,
+            })
+            .onConflictDoUpdate({
+              target: sleepTime.id,
+              set: {
+                day: sql`excluded.day`,
+                optimalBedtimeStart: sql`excluded.optimal_bedtime_start`,
+                optimalBedtimeEnd: sql`excluded.optimal_bedtime_end`,
+                recommendation: sql`excluded.recommendation`,
+                status: sql`excluded.status`,
+              },
+            });
+        }
+        return sleepTimeData.length;
+      });
+      if (writeResult.warning) warnings.push(writeResult.warning);
+      else totalRecords += writeResult.value ?? 0;
     }
-    totalRecords += sleepTimeData.length;
 
     await db
       .insert(personalInfo)
