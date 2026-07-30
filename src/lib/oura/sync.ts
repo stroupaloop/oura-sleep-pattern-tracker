@@ -73,14 +73,22 @@ export async function syncDateRange(
       ouraFetch<OuraDailyReadiness>("v2/usercollection/daily_readiness", params),
     ]);
 
-    const [activityData, stressData, resilienceData] = await Promise.all([
+    const [activityData, stressData] = await Promise.all([
       ouraFetch<OuraDailyActivity>("v2/usercollection/daily_activity", params),
       ouraFetch<OuraDailyStress>("v2/usercollection/daily_stress", params),
-      ouraFetch<OuraDailyResilience>(
-        "v2/usercollection/daily_resilience",
-        params
-      ),
     ]);
+
+    const resilienceResult = await fetchOptionalOuraCollection(
+      "daily_resilience",
+      () =>
+        ouraFetch<OuraDailyResilience>(
+          "v2/usercollection/daily_resilience",
+          params,
+          { refreshUnauthorized: false }
+        )
+    );
+    const resilienceData = resilienceResult.data;
+    if (resilienceResult.warning) warnings.push(resilienceResult.warning);
 
     for (const s of sleepData) {
       await db
@@ -288,30 +296,35 @@ export async function syncDateRange(
     }
     totalRecords += stressData.length;
 
-    for (const r of resilienceData) {
-      await db
-        .insert(dailyResilience)
-        .values({
-          id: r.id,
-          day: r.day,
-          level: r.level,
-          contributorSleepRecovery: r.contributors?.sleep_recovery ?? null,
-          contributorDaytimeRecovery: r.contributors?.daytime_recovery ?? null,
-          contributorStress: r.contributors?.stress ?? null,
-          createdAt: now,
-        })
-        .onConflictDoUpdate({
-          target: dailyResilience.id,
-          set: {
-            day: sql`excluded.day`,
-            level: sql`excluded.level`,
-            contributorSleepRecovery: sql`excluded.contributor_sleep_recovery`,
-            contributorDaytimeRecovery: sql`excluded.contributor_daytime_recovery`,
-            contributorStress: sql`excluded.contributor_stress`,
-          },
-        });
+    if (!resilienceResult.warning) {
+      for (const r of resilienceData) {
+        await db
+          .insert(dailyResilience)
+          .values({
+            id: r.id,
+            day: r.day,
+            level: r.level,
+            contributorSleepRecovery: r.contributors?.sleep_recovery ?? null,
+            contributorDaytimeRecovery:
+              r.contributors?.daytime_recovery ?? null,
+            contributorStress: r.contributors?.stress ?? null,
+            createdAt: now,
+          })
+          .onConflictDoUpdate({
+            target: dailyResilience.id,
+            set: {
+              day: sql`excluded.day`,
+              level: sql`excluded.level`,
+              contributorSleepRecovery:
+                sql`excluded.contributor_sleep_recovery`,
+              contributorDaytimeRecovery:
+                sql`excluded.contributor_daytime_recovery`,
+              contributorStress: sql`excluded.contributor_stress`,
+            },
+          });
+      }
+      totalRecords += resilienceData.length;
     }
-    totalRecords += resilienceData.length;
 
     const [spo2Result, workoutResult, sessionResult] = await Promise.all([
       fetchOptionalOuraCollection("daily_spo2", () =>

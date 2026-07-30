@@ -14,6 +14,10 @@ const PERSIST_RETRY_DELAYS_MS = [0, 100, 250, 500, 1000];
 type StoredOuraToken = typeof oauthTokens.$inferSelect;
 type RefreshedOuraToken = Awaited<ReturnType<typeof refreshAccessToken>>;
 
+export interface OuraFetchOptions {
+  refreshUnauthorized?: boolean;
+}
+
 const refreshFlights = new Map<string, Promise<string>>();
 
 async function loadToken(): Promise<StoredOuraToken> {
@@ -176,11 +180,22 @@ async function fetchWithAccessToken(
   });
 }
 
-async function authorizedFetch(url: string): Promise<Response> {
+async function authorizedFetch(
+  url: string,
+  options: OuraFetchOptions = {}
+): Promise<Response> {
   let accessToken = await getAccessToken();
   let response = await fetchWithAccessToken(url, accessToken);
   if (response.status !== 401) {
     return response;
+  }
+
+  if (options.refreshUnauthorized === false) {
+    const latest = await loadToken();
+    if (latest.accessToken === accessToken) {
+      return response;
+    }
+    return fetchWithAccessToken(url, latest.accessToken);
   }
 
   accessToken = await recoverAccessToken(accessToken);
@@ -188,8 +203,11 @@ async function authorizedFetch(url: string): Promise<Response> {
   return response;
 }
 
-export async function ouraFetchSingle<T>(endpoint: string): Promise<T> {
-  const res = await authorizedFetch(`${BASE_URL}/${endpoint}`);
+export async function ouraFetchSingle<T>(
+  endpoint: string,
+  options: OuraFetchOptions = {}
+): Promise<T> {
+  const res = await authorizedFetch(`${BASE_URL}/${endpoint}`, options);
   if (!res.ok) {
     throw new OuraRequestError(res.status, endpoint);
   }
@@ -198,7 +216,8 @@ export async function ouraFetchSingle<T>(endpoint: string): Promise<T> {
 
 export async function ouraFetch<T>(
   endpoint: string,
-  params: Record<string, string> = {}
+  params: Record<string, string> = {},
+  options: OuraFetchOptions = {}
 ): Promise<T[]> {
   const allData: T[] = [];
   let nextToken: string | null = null;
@@ -210,7 +229,7 @@ export async function ouraFetch<T>(
     }
     if (nextToken) url.searchParams.set("next_token", nextToken);
 
-    const res = await authorizedFetch(url.toString());
+    const res = await authorizedFetch(url.toString(), options);
 
     if (!res.ok) {
       throw new OuraRequestError(res.status, endpoint);

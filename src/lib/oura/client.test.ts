@@ -284,6 +284,87 @@ describe("Oura authenticated client", () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(2);
   });
 
+  it("does not rotate a fresh token for an optional endpoint 401", async () => {
+    mocks.fetch.mockResolvedValue(
+      jsonResponse({ error: "unauthorized" }, 401)
+    );
+    const { ouraFetch } = await import("./client");
+
+    await expect(
+      ouraFetch(
+        "v2/usercollection/daily_resilience",
+        {},
+        { refreshUnauthorized: false }
+      )
+    ).rejects.toMatchObject({
+      name: "OuraRequestError",
+      status: 401,
+      operation: "v2/usercollection/daily_resilience",
+    });
+    expect(mocks.refreshAccessToken).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(authorization(mocks.fetch.mock.calls[0][1])).toBe(
+      "Bearer old-access"
+    );
+  });
+
+  it("still refreshes an expired token before an optional endpoint request", async () => {
+    mocks.token.expiresAt = 0;
+    mocks.fetch.mockResolvedValue(
+      jsonResponse({ error: "unauthorized" }, 401)
+    );
+    const { ouraFetch } = await import("./client");
+
+    await expect(
+      ouraFetch(
+        "v2/usercollection/daily_resilience",
+        {},
+        { refreshUnauthorized: false }
+      )
+    ).rejects.toMatchObject({
+      name: "OuraRequestError",
+      status: 401,
+      operation: "v2/usercollection/daily_resilience",
+    });
+    expect(mocks.refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
+    expect(mocks.fetch).toHaveBeenCalledTimes(1);
+    expect(authorization(mocks.fetch.mock.calls[0][1])).toBe(
+      "Bearer new-access"
+    );
+  });
+
+  it("uses a newer stored token without refreshing an optional endpoint 401", async () => {
+    mocks.fetch
+      .mockImplementationOnce(async () => {
+        mocks.token = {
+          ...mocks.token,
+          accessToken: "winner-access",
+          refreshToken: "winner-refresh",
+        };
+        return jsonResponse({ error: "unauthorized" }, 401);
+      })
+      .mockResolvedValueOnce(
+        jsonResponse({ data: [{ id: "synthetic" }], next_token: null })
+      );
+    const { ouraFetch } = await import("./client");
+
+    await expect(
+      ouraFetch(
+        "v2/usercollection/daily_resilience",
+        {},
+        { refreshUnauthorized: false }
+      )
+    ).resolves.toEqual([{ id: "synthetic" }]);
+    expect(mocks.refreshAccessToken).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+    expect(mocks.fetch).toHaveBeenCalledTimes(2);
+    expect(
+      mocks.fetch.mock.calls.map(([, init]) => authorization(init))
+    ).toEqual(["Bearer old-access", "Bearer winner-access"]);
+  });
+
   it("does not refresh or retry a 403", async () => {
     mocks.fetch.mockResolvedValue(jsonResponse({ error: "forbidden" }, 403));
     const { ouraFetchSingle } = await import("./client");
