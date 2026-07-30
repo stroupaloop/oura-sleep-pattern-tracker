@@ -21,6 +21,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { collectLifeChartDays } from "@/lib/life-chart";
 
 interface AnalysisRow {
   day: string;
@@ -80,10 +81,11 @@ function SleepTooltip({ active, payload }: { active?: boolean; payload?: any[] }
 }
 
 export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
+  const analysisMap = new Map(analysis.map((row) => [row.day, row]));
   const moodMap = new Map(moods.map((m) => [m.day, m]));
   const episodeMap = new Map(episodes.map((e) => [e.day, e]));
 
-  const allDays = analysis.map((a) => a.day);
+  const allDays = collectLifeChartDays(analysis, moods, episodes);
   const syncId = "lifechart";
 
   const moodData = allDays.map((day) => {
@@ -106,23 +108,34 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
     };
   });
 
-  const sleepData = analysis.map((a) => ({
-    day: a.day,
-    sleepHours: a.totalSleepMinutes ? a.totalSleepMinutes / 60 : null,
-    baselineHours: a.baselineSleepMinutes ? a.baselineSleepMinutes / 60 : null,
-    anomalyDirection: a.anomalyDirection,
-  }));
+  const sleepData = allDays.map((day) => {
+    const row = analysisMap.get(day);
+    return {
+      day,
+      sleepHours:
+        row?.totalSleepMinutes != null ? row.totalSleepMinutes / 60 : null,
+      baselineHours:
+        row?.baselineSleepMinutes != null
+          ? row.baselineSleepMinutes / 60
+          : null,
+      anomalyDirection: row?.anomalyDirection ?? null,
+    };
+  });
 
-  const metricsData = analysis.map((a) => ({
-    day: a.day,
-    hrvZ: a.hrvZScore,
-    bedtimeZ: a.bedtimeZScore,
-    withinNightZ: a.withinNightHrvCV ? a.withinNightHrvCV * 10 : null,
-  }));
+  const metricsData = allDays.map((day) => {
+    const row = analysisMap.get(day);
+    return {
+      day,
+      hrvZ: row?.hrvZScore ?? null,
+      bedtimeZ: row?.bedtimeZScore ?? null,
+      withinNightZ:
+        row?.withinNightHrvCV != null ? row.withinNightHrvCV * 10 : null,
+    };
+  });
 
-  const stepsData = analysis.map((a) => ({
-    day: a.day,
-    steps: a.steps,
+  const stepsData = allDays.map((day) => ({
+    day,
+    steps: analysisMap.get(day)?.steps ?? null,
   }));
 
   const tagData = allDays.map((day) => {
@@ -195,7 +208,7 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
               <LineChart data={moodData} syncId={syncId}>
                 <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 5%)" />
                 <XAxis dataKey="day" hide />
-                <YAxis domain={[0, 10]} fontSize={10} tick={{ fill: "oklch(0.708 0 0)" }} />
+                <YAxis domain={[1, 5]} fontSize={10} tick={{ fill: "oklch(0.708 0 0)" }} />
                 <Tooltip
                   content={({ active, payload }) => {
                     if (!active || !payload?.length) return null;
@@ -211,9 +224,9 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
                   }}
                 />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
-                <Line type="monotone" dataKey="energyScore" stroke="#fbbf24" strokeWidth={1.5} dot={false} name="Energy" connectNulls />
-                <Line type="monotone" dataKey="irritabilityScore" stroke="#f87171" strokeWidth={1.5} dot={false} name="Irritability" connectNulls />
-                <Line type="monotone" dataKey="anxietyScore" stroke="#a78bfa" strokeWidth={1.5} dot={false} name="Anxiety" connectNulls />
+                <Line type="monotone" dataKey="energyScore" stroke="#fbbf24" strokeWidth={1.5} dot={false} name="Energy" connectNulls={false} />
+                <Line type="monotone" dataKey="irritabilityScore" stroke="#f87171" strokeWidth={1.5} dot={false} name="Irritability" connectNulls={false} />
+                <Line type="monotone" dataKey="anxietyScore" stroke="#a78bfa" strokeWidth={1.5} dot={false} name="Anxiety" connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -251,7 +264,7 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
                 strokeWidth={1.5}
                 dot={false}
                 name="Sleep"
-                connectNulls
+                connectNulls={false}
               />
             </AreaChart>
           </ResponsiveContainer>
@@ -282,8 +295,8 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Line type="monotone" dataKey="hrvZ" stroke="#34d399" strokeWidth={1.5} dot={false} name="HRV" connectNulls />
-              <Line type="monotone" dataKey="bedtimeZ" stroke="#f59e0b" strokeWidth={1.5} dot={false} name="Bedtime" connectNulls />
+              <Line type="monotone" dataKey="hrvZ" stroke="#34d399" strokeWidth={1.5} dot={false} name="HRV" connectNulls={false} />
+              <Line type="monotone" dataKey="bedtimeZ" stroke="#f59e0b" strokeWidth={1.5} dot={false} name="Bedtime" connectNulls={false} />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>

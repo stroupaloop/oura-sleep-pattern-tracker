@@ -14,6 +14,7 @@ import { AnalyzeButton } from "./analyze-button";
 import { EpisodeTimeline } from "@/components/charts/episode-timeline";
 import { RESEARCH_REFERENCES } from "@/lib/research/references";
 import type { AlertResearchContext } from "@/lib/analysis/episode";
+import { normalizeEvidenceScore } from "@/lib/analysis/window";
 
 const tierConfig = {
   alert: {
@@ -33,7 +34,7 @@ const tierConfig = {
   },
 } as const;
 
-function ConfidenceBar({ value }: { value: number }) {
+function EvidenceBar({ value }: { value: number }) {
   const pct = Math.min(100, (value / 10) * 100);
   const color =
     value >= 5 ? "bg-red-500" : value >= 3.5 ? "bg-amber-500" : "bg-blue-500";
@@ -47,7 +48,15 @@ function ConfidenceBar({ value }: { value: number }) {
   );
 }
 
-function ResearchContextCard({ ctx, day }: { ctx: AlertResearchContext; day: string }) {
+function ResearchContextCard({
+  ctx,
+  direction,
+  consecutiveDays,
+}: {
+  ctx: AlertResearchContext;
+  direction: string | null;
+  consecutiveDays: number | null;
+}) {
   const refs = RESEARCH_REFERENCES.filter((r) =>
     ctx.researchIds.includes(r.id)
   );
@@ -55,7 +64,15 @@ function ResearchContextCard({ ctx, day }: { ctx: AlertResearchContext; day: str
 
   return (
     <div className="space-y-4">
-      <p className="text-sm font-medium">{ctx.headline}</p>
+      <p className="text-sm font-medium">
+        {consecutiveDays ?? 0}-day{" "}
+        {direction === "hyper"
+          ? "higher-activation"
+          : direction === "hypo"
+            ? "lower-activation"
+            : "mixed"}{" "}
+        pattern flag from the available data
+      </p>
 
       {ctx.whatWeDetected.length > 0 && (
         <div>
@@ -78,7 +95,7 @@ function ResearchContextCard({ ctx, day }: { ctx: AlertResearchContext; day: str
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
             Why this matters
           </p>
-          <p className="text-sm">{ctx.whyItMatters}</p>
+          <p className="text-sm">{topRef.finding}</p>
           <a
             href={topRef.url}
             target="_blank"
@@ -137,7 +154,7 @@ export default async function AlertsPage() {
     day: e.day,
     tier: e.tier,
     direction: e.direction,
-    confidence: e.confidence,
+    confidence: normalizeEvidenceScore(e.confidence),
     primaryDrivers: e.primaryDrivers,
   }));
 
@@ -147,8 +164,8 @@ export default async function AlertsPage() {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Alerts</h1>
           <p className="text-muted-foreground">
-            {allAnalysis.length} days analyzed, {episodes.length} episode
-            {episodes.length !== 1 ? "s" : ""} detected
+            {allAnalysis.length} days analyzed, {episodes.length} pattern flag
+            {episodes.length !== 1 ? "s" : ""}
           </p>
         </div>
         <AnalyzeButton />
@@ -176,13 +193,18 @@ export default async function AlertsPage() {
         <Card>
           <CardContent className="pt-6">
             <p className="text-green-400 font-medium">
-              No concerning patterns detected. Your sleep patterns appear stable.
+              No sustained pattern flags from the available data. This is not a
+              clinical assessment.
             </p>
           </CardContent>
         </Card>
       )}
 
-      {episodes.map((ep) => {
+      {episodes.map((storedEpisode) => {
+        const ep = {
+          ...storedEpisode,
+          confidence: normalizeEvidenceScore(storedEpisode.confidence),
+        };
         const cfg =
           tierConfig[ep.tier as keyof typeof tierConfig] ?? tierConfig.watch;
         let drivers: string[] = [];
@@ -216,8 +238,8 @@ export default async function AlertsPage() {
                       }`}
                     >
                       {ep.direction === "hypo"
-                        ? "Depressive pattern"
-                        : "Hypomanic pattern"}
+                        ? "Lower-activation pattern"
+                        : "Higher-activation pattern"}
                     </span>
                   )}
                   <span
@@ -230,11 +252,15 @@ export default async function AlertsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {researchCtx ? (
-                <ResearchContextCard ctx={researchCtx} day={ep.day} />
+                <ResearchContextCard
+                  ctx={researchCtx}
+                  direction={ep.direction}
+                  consecutiveDays={ep.consecutiveConcerningDays}
+                />
               ) : (
                 <>
                   <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                    <span>Confidence: {ep.confidence?.toFixed(1)}/10</span>
+                    <span>Evidence score: {ep.confidence?.toFixed(1)}/10</span>
                     {ep.consecutiveConcerningDays != null && (
                       <span>
                         &middot; {ep.consecutiveConcerningDays} consecutive day
@@ -245,8 +271,7 @@ export default async function AlertsPage() {
                       <span>&middot; {ep.bestWindowDays}-day window</span>
                     )}
                   </CardDescription>
-                  <ConfidenceBar value={ep.confidence ?? 0} />
-                  {ep.summary && <p className="text-sm">{ep.summary}</p>}
+                  <EvidenceBar value={ep.confidence ?? 0} />
                   {drivers.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
                       {drivers.map((d, i) => (
@@ -267,7 +292,7 @@ export default async function AlertsPage() {
                   Technical details
                 </summary>
                 <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
-                  <div>Confidence: {ep.confidence?.toFixed(1)}/10</div>
+                  <div>Evidence score: {ep.confidence?.toFixed(1)}/10</div>
                   {ep.bestWindowDays && (
                     <div>Window: {ep.bestWindowDays} days</div>
                   )}
@@ -307,7 +332,7 @@ export default async function AlertsPage() {
 
               {(ep.confounderLikelihood ?? 0) > 0.2 && (
                 <p className="text-xs text-muted-foreground">
-                  Confounder likelihood:{" "}
+                  Bounce-back index:{" "}
                   {((ep.confounderLikelihood ?? 0) * 100).toFixed(0)}%
                 </p>
               )}

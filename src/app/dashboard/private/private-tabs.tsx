@@ -14,7 +14,6 @@ import { Vo2MaxChart } from "@/components/charts/vo2-max-chart";
 import { CycleTemperatureChart } from "@/components/charts/cycle-temperature-chart";
 import { CycleLengthChart } from "@/components/charts/cycle-length-chart";
 
-import { getTodayET } from "@/lib/date-utils";
 import { BedtimeTrendChart } from "@/components/charts/bedtime-trend-chart";
 import { CycleCalendar } from "@/components/charts/cycle-calendar";
 import { RestingHrChart } from "@/components/charts/resting-hr-chart";
@@ -36,6 +35,7 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 interface PrivateTabsProps {
+  currentDay: string;
   cvAgeData: { day: string; vascularAge: number | null }[];
   vo2Data: { day: string; vo2Max: number | null }[];
   personalInfo: {
@@ -50,9 +50,10 @@ interface PrivateTabsProps {
     ovulationDay: string | null;
     nextPeriodDay: string | null;
     cycleLength: number | null;
-    confidence: number | null;
+    evidenceScore: number | null;
   }[];
   temperatureData: { day: string; temperatureDelta: number | null }[];
+  eligibleTemperatureRun: number;
   bedtimeData: {
     day: string;
     actualBedtime: number | null;
@@ -78,6 +79,12 @@ interface PrivateTabsProps {
   }[];
   wearActivityData: WearActivityDay[];
   wearActivityHrData: { day: string; hour: number; avgBpm: number | null; source: string | null }[];
+}
+
+function describeEvidence(score: number): string {
+  if (score >= 0.7) return "Higher";
+  if (score >= 0.4) return "Moderate";
+  return "Limited";
 }
 
 export function PrivateTabs(props: PrivateTabsProps) {
@@ -182,97 +189,80 @@ function HeartRateTab({
 }
 
 function CycleTab({
+  currentDay,
   cycleData,
   temperatureData,
+  eligibleTemperatureRun,
   cyclePhaseDaily,
 }: PrivateTabsProps) {
-  const today = getTodayET();
-  const pastCycles = cycleData.filter(
-    (c) => c.periodStartDay && c.periodStartDay <= today
-  );
-  const futureCycles = cycleData.filter(
-    (c) => c.periodStartDay && c.periodStartDay > today
-  );
-  const latestCycle = pastCycles[0] ?? null;
-  const nextProjected = futureCycles.length > 0
-    ? futureCycles[futureCycles.length - 1]
-    : null;
-  const ovulationDays = cycleData
+  const today = currentDay;
+  const detectedShifts = cycleData
+    .filter(
+      (cycle) =>
+        cycle.ovulationDay != null &&
+        cycle.ovulationDay <= today &&
+        (cycle.evidenceScore ?? 0) >= 0.3
+    )
+    .sort((a, b) => b.ovulationDay!.localeCompare(a.ovulationDay!));
+  const latestShift = detectedShifts[0] ?? null;
+  const thermalShiftDays = detectedShifts
     .map((c) => c.ovulationDay)
     .filter((d): d is string => d != null);
+  const hasCurrentIntervalSemantics =
+    latestShift?.periodStartDay == null &&
+    latestShift?.nextPeriodDay == null;
 
   const validTempData = temperatureData.filter((d) => d.temperatureDelta != null);
-  const hasSleepData = temperatureData.length > 0;
+  const hasReadinessData = temperatureData.length > 0;
   const hasValidTemp = validTempData.length > 0;
 
   return (
     <div className="space-y-6">
-      {latestCycle ? (
+      {latestShift ? (
         <Card>
           <CardHeader>
-            <CardTitle>Cycle Prediction</CardTitle>
+            <CardTitle>Thermal Shift Summary</CardTitle>
             <CardDescription>
-              Based on basal body temperature (BBT) analysis. Not a contraceptive method.
+              Sustained changes detected in Oura nighttime skin-temperature deviation. This does not identify ovulation, menstruation, or fertility.
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-              {latestCycle.periodStartDay && (
+              {latestShift.ovulationDay && (
                 <div>
-                  <span className="text-muted-foreground">Last Period Start</span>
-                  <p className="font-medium">{latestCycle.periodStartDay}</p>
+                  <span className="text-muted-foreground">Latest Detected Shift</span>
+                  <p className="font-medium">{latestShift.ovulationDay}</p>
                 </div>
               )}
-              {latestCycle.ovulationDay && (
+              {hasCurrentIntervalSemantics && latestShift.cycleLength != null && (
                 <div>
-                  <span className="text-muted-foreground">Ovulation</span>
-                  <p className="font-medium">{latestCycle.ovulationDay}</p>
+                  <span className="text-muted-foreground">Previous Shift Interval</span>
+                  <p className="font-medium">{latestShift.cycleLength} days</p>
                 </div>
               )}
-              {(() => {
-                const nextDate = nextProjected?.periodStartDay ?? latestCycle.nextPeriodDay;
-                if (!nextDate) return null;
-                const isPast = nextDate < today;
-                return (
-                  <div>
-                    <span className="text-muted-foreground">
-                      {isPast ? "Next Period (overdue)" : "Next Period (est.)"}
-                    </span>
-                    <p className={`font-medium ${isPast ? "text-amber-400" : ""}`}>
-                      {isPast
-                        ? `Overdue — expected ${nextDate}`
-                        : nextDate}
-                    </p>
-                  </div>
-                );
-              })()}
-              {latestCycle.cycleLength != null && (
+              {latestShift.evidenceScore != null && (
                 <div>
-                  <span className="text-muted-foreground">Cycle Length</span>
-                  <p className="font-medium">{latestCycle.cycleLength} days</p>
-                </div>
-              )}
-              {latestCycle.confidence != null && (
-                <div>
-                  <span className="text-muted-foreground">Confidence</span>
-                  <p className="font-medium">{Math.round(latestCycle.confidence * 100)}%</p>
+                  <span className="text-muted-foreground">Evidence Strength</span>
+                  <p className="font-medium">
+                    {describeEvidence(latestShift.evidenceScore)}
+                  </p>
                 </div>
               )}
             </div>
             <p className="text-xs text-muted-foreground mt-4">
-              Bipolar medication can affect temperature patterns. Illness, alcohol, and travel may disrupt readings.
+              This evidence score is not a probability. Medication, illness, alcohol, and travel can affect temperature patterns.
             </p>
           </CardContent>
         </Card>
-      ) : hasSleepData ? (
+      ) : hasReadinessData ? (
         <Card>
           <CardContent className="py-6">
             <p className="text-sm text-muted-foreground">
               {!hasValidTemp
-                ? "Temperature data not available from your Oura ring. Your ring may not report temperature deviations yet — this typically requires a few weeks of consistent wear."
-                : validTempData.length < 30
-                  ? `Not enough temperature data for cycle detection (${validTempData.length}/30 days needed). Keep wearing your ring nightly to build up data.`
-                  : "No thermal shifts detected in available data. This can happen with medication, irregular sleep, or travel."}
+                ? "Nighttime skin-temperature deviation is not available from Oura yet. This typically requires consistent nightly wear."
+                : eligibleTemperatureRun < 30
+                  ? `Not enough consecutive eligible nighttime temperature data for this app rule (${eligibleTemperatureRun}/30 consecutive days).`
+                  : "No sustained thermal shift matched the app's current rules. Medication, irregular sleep, illness, alcohol, and travel can affect the pattern."}
             </p>
           </CardContent>
         </Card>
@@ -280,45 +270,55 @@ function CycleTab({
         <Card>
           <CardContent className="py-8">
             <p className="text-sm text-muted-foreground text-center">
-              No cycle data available. Temperature data typically requires a few weeks of consistent nightly wear.
+              No thermal-shift result is available. Oura nighttime temperature data typically requires consistent nightly wear.
             </p>
           </CardContent>
         </Card>
       )}
 
-      {cycleData.length > 0 && <CycleCalendar cycleData={cycleData} />}
+      {detectedShifts.length > 0 && (
+        <CycleCalendar cycleData={detectedShifts} currentDay={currentDay} />
+      )}
 
-      {cycleData.length > 0 && cyclePhaseDaily.length > 0 && (
+      {detectedShifts.length > 0 && cyclePhaseDaily.length > 0 && (
         <CyclePhaseChart
           dailyData={cyclePhaseDaily}
-          cycles={cycleData.map((c) => ({
-            periodStartDay: c.periodStartDay,
-            ovulationDay: c.ovulationDay,
-            nextPeriodDay: c.nextPeriodDay,
-            cycleLength: c.cycleLength,
-          }))}
+          thermalShiftDays={thermalShiftDays}
         />
       )}
 
       {hasValidTemp ? (
-        <CycleTemperatureChart data={temperatureData} ovulationDays={ovulationDays} />
-      ) : hasSleepData ? (
+        <CycleTemperatureChart
+          data={temperatureData}
+          thermalShiftDays={thermalShiftDays}
+        />
+      ) : hasReadinessData ? (
         <Card>
           <CardHeader>
             <CardTitle>Temperature Trend</CardTitle>
           </CardHeader>
           <CardContent className="py-6">
             <p className="text-sm text-muted-foreground">
-              Temperature data not available from your Oura ring. This data usually appears after a few weeks of consistent nightly wear.
+              Oura nighttime skin-temperature deviation is not available yet. It usually appears after consistent nightly wear.
             </p>
           </CardContent>
         </Card>
       ) : null}
 
-      {cycleData.length > 1 && (
+      {detectedShifts.filter(
+        (cycle) =>
+          cycle.periodStartDay == null &&
+          cycle.nextPeriodDay == null &&
+          cycle.cycleLength != null
+      ).length > 0 && (
         <CycleLengthChart
-          data={cycleData
-            .filter((c) => c.cycleLength != null)
+          data={detectedShifts
+            .filter(
+              (cycle) =>
+                cycle.periodStartDay == null &&
+                cycle.nextPeriodDay == null &&
+                cycle.cycleLength != null
+            )
             .map((c) => ({ cycleNumber: c.cycleNumber, cycleLength: c.cycleLength! }))
             .reverse()}
         />
@@ -332,22 +332,25 @@ function FitnessTab({
   vo2Data,
   personalInfo,
 }: PrivateTabsProps) {
+  const hasCvAge = cvAgeData.some((d) => d.vascularAge != null);
+  const hasVo2 = vo2Data.some((d) => d.vo2Max != null);
+
   return (
     <div className="space-y-6">
-      {cvAgeData.length > 0 && (
+      {hasCvAge && (
         <CardiovascularAgeChart
           data={cvAgeData}
           actualAge={personalInfo?.age}
         />
       )}
 
-      {vo2Data.length > 0 && <Vo2MaxChart data={vo2Data} />}
+      {hasVo2 && <Vo2MaxChart data={vo2Data} />}
 
-      {cvAgeData.length === 0 && vo2Data.length === 0 && (
+      {!hasCvAge && !hasVo2 && (
         <Card>
           <CardContent className="py-8">
             <p className="text-sm text-muted-foreground text-center">
-              No fitness data available. Cardiovascular age and VO2 max data require consistent ring wear.
+              No fitness estimates are available. Oura Cardiovascular Age and VO₂ max require sufficient eligible data.
             </p>
           </CardContent>
         </Card>

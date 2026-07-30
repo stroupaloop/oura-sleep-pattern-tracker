@@ -1,10 +1,11 @@
 import { db } from "@/lib/db";
 import { episodeAssessments } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
-import { DetectionConfigValues, BipolarType, getBipolarProfile } from "./config";
+import { DetectionConfigValues, BipolarType } from "./config";
 import { DailyAnalysisResult } from "./anomaly";
 import { WindowResult, analyzeAllWindows } from "./window";
 import { getReferencesForDirection } from "@/lib/research/references";
+import { isNextCalendarDay } from "./baseline";
 
 export type Tier = "none" | "watch" | "warning" | "alert";
 
@@ -38,12 +39,24 @@ export interface EpisodeResult {
   configVersion: number;
 }
 
+export function finiteMetricOrNull(
+  value: number | null | undefined
+): number | null {
+  return value != null && Number.isFinite(value) ? value : null;
+}
+
 function countConsecutiveConcerning(
   dailyResults: DailyAnalysisResult[],
   concernThreshold: number
 ): number {
   let count = 0;
   for (let i = dailyResults.length - 1; i >= 0; i--) {
+    if (
+      i < dailyResults.length - 1 &&
+      !isNextCalendarDay(dailyResults[i].day, dailyResults[i + 1].day)
+    ) {
+      break;
+    }
     if (dailyResults[i].compositeScore > concernThreshold) {
       count++;
     } else {
@@ -124,17 +137,17 @@ function buildSummary(
 ): string {
   if (tier === "none") {
     if (confounderLikelihood > 0.5) {
-      return "Isolated disruption detected \u2014 likely a confounder (alcohol, travel, late night). Pattern has resolved.";
+      return "An isolated change was followed by a return toward baseline.";
     }
-    return "Sleep patterns within normal range.";
+    return "No sustained pattern flag from the available data.";
   }
 
   const dirLabel =
     direction === "hyper"
-      ? "hypomanic-pattern"
+      ? "higher-activation"
       : direction === "hypo"
-        ? "depressive-pattern"
-        : "mixed-pattern";
+        ? "lower-activation"
+        : "mixed";
 
   const tierLabel =
     tier === "watch"
@@ -144,7 +157,7 @@ function buildSummary(
         : "Strong pattern";
 
   const parts = [
-    `${tierLabel}: ${consecutiveDays}-day ${dirLabel} disruption (confidence ${confidence.toFixed(1)}/10).`,
+    `${tierLabel}: ${consecutiveDays}-day ${dirLabel} pattern (evidence score ${confidence.toFixed(1)}/10).`,
   ];
 
   if (drivers.length > 0) {
@@ -152,7 +165,7 @@ function buildSummary(
   }
 
   if (confounderLikelihood > 0.3) {
-    parts.push(`Note: ${(confounderLikelihood * 100).toFixed(0)}% confounder probability \u2014 pattern may resolve.`);
+    parts.push(`Bounce-back index: ${(confounderLikelihood * 100).toFixed(0)}%.`);
   }
 
   return parts.join(" ");
@@ -169,10 +182,15 @@ function buildResearchContext(
 ): AlertResearchContext | null {
   if (tier === "none") return null;
 
-  const dirLabel = direction === "hyper" ? "hypomanic" : direction === "hypo" ? "depressive" : "mood";
+  const dirLabel =
+    direction === "hyper"
+      ? "higher-activation"
+      : direction === "hypo"
+        ? "lower-activation"
+        : "mixed";
 
   const headline =
-    `Your sleep patterns over the last ${consecutiveDays} day${consecutiveDays !== 1 ? "s" : ""} show signs consistent with early ${dirLabel} changes`;
+    `Your available data over the last ${consecutiveDays} day${consecutiveDays !== 1 ? "s" : ""} matched this app's ${dirLabel} pattern rule`;
 
   const whatWeDetected: string[] = [];
   const z = result.zScores;
@@ -185,7 +203,9 @@ function buildResearchContext(
     whatWeDetected.push(`Sleep duration ${dir} ${delta.toFixed(0)} min ${z.sleep < 0 ? "below" : "above"} your baseline`);
   }
   if ((z.withinNightVar ?? 0) > 1.0) {
-    whatWeDetected.push(`Within-night sleep variability increased ${((z.withinNightVar ?? 0)).toFixed(1)}x above baseline`);
+    whatWeDetected.push(
+      `Within-night sleep variability was ${(z.withinNightVar ?? 0).toFixed(1)} standard deviations above baseline`
+    );
   }
   if (Math.abs(z.hrv) > 1.0) {
     const dir = z.hrv > 0 ? "elevated" : "decreased";
@@ -206,7 +226,7 @@ function buildResearchContext(
   const topRef = refs[0];
   const whyItMatters = topRef
     ? `${topRef.finding} (${topRef.authors}, ${topRef.year})`
-    : "Research shows that changes in sleep and activity patterns can signal mood episode onset days before symptoms become apparent.";
+    : "Sleep and activity changes have been studied in relation to mood symptoms, but they do not establish that an episode is beginning.";
 
   const whatYouCanDo =
     direction === "hyper"
@@ -225,7 +245,9 @@ function buildResearchContext(
   const dataCompleteness = {
     moodLogged: hasMood,
     moodCoverage: moodCoverage ?? 0,
-    note: !hasMood ? "Adding daily check-ins improves detection accuracy by ~20%" : null,
+    note: !hasMood
+      ? "Daily check-ins add symptom context that wearable data cannot provide"
+      : null,
   };
 
   return {
@@ -249,7 +271,13 @@ export function assessEpisode(
   expectedDaysByWindow?: Record<number, number>,
   bipolarType: BipolarType = "unspecified"
 ): EpisodeResult {
-  const { best, all: _all } = analyzeAllWindows(recentDailyResults, allPriorResults, config, expectedDaysByWindow, bipolarType);
+  const { best } = analyzeAllWindows(
+    recentDailyResults,
+    allPriorResults,
+    config,
+    expectedDaysByWindow,
+    bipolarType
+  );
 
   const consecutiveDays = countConsecutiveConcerning(recentDailyResults, config.concernThreshold);
   const latestResult = recentDailyResults[recentDailyResults.length - 1];
@@ -293,7 +321,6 @@ export function assessEpisode(
     tier = "watch";
   }
 
-  const profile = getBipolarProfile(bipolarType);
   const effectiveBounceThreshold = best.direction === "hypo"
     ? Math.min(config.bounceBackThreshold + 0.2, 1.0)
     : config.bounceBackThreshold;
@@ -333,18 +360,18 @@ export async function upsertEpisodeAssessment(result: EpisodeResult) {
       direction: result.direction,
       confidence: result.confidence,
       bestWindowDays: result.bestWindowDays,
-      trendSlope: w?.trendSlope ?? null,
-      consistencyRatio: w?.consistencyRatio ?? null,
-      directionConsistency: w?.directionConsistency ?? null,
-      bounceBackScore: w?.bounceBackScore ?? null,
+      trendSlope: finiteMetricOrNull(w?.trendSlope),
+      consistencyRatio: finiteMetricOrNull(w?.consistencyRatio),
+      directionConsistency: finiteMetricOrNull(w?.directionConsistency),
+      bounceBackScore: finiteMetricOrNull(w?.bounceBackScore),
       confounderLikelihood: result.confounderLikelihood,
-      latencyCV: w?.latencyCV ?? null,
-      latencyCVZScore: w?.latencyCVZScore ?? null,
-      bedtimeCV: w?.bedtimeCV ?? null,
-      bedtimeCVZScore: w?.bedtimeCVZScore ?? null,
-      sleepDurationCV: w?.sleepDurationCV ?? null,
-      hrvCV: w?.hrvCV ?? null,
-      temperatureMean: w?.temperatureMean ?? null,
+      latencyCV: finiteMetricOrNull(w?.latencyCV),
+      latencyCVZScore: finiteMetricOrNull(w?.latencyCVZScore),
+      bedtimeCV: finiteMetricOrNull(w?.bedtimeCV),
+      bedtimeCVZScore: finiteMetricOrNull(w?.bedtimeCVZScore),
+      sleepDurationCV: finiteMetricOrNull(w?.sleepDurationCV),
+      hrvCV: finiteMetricOrNull(w?.hrvCV),
+      temperatureMean: finiteMetricOrNull(w?.temperatureMean),
       temperatureElevated: w?.temperatureElevated ? 1 : 0,
       missingDaysInWindow: w?.missingDaysInWindow ?? null,
       consecutiveConcerningDays: result.consecutiveConcerningDays,

@@ -2,13 +2,18 @@ export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
 import { dailyAnalysis, episodeAssessments, workouts, dailyMood } from "@/lib/db/schema";
-import { desc, gte, ne, and } from "drizzle-orm";
+import { gte, ne, and } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import Link from "next/link";
 import { InsightsTabs } from "./insights-tabs";
+import { getTodayET } from "@/lib/date-utils";
+import { normalizeEvidenceScore } from "@/lib/analysis/window";
 
 export default async function InsightsPage() {
-  const ninetyDaysAgo = format(subDays(new Date(), 90), "yyyy-MM-dd");
+  const ninetyDaysAgo = format(
+    subDays(new Date(`${getTodayET()}T12:00:00`), 89),
+    "yyyy-MM-dd"
+  );
 
   const [analysis, episodes, workoutData, moodData] = await Promise.all([
     db
@@ -30,6 +35,7 @@ export default async function InsightsPage() {
         hypnogramFragmentation: dailyAnalysis.hypnogramFragmentation,
         avgHrv: dailyAnalysis.avgHrv,
         efficiency: dailyAnalysis.efficiency,
+        deepPct: dailyAnalysis.deepPercentage,
         anomalyScore: dailyAnalysis.anomalyScore,
         anomalyDirection: dailyAnalysis.anomalyDirection,
         isAnomaly: dailyAnalysis.isAnomaly,
@@ -103,7 +109,15 @@ export default async function InsightsPage() {
           <p>No analysis data yet. Sync your Oura data and run analysis to see insights.</p>
         </div>
       ) : (
-        <InsightsTabs analysis={analysis} episodes={episodes} workouts={workoutData} moods={moodData} />
+        <InsightsTabs
+          analysis={analysis}
+          episodes={episodes.map((episode) => ({
+            ...episode,
+            confidence: normalizeEvidenceScore(episode.confidence),
+          }))}
+          workouts={workoutData}
+          moods={moodData}
+        />
       )}
     </div>
   );

@@ -18,7 +18,16 @@ export function BackfillButton() {
       });
       const data = await res.json();
       if (res.ok) {
-        setResult(`Synced ${data.records} records (${data.startDate} to ${data.endDate})`);
+        const warningCount = Array.isArray(data.warnings)
+          ? data.warnings.length
+          : 0;
+        setResult(
+          `Synced ${data.records} records (${data.startDate} to ${data.endDate})${
+            warningCount > 0
+              ? `; ${warningCount} source${warningCount === 1 ? "" : "s"} unavailable`
+              : ""
+          }`
+        );
       } else {
         setResult(`Error: ${data.error}`);
       }
@@ -54,7 +63,16 @@ export function ManualSyncButton() {
       });
       const data = await res.json();
       if (res.ok) {
-        setResult(`Synced ${data.records} records`);
+        const warningCount = Array.isArray(data.warnings)
+          ? data.warnings.length
+          : 0;
+        setResult(
+          `Synced ${data.records} records${
+            warningCount > 0
+              ? `; ${warningCount} source${warningCount === 1 ? "" : "s"} unavailable`
+              : ""
+          }`
+        );
       } else {
         setResult(`Error: ${data.error}`);
       }

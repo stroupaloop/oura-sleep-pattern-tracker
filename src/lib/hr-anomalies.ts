@@ -1,3 +1,5 @@
+import { shiftIsoDay } from "@/lib/date-utils";
+
 export interface HourlyHrPoint {
   day: string;
   hour: number;
@@ -8,12 +10,51 @@ export interface HourlyHrPoint {
 }
 
 export interface HrAnomaly {
+  day: string;
   hour: number;
   type: "spike" | "drop" | "elevated_resting";
   severity: "moderate" | "high";
   message: string;
   bpm: number;
   baseline: number;
+}
+
+function buildHourlyStats(points: HourlyHrPoint[]) {
+  const baselineByHour = new Map<number, number[]>();
+  for (const point of points) {
+    if (point.avgBpm == null) continue;
+    const values = baselineByHour.get(point.hour);
+    if (values) values.push(point.avgBpm);
+    else baselineByHour.set(point.hour, [point.avgBpm]);
+  }
+
+  const stats = new Map<number, { mean: number; sd: number }>();
+  for (const [hour, values] of baselineByHour) {
+    if (values.length < 3) continue;
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const variance =
+      values.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
+      values.length;
+    const sd = Math.sqrt(variance);
+    stats.set(hour, { mean, sd: sd > 0 ? sd : 1 });
+  }
+
+  return stats;
+}
+
+export function areAdjacentLocalHours(
+  previous: Pick<HourlyHrPoint, "day" | "hour">,
+  current: Pick<HourlyHrPoint, "day" | "hour">
+): boolean {
+  if (previous.day === current.day) {
+    return current.hour === previous.hour + 1;
+  }
+
+  return (
+    previous.hour === 23 &&
+    current.hour === 0 &&
+    shiftIsoDay(previous.day, 1) === current.day
+  );
 }
 
 export function detectHrAnomalies(
@@ -25,22 +66,7 @@ export function detectHrAnomalies(
 
   if (todayData.length === 0) return [];
 
-  const baselineByHour = new Map<number, number[]>();
-  for (const d of priorData) {
-    if (d.avgBpm == null) continue;
-    const arr = baselineByHour.get(d.hour);
-    if (arr) arr.push(d.avgBpm);
-    else baselineByHour.set(d.hour, [d.avgBpm]);
-  }
-
-  const stats = new Map<number, { mean: number; sd: number }>();
-  for (const [hour, vals] of baselineByHour) {
-    if (vals.length < 3) continue;
-    const mean = vals.reduce((a, b) => a + b, 0) / vals.length;
-    const variance = vals.reduce((a, b) => a + (b - mean) ** 2, 0) / vals.length;
-    const sd = Math.sqrt(variance);
-    stats.set(hour, { mean, sd: sd > 0 ? sd : 1 });
-  }
+  const stats = buildHourlyStats(priorData);
 
   const anomalies: HrAnomaly[] = [];
 
@@ -53,6 +79,7 @@ export function detectHrAnomalies(
 
     if (zScore > 2) {
       anomalies.push({
+        day: point.day,
         hour: point.hour,
         type: "spike",
         severity: zScore > 3 ? "high" : "moderate",
@@ -62,6 +89,7 @@ export function detectHrAnomalies(
       });
     } else if (zScore < -2) {
       anomalies.push({
+        day: point.day,
         hour: point.hour,
         type: "drop",
         severity: zScore < -3 ? "high" : "moderate",
@@ -72,21 +100,43 @@ export function detectHrAnomalies(
     }
   }
 
-  const restHours = todayData
+  const previousDay = shiftIsoDay(selectedDay, -1);
+  const restHours = allHourlyData
     .filter((p) => p.source === "rest" && p.avgBpm != null)
-    .sort((a, b) => a.hour - b.hour);
+    .filter((p) => p.day === selectedDay || p.day === previousDay)
+    .sort((a, b) => a.day.localeCompare(b.day) || a.hour - b.hour);
 
   let consecutive = 0;
+  let previousElevatedPoint: HourlyHrPoint | null = null;
+  const streakStatsByDay = new Map<string, ReturnType<typeof buildHourlyStats>>();
+
   for (const point of restHours) {
-    const baseline = stats.get(point.hour);
+    let dayStats = streakStatsByDay.get(point.day);
+    if (!dayStats) {
+      dayStats = buildHourlyStats(
+        allHourlyData.filter((candidate) => candidate.day < point.day)
+      );
+      streakStatsByDay.set(point.day, dayStats);
+    }
+
+    const baseline = dayStats.get(point.hour);
     if (!baseline || point.avgBpm == null) {
       consecutive = 0;
+      previousElevatedPoint = null;
       continue;
     }
+
     if (point.avgBpm > baseline.mean + baseline.sd) {
-      consecutive++;
-      if (consecutive >= 3) {
+      consecutive =
+        previousElevatedPoint &&
+        areAdjacentLocalHours(previousElevatedPoint, point)
+          ? consecutive + 1
+          : 1;
+      previousElevatedPoint = point;
+
+      if (consecutive >= 3 && point.day === selectedDay) {
         anomalies.push({
+          day: point.day,
           hour: point.hour,
           type: "elevated_resting",
           severity: "moderate",
@@ -98,6 +148,7 @@ export function detectHrAnomalies(
       }
     } else {
       consecutive = 0;
+      previousElevatedPoint = null;
     }
   }
 

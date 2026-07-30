@@ -23,24 +23,25 @@ export async function GET(request: NextRequest) {
   try {
     const syncResult = await syncDateRange(startDate, endDate, "cron");
 
-    const sensitiveResult = await syncSensitiveDateRange(startDate, endDate, "cron")
-      .catch((err) => { console.error("Sensitive sync (non-fatal):", err); return { records: 0 }; });
+    const sensitiveResult = await syncSensitiveDateRange(
+      startDate,
+      endDate,
+      "cron"
+    );
 
-    await runCyclePredictions().catch((err) => {
-      console.error("Cycle prediction (non-fatal):", err);
-    });
+    await runCyclePredictions();
 
     const config = await loadActiveConfig();
     const bipolarType = await loadBipolarType();
     const analysisResult = await reprocessAll(config, startDate, endDate, bipolarType);
 
-    const healthResult = await runHealthSignalDetection().catch((err) => {
-      console.error("Health signal detection (non-fatal):", err);
-      return { signals: 0 };
-    });
+    const healthResult = await runHealthSignalDetection();
+    const warnings = [...syncResult.warnings, ...sensitiveResult.warnings];
 
     return NextResponse.json({
       success: true,
+      status: warnings.length > 0 ? "partial" : "success",
+      warnings,
       records: syncResult.records,
       sensitiveRecords: sensitiveResult.records,
       analysis: {

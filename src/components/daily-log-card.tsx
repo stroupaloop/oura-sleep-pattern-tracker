@@ -5,16 +5,17 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MedicationDoseGroups } from "@/components/medication-dose-groups";
 import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
 import { AS_NEEDED_KEY } from "@/lib/medication-schedule";
-import { getTodayET } from "@/lib/date-utils";
+import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
+import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 
 const MOODS = [
-  { value: -3, label: "Depressed", color: "bg-blue-600" },
+  { value: -3, label: "Very Low", color: "bg-blue-600" },
   { value: -2, label: "Low", color: "bg-blue-500" },
   { value: -1, label: "Slightly Low", color: "bg-blue-400" },
   { value: 0, label: "Neutral", color: "bg-green-500" },
   { value: 1, label: "Slightly High", color: "bg-amber-400" },
   { value: 2, label: "High", color: "bg-amber-500" },
-  { value: 3, label: "Manic", color: "bg-amber-600" },
+  { value: 3, label: "Very High", color: "bg-amber-600" },
 ];
 
 const TAGS = [
@@ -41,19 +42,39 @@ interface Medication {
 interface DailyLogCardProps {
   initialDay: string;
   medications: Medication[];
-  initialMood: { moodScore: number } | null;
+  initialMood: {
+    moodScore: number;
+    episodeState: string | null;
+    tags: string | null;
+    notes: string | null;
+  } | null;
   initialMedLogs: { medicationId: number; slot: string | null; taken: number }[];
-  initialEpisodeState: string | null;
 }
 
 type MedCheckMap = Record<number, Record<string, boolean>>;
 
+function buildMedicationState(
+  medications: Medication[],
+  logs: DailyLogCardProps["initialMedLogs"]
+): { checks: MedCheckMap; unclassifiedLegacyCount: number } {
+  const map: MedCheckMap = {};
+  for (const med of medications) map[med.id] = {};
+
+  const classified = classifyMedicationLogsForEditing(medications, logs);
+  for (const log of classified.editableLogs) {
+    const inner = map[log.medicationId] ?? (map[log.medicationId] = {});
+    const key = log.slot ?? AS_NEEDED_KEY;
+    inner[key] = log.taken === 1;
+  }
+  return {
+    checks: map,
+    unclassifiedLegacyCount: classified.unclassifiedLegacyCount,
+  };
+}
+
 function formatDisplayDate(dateStr: string): string {
   const todayStr = getTodayET();
-  const [ty, tm, td] = todayStr.split("-").map(Number);
-  const yesterday = new Date(ty, tm - 1, td);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  const yesterdayStr = shiftIsoDay(todayStr, -1);
 
   if (dateStr === todayStr) return "Today";
   if (dateStr === yesterdayStr) return "Yesterday";
@@ -64,10 +85,7 @@ function formatDisplayDate(dateStr: string): string {
 }
 
 function shiftDay(dateStr: string, delta: number): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + delta);
-  return date.toISOString().slice(0, 10);
+  return shiftIsoDay(dateStr, delta) ?? dateStr;
 }
 
 function medsForDay(allMeds: Medication[], day: string): Medication[] {
@@ -92,34 +110,33 @@ export function DailyLogCard({
   medications,
   initialMood,
   initialMedLogs,
-  initialEpisodeState,
 }: DailyLogCardProps) {
   const [selectedDay, setSelectedDay] = useState(initialDay);
   const [moodScore, setMoodScore] = useState<number | null>(
     initialMood?.moodScore ?? null
   );
-  const [medStates, setMedStates] = useState<MedCheckMap>(() => {
-    const map: MedCheckMap = {};
-    for (const med of medications) {
-      map[med.id] = {};
-    }
-    for (const log of initialMedLogs) {
-      const inner = map[log.medicationId] ?? (map[log.medicationId] = {});
-      const key = log.slot ?? AS_NEEDED_KEY;
-      inner[key] = log.taken === 1;
-    }
-    return map;
-  });
-  const [episodeState, setEpisodeState] = useState<string | null>(
-    initialEpisodeState
+  const [medStates, setMedStates] = useState<MedCheckMap>(
+    () => buildMedicationState(medications, initialMedLogs).checks
   );
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [notes, setNotes] = useState("");
+  const [unclassifiedLegacyCount, setUnclassifiedLegacyCount] = useState(
+    () =>
+      buildMedicationState(medications, initialMedLogs)
+        .unclassifiedLegacyCount
+  );
+  const [episodeState, setEpisodeState] = useState<string | null>(
+    initialMood?.episodeState ?? null
+  );
+  const [selectedTags, setSelectedTags] = useState<string[]>(
+    parseTags(initialMood?.tags)
+  );
+  const [notes, setNotes] = useState(initialMood?.notes ?? "");
   const [showMore, setShowMore] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const showSaved = useCallback(() => {
+    setSaveError(null);
     const now = new Date();
     setLastSavedAt(
       now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
@@ -147,18 +164,14 @@ export function DailyLogCard({
         setLastSavedAt(null);
       }
 
-      const newMap: MedCheckMap = {};
-      for (const med of medications) {
-        newMap[med.id] = {};
-      }
-      if (medData.logs) {
-        for (const log of medData.logs) {
-          const inner = newMap[log.medicationId] ?? (newMap[log.medicationId] = {});
-          const key = log.slot ?? AS_NEEDED_KEY;
-          inner[key] = log.taken === 1;
-        }
-      }
-      setMedStates(newMap);
+      const medicationState = buildMedicationState(
+        medications,
+        Array.isArray(medData.logs) ? medData.logs : []
+      );
+      setMedStates(medicationState.checks);
+      setUnclassifiedLegacyCount(
+        medicationState.unclassifiedLegacyCount
+      );
     } finally {
       setLoading(false);
     }
@@ -182,35 +195,46 @@ export function DailyLogCard({
   }
 
   async function saveMood(score: number) {
+    const previousScore = moodScore;
     setMoodScore(score);
-    await fetch("/api/mood", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day: selectedDay,
-        moodScore: score,
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
-        notes: notes || undefined,
-      }),
-    });
-    showSaved();
+    setSaveError(null);
+    try {
+      const response = await fetch("/api/mood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          day: selectedDay,
+          moodScore: score,
+        }),
+      });
+      if (!response.ok) throw new Error("save failed");
+      showSaved();
+    } catch {
+      setMoodScore(previousScore);
+      setSaveError("Mood was not saved. Please try again.");
+    }
   }
 
   async function saveEpisode(value: string) {
+    const previousValue = episodeState;
     const newValue = episodeState === value ? null : value;
     setEpisodeState(newValue);
-    await fetch("/api/mood", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day: selectedDay,
-        moodScore: moodScore ?? 0,
-        episodeState: newValue,
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
-        notes: notes || undefined,
-      }),
-    });
-    showSaved();
+    setSaveError(null);
+    try {
+      const response = await fetch("/api/mood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          day: selectedDay,
+          episodeState: newValue,
+        }),
+      });
+      if (!response.ok) throw new Error("save failed");
+      showSaved();
+    } catch {
+      setEpisodeState(previousValue);
+      setSaveError("Episode state was not saved. Please try again.");
+    }
   }
 
   async function saveMedSlot(medId: number, slot: string, newState: boolean) {
@@ -220,6 +244,7 @@ export function DailyLogCard({
       [medId]: { ...(prev[medId] ?? {}), [slot]: newState },
     }));
     try {
+      setSaveError(null);
       const res = await fetch("/api/medications/log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -233,46 +258,55 @@ export function DailyLogCard({
       if (!res.ok) throw new Error("save failed");
       showSaved();
     } catch {
-      // Revert the optimistic toggle so the UI reflects the unsaved state.
       setMedStates((prev) => ({
         ...prev,
         [medId]: { ...(prev[medId] ?? {}), [slot]: currentState },
       }));
+      setSaveError("Medication status was not saved. Please try again.");
     }
   }
 
   async function toggleTag(tag: string) {
+    if (moodScore == null) return;
     const newTags = selectedTags.includes(tag)
       ? selectedTags.filter((t) => t !== tag)
       : [...selectedTags, tag];
     setSelectedTags(newTags);
-    await fetch("/api/mood", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day: selectedDay,
-        moodScore: moodScore ?? 0,
-        tags: newTags.length > 0 ? newTags : undefined,
-        notes: notes || undefined,
-        episodeState: episodeState ?? undefined,
-      }),
-    });
-    showSaved();
+    setSaveError(null);
+    try {
+      const response = await fetch("/api/mood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          day: selectedDay,
+          tags: newTags,
+        }),
+      });
+      if (!response.ok) throw new Error("save failed");
+      showSaved();
+    } catch {
+      setSelectedTags(selectedTags);
+      setSaveError("Tags were not saved. Please try again.");
+    }
   }
 
   async function saveNotes() {
-    await fetch("/api/mood", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        day: selectedDay,
-        moodScore: moodScore ?? 0,
-        tags: selectedTags.length > 0 ? selectedTags : undefined,
-        notes: notes || undefined,
-        episodeState: episodeState ?? undefined,
-      }),
-    });
-    showSaved();
+    if (moodScore == null) return;
+    setSaveError(null);
+    try {
+      const response = await fetch("/api/mood", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          day: selectedDay,
+          notes: notes || null,
+        }),
+      });
+      if (!response.ok) throw new Error("save failed");
+      showSaved();
+    } catch {
+      setSaveError("Notes were not saved. Please try again.");
+    }
   }
 
   const todayStr = getTodayET();
@@ -364,7 +398,22 @@ export function DailyLogCard({
                 saveMedSlot(dose.medId, dose.slotKey, checked)
               }
             />
+            {unclassifiedLegacyCount > 0 && (
+              <p className="mt-2 text-xs text-amber-300">
+                {unclassifiedLegacyCount} legacy medication{" "}
+                {unclassifiedLegacyCount === 1 ? "record has" : "records have"}{" "}
+                an unknown dose-slot classification.{" "}
+                {unclassifiedLegacyCount === 1 ? "It is" : "They are"} retained
+                in reports but not editable here.
+              </p>
+            )}
           </div>
+        )}
+
+        {saveError && (
+          <p className="text-xs text-red-400" role="alert">
+            {saveError}
+          </p>
         )}
 
         {moodScore != null && (moodScore <= -2 || moodScore >= 2) && (
@@ -397,6 +446,11 @@ export function DailyLogCard({
 
         {showMore && (
           <div className="space-y-3 pt-1">
+            {moodScore == null && (
+              <p className="text-xs text-muted-foreground">
+                Choose a mood before adding tags or notes.
+              </p>
+            )}
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">Tags</p>
               <div className="flex flex-wrap gap-1.5">
@@ -404,7 +458,7 @@ export function DailyLogCard({
                   <button
                     key={tag}
                     onClick={() => toggleTag(tag)}
-                    disabled={loading}
+                    disabled={loading || moodScore == null}
                     className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
                       selectedTags.includes(tag)
                         ? "bg-primary text-primary-foreground"
@@ -423,7 +477,7 @@ export function DailyLogCard({
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 onBlur={saveNotes}
-                disabled={loading}
+                disabled={loading || moodScore == null}
                 className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
                 rows={4}
               />

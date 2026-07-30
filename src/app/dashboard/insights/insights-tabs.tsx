@@ -6,6 +6,7 @@ import { ActivityRecoveryChart } from "@/components/charts/activity-recovery-cha
 import { VariabilityChart } from "@/components/charts/variability-chart";
 import { WithinNightChart } from "@/components/charts/within-night-chart";
 import { CorrelationView } from "@/components/charts/correlation-view";
+import { summarizeWorkoutsByDay } from "@/lib/workout-summary";
 
 const TABS = [
   { id: "circadian", label: "Circadian Rhythms" },
@@ -35,6 +36,7 @@ interface AnalysisRow {
   hypnogramFragmentation: number | null;
   avgHrv: number | null;
   efficiency: number | null;
+  deepPct: number | null;
   anomalyScore: number | null;
   anomalyDirection: string | null;
   isAnomaly: number | null;
@@ -94,14 +96,7 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
     };
   });
 
-  const workoutsByDay = new Map<string, { count: number; calories: number; types: string[] }>();
-  for (const w of workouts) {
-    const existing = workoutsByDay.get(w.day) ?? { count: 0, calories: 0, types: [] };
-    existing.count++;
-    if (w.calories) existing.calories += w.calories;
-    if (w.activity && !existing.types.includes(w.activity)) existing.types.push(w.activity);
-    workoutsByDay.set(w.day, existing);
-  }
+  const workoutsByDay = summarizeWorkoutsByDay(workouts);
 
   const activityData = analysis.map((a) => {
     const w = workoutsByDay.get(a.day);
@@ -109,11 +104,13 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
       day: a.day,
       steps: a.steps,
       activeMinutes: a.activeMinutes,
-      stressHigh: a.stressHigh,
-      recoveryHigh: a.recoveryHigh,
+      stressHigh:
+        a.stressHigh != null ? Math.round(a.stressHigh / 60) : null,
+      recoveryHigh:
+        a.recoveryHigh != null ? Math.round(a.recoveryHigh / 60) : null,
       resilienceLevel: a.resilienceLevel,
       workoutCount: w?.count ?? 0,
-      workoutCalories: w?.calories ?? 0,
+      workoutCalories: w?.calories ?? null,
       workoutTypes: w?.types ?? [],
     };
   });
@@ -140,7 +137,7 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
       xLabel: "HRV (ms)",
       yLabel: "Efficiency (%)",
       data: analysis
-        .filter((a) => a.avgHrv && a.efficiency)
+        .filter((a) => a.avgHrv != null && a.efficiency != null)
         .map((a) => ({
           day: a.day,
           x: a.avgHrv!,
@@ -149,11 +146,11 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
         })),
     },
     {
-      title: "Steps vs Anomaly Score",
+      title: "Steps vs Pattern Score",
       xLabel: "Steps",
-      yLabel: "Anomaly Score",
+      yLabel: "Pattern Score",
       data: analysis
-        .filter((a) => a.steps && a.anomalyScore != null)
+        .filter((a) => a.steps != null && a.anomalyScore != null)
         .map((a) => ({
           day: a.day,
           x: a.steps!,
@@ -162,11 +159,11 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
         })),
     },
     {
-      title: "Bedtime CV vs Anomaly Score",
-      xLabel: "Bedtime CV",
-      yLabel: "Anomaly Score",
+      title: "Bedtime Variation vs Pattern Score",
+      xLabel: "Bedtime variation index",
+      yLabel: "Pattern Score",
       data: analysis
-        .filter((a) => a.dayToDayBedtimeCV && a.anomalyScore != null)
+        .filter((a) => a.dayToDayBedtimeCV != null && a.anomalyScore != null)
         .map((a) => ({
           day: a.day,
           x: a.dayToDayBedtimeCV!,
@@ -175,17 +172,21 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
         })),
     },
     {
-      title: "Within-Night HRV CV vs Episode Confidence",
+      title: "Within-Night HRV CV vs Episode Evidence Score",
       xLabel: "HRV CV",
-      yLabel: "Confidence",
+      yLabel: "Evidence Score (0–10)",
       data: analysis
-        .filter((a) => a.withinNightHrvCV)
+        .filter(
+          (a) =>
+            a.withinNightHrvCV != null &&
+            episodeMap.has(a.day)
+        )
         .map((a) => {
-          const ep = episodeMap.get(a.day);
+          const ep = episodeMap.get(a.day)!;
           return {
             day: a.day,
             x: a.withinNightHrvCV!,
-            y: ep?.confidence ?? 0,
+            y: ep.confidence,
             anomalyDirection: a.isAnomaly ? a.anomalyDirection : null,
           };
         }),
@@ -218,26 +219,26 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
     },
     {
       title: "Irritability vs Deep Sleep %",
-      xLabel: "Irritability (0-10)",
+      xLabel: "Irritability (1-5)",
       yLabel: "Deep Sleep %",
       data: analysis
         .filter((a) => {
           const m = moodMap.get(a.day);
-          return m?.irritabilityScore != null && a.efficiency != null;
+          return m?.irritabilityScore != null && a.deepPct != null;
         })
         .map((a) => {
           const m = moodMap.get(a.day)!;
           return {
             day: a.day,
             x: m.irritabilityScore!,
-            y: a.efficiency!,
+            y: a.deepPct!,
             anomalyDirection: a.isAnomaly ? a.anomalyDirection : null,
           };
         }),
     },
     {
       title: "Anxiety vs HRV",
-      xLabel: "Anxiety (0-10)",
+      xLabel: "Anxiety (1-5)",
       yLabel: "HRV (ms)",
       data: analysis
         .filter((a) => {

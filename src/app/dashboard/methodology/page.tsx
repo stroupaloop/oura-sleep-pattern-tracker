@@ -11,7 +11,7 @@ export default function MethodologyPage() {
       <div>
         <h1 className="text-2xl md:text-3xl font-bold">Methodology</h1>
         <p className="text-muted-foreground text-sm mt-1">
-          How we detect mood episode signals from wearable data
+          How personal-baseline pattern flags are calculated
         </p>
       </div>
 
@@ -19,7 +19,7 @@ export default function MethodologyPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">How It Works</h2>
         <p className="text-sm text-muted-foreground">
-          The detection system uses a 3-stage pipeline that runs daily after
+          The pattern-scoring system uses a 3-stage pipeline that runs daily after
           syncing your Oura Ring data.
         </p>
 
@@ -41,11 +41,12 @@ export default function MethodologyPage() {
             </p>
           </div>
           <div className="rounded-lg border p-4 space-y-2">
-            <div className="text-sm font-medium">Stage 3: Episode Classification</div>
+            <div className="text-sm font-medium">Stage 3: Pattern Flagging</div>
             <p className="text-xs text-muted-foreground">
-              Based on confidence score and consecutive concerning days, each
+              Based on a heuristic evidence score and consecutive flagged days, each
               day is classified into a tier: none, watch, warning, or alert.
-              Direction (hyper/hypo) is determined by which signals dominate.
+              Higher- or lower-activation direction describes which inputs
+              dominate; it does not identify a mood episode.
             </p>
           </div>
         </div>
@@ -108,8 +109,9 @@ export default function MethodologyPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Research</h2>
         <p className="text-sm text-muted-foreground">
-          Our detection approach is informed by peer-reviewed research on
-          wearable biomarkers and bipolar disorder.
+          The feature selection is informed by peer-reviewed research on
+          wearable measures and bipolar disorder. Those studies do not validate
+          this app&apos;s combined score or thresholds.
         </p>
 
         <div className="space-y-3">
@@ -187,36 +189,35 @@ export default function MethodologyPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Sensitivity &amp; Configuration</h2>
         <p className="text-sm text-muted-foreground">
-          Detection thresholds are tuned based on two factors:
+          Heuristic thresholds can be adjusted in two ways:
         </p>
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-lg border p-4 space-y-1">
             <div className="text-sm font-medium">Bipolar Type</div>
             <p className="text-xs text-muted-foreground">
-              <strong>BP1:</strong> Higher weight on mania signals (sleep
-              reduction, HRV spikes, temperature elevation). Tuned for
-              detecting full manic episodes.
+              <strong>BP1:</strong> Changes the weighting and persistence rules
+              for higher-activation patterns. It is not validated to detect
+              manic episodes.
             </p>
             <p className="text-xs text-muted-foreground">
-              <strong>BP2:</strong> Higher weight on depressive signals and
-              subtle hypomania markers (circadian disruption, activity
-              variability). Tuned for earlier detection of hypomanic shifts.
+              <strong>BP2:</strong> Gives more weight to exploratory
+              within-night variability. It is not a validated hypomania
+              detector.
             </p>
           </div>
           <div className="rounded-lg border p-4 space-y-1">
             <div className="text-sm font-medium">Sensitivity Level</div>
             <p className="text-xs text-muted-foreground">
-              <strong>Low:</strong> Fewer alerts, higher confidence required.
-              Best if you prefer minimal notifications.
+              <strong>Low:</strong> Fewer flags, with more heuristic evidence
+              required.
             </p>
             <p className="text-xs text-muted-foreground">
-              <strong>Medium:</strong> Balanced detection. Recommended for most
-              users.
+              <strong>Medium:</strong> The app&apos;s default balance between
+              sensitivity and noise.
             </p>
             <p className="text-xs text-muted-foreground">
-              <strong>High:</strong> More sensitive, may flag subtle shifts
-              earlier. Best for users who want maximum awareness.
+              <strong>High:</strong> More flags and a greater chance of noise.
             </p>
           </div>
         </div>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import type { ReportData, ReportTrend } from "@/lib/reports/generate";
 import {
   Card,
   CardContent,
@@ -9,50 +9,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-interface ReportData {
-  dateRange: { start: string; end: string };
-  summary: {
-    totalDays: number;
-    avgSleepHours: number;
-    avgHrv: number;
-    avgSteps: number;
-    moodEntries: number;
-    avgMood: number | null;
-  };
-  trends: {
-    sleepTrend: string;
-    hrvTrend: string;
-  };
-  episodes: {
-    day: string;
-    tier: string;
-    direction: string | null;
-    confidence: number;
-    summary: string | null;
-  }[];
-  medicationAdherence: {
-    name: string;
-    taken: number;
-    total: number;
-    rate: number;
-    asNeeded: boolean;
-  }[];
-  dataCompleteness: {
-    ouraDays: number;
-    moodDays: number;
-    totalDays: number;
-    ouraRate: number;
-    moodRate: number;
-  };
-}
-
-function trendArrow(trend: string): string {
-  if (trend === "improving") return "\u2191";
-  if (trend === "worsening") return "\u2193";
-  return "\u2192";
+function trendArrow(trend: ReportTrend): string | null {
+  if (trend === "increasing") return "\u2191";
+  if (trend === "decreasing") return "\u2193";
+  if (trend === "stable") return "\u2192";
+  return null;
 }
 
 export function ReportView({ data }: { data: ReportData }) {
+  const sleepTrendArrow = trendArrow(data.trends.sleepTrend);
+  const hrvTrendArrow = trendArrow(data.trends.hrvTrend);
+
   return (
     <div className="space-y-6 print:space-y-4">
       <div className="flex items-center justify-between print:hidden">
@@ -78,18 +45,41 @@ export function ReportView({ data }: { data: ReportData }) {
             <div>
               <p className="text-muted-foreground">Avg Sleep</p>
               <p className="text-lg font-semibold">
-                {data.summary.avgSleepHours.toFixed(1)}h {trendArrow(data.trends.sleepTrend)}
+                {data.summary.avgSleepHours != null
+                  ? `${data.summary.avgSleepHours.toFixed(1)}h${sleepTrendArrow ? ` ${sleepTrendArrow}` : ""}`
+                  : "--"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {data.summary.sleepDays} measured{" "}
+                {data.summary.sleepDays === 1 ? "night" : "nights"}
+                {data.trends.sleepTrend === "insufficient_data" &&
+                  " · Trend unavailable: fewer than 7 measured nights"}
               </p>
             </div>
             <div>
               <p className="text-muted-foreground">Avg HRV</p>
               <p className="text-lg font-semibold">
-                {data.summary.avgHrv.toFixed(0)} ms {trendArrow(data.trends.hrvTrend)}
+                {data.summary.avgHrv != null
+                  ? `${data.summary.avgHrv.toFixed(0)} ms${hrvTrendArrow ? ` ${hrvTrendArrow}` : ""}`
+                  : "--"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {data.summary.hrvDays} measured{" "}
+                {data.summary.hrvDays === 1 ? "night" : "nights"}
+                {data.trends.hrvTrend === "insufficient_data" &&
+                  " · Trend unavailable: fewer than 7 measured nights"}
               </p>
             </div>
             <div>
               <p className="text-muted-foreground">Avg Steps</p>
-              <p className="text-lg font-semibold">{data.summary.avgSteps.toLocaleString()}</p>
+              <p className="text-lg font-semibold">
+                {data.summary.avgSteps != null
+                  ? data.summary.avgSteps.toLocaleString()
+                  : "--"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {data.summary.stepDays} measured days
+              </p>
             </div>
             <div>
               <p className="text-muted-foreground">Mood Entries</p>
@@ -114,7 +104,7 @@ export function ReportView({ data }: { data: ReportData }) {
       {data.episodes.length > 0 && (
         <Card className="print:border print:shadow-none">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Episodes Detected</CardTitle>
+            <CardTitle className="text-base">Flagged Days</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
@@ -142,10 +132,13 @@ export function ReportView({ data }: { data: ReportData }) {
                     {ep.tier.toUpperCase()}
                   </span>
                   {ep.direction && (
-                    <span className="text-xs text-muted-foreground">{ep.direction}</span>
-                  )}
-                  {ep.summary && (
-                    <span className="text-muted-foreground">{ep.summary}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {ep.direction === "hyper"
+                        ? "higher-activation pattern"
+                        : ep.direction === "hypo"
+                          ? "lower-activation pattern"
+                          : "mixed pattern"}
+                    </span>
                   )}
                 </div>
               ))}
@@ -157,30 +150,45 @@ export function ReportView({ data }: { data: ReportData }) {
       {data.medicationAdherence.length > 0 && (
         <Card className="print:border print:shadow-none">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Medication Adherence</CardTitle>
+            <CardTitle className="text-base">Recorded Dose Adherence</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 text-sm">
               {data.medicationAdherence.map((med, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <span>
-                    {med.name}
-                    {med.asNeeded && (
-                      <span className="text-muted-foreground ml-1 text-xs">(as needed)</span>
+                <div key={i}>
+                  <div className="flex items-center justify-between">
+                    <span>
+                      {med.name}
+                      {med.asNeeded && (
+                        <span className="text-muted-foreground ml-1 text-xs">(as needed)</span>
+                      )}
+                    </span>
+                    {med.asNeeded ? (
+                      <span className="text-muted-foreground">
+                        {med.taken} recorded {med.taken === 1 ? "use" : "uses"}
+                      </span>
+                    ) : (
+                      <span className={med.rate >= 0.8 ? "text-green-400" : "text-amber-400"}>
+                        {med.taken}/{med.total} recorded doses ({(med.rate * 100).toFixed(0)}%)
+                      </span>
                     )}
-                  </span>
-                  {med.asNeeded ? (
-                    <span className="text-muted-foreground">
-                      {med.taken} taken
-                    </span>
-                  ) : (
-                    <span className={med.rate >= 0.8 ? "text-green-400" : "text-amber-400"}>
-                      {med.taken}/{med.total} doses ({(med.rate * 100).toFixed(0)}%)
-                    </span>
+                  </div>
+                  {med.unclassifiedLegacyRecords > 0 && (
+                    <p className="text-xs text-amber-300">
+                      {med.unclassifiedLegacyRecords} legacy{" "}
+                      {med.unclassifiedLegacyRecords === 1
+                        ? "record has"
+                        : "records have"}{" "}
+                      an unknown dose-slot classification.
+                    </p>
                   )}
                 </div>
               ))}
             </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Scheduled percentages use only explicitly recorded doses. Unlogged
+              doses are unknown, not counted as missed.
+            </p>
           </CardContent>
         </Card>
       )}

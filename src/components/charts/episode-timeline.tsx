@@ -35,7 +35,7 @@ interface Episode {
 
 interface TimelinePoint {
   day: string;
-  score: number;
+  score: number | null;
   isAnomaly: boolean;
   direction: string | null;
   tier: string | null;
@@ -69,12 +69,12 @@ function CustomTooltip({
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-foreground">{p.day}</p>
       <p className="text-muted-foreground">
-        Score: {p.score.toFixed(1)}
+        Score: {p.score != null ? p.score.toFixed(1) : "--"}
         {p.isAnomaly && " (anomaly)"}
       </p>
       {p.direction && (
         <p style={{ color: p.direction === "hyper" ? "#f59e0b" : "#3b82f6" }}>
-          {p.direction === "hyper" ? "Hypomanic" : "Depressive"} direction
+          {p.direction === "hyper" ? "Higher-activation" : "Lower-activation"} direction
         </p>
       )}
       {p.tier && p.tier !== "none" && (
@@ -123,7 +123,7 @@ export function EpisodeTimeline({
       }
       return {
         day: a.day,
-        score: Math.abs(a.anomalyScore ?? 0),
+        score: a.anomalyScore != null ? Math.abs(a.anomalyScore) : null,
         isAnomaly: a.isAnomaly === 1,
         direction: a.anomalyDirection,
         tier: ep?.tier ?? null,
@@ -135,14 +135,17 @@ export function EpisodeTimeline({
   if (data.length === 0) return null;
 
   const episodeSpans = getEpisodeSpans(episodes);
-  const maxScore = Math.max(...data.map((d) => d.score), 3);
+  const measuredScores = data
+    .map((point) => point.score)
+    .filter((score): score is number => score != null);
+  const maxScore = Math.max(...measuredScores, 3);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Anomaly Timeline</CardTitle>
+        <CardTitle>Pattern-Score Timeline</CardTitle>
         <CardDescription>
-          Daily anomaly scores with episode detection spans
+          Daily personal-baseline scores with flagged days
         </CardDescription>
       </CardHeader>
       <CardContent>

@@ -2,14 +2,14 @@ export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
 import { dailyMood, medications, medicationLogs } from "@/lib/db/schema";
-import { eq, and, or, lte, isNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { MoodForm } from "./mood-form";
 import { getTodayET } from "@/lib/date-utils";
 
 export default async function CheckinPage() {
   const today = getTodayET();
 
-  const [existingMood, activeMeds, todayMedLogs] = await Promise.all([
+  const [existingMood, trackedMeds, todayMedLogs] = await Promise.all([
     db
       .select()
       .from(dailyMood)
@@ -27,13 +27,6 @@ export default async function CheckinPage() {
         endDate: medications.endDate,
       })
       .from(medications)
-      .where(
-        and(
-          eq(medications.isActive, 1),
-          or(lte(medications.startDate, today), isNull(medications.startDate)),
-          or(isNull(medications.endDate))
-        )
-      )
       .orderBy(medications.name),
     db
       .select({
@@ -53,7 +46,7 @@ export default async function CheckinPage() {
       <MoodForm
         initialDay={today}
         existingMood={existingMood}
-        medications={activeMeds}
+        medications={trackedMeds}
         existingMedLogs={todayMedLogs}
       />
     </div>

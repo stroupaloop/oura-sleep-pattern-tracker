@@ -3,7 +3,11 @@ export const dynamic = "force-dynamic";
 import { db } from "@/lib/db";
 import { oauthTokens, syncLog, users } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
-import { auth } from "@/lib/auth";
+import {
+  auth,
+  isPrimarySensitiveUser,
+  isSensitiveUser,
+} from "@/lib/auth";
 import { eq } from "drizzle-orm";
 import { OuraConnectButton } from "./oura-connect-button";
 import { DisconnectButton } from "./disconnect-button";
@@ -19,6 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { OURA_SCOPES } from "@/lib/oura/oauth";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -28,6 +33,15 @@ export default async function SettingsPage() {
     ? new Date(tokens[0].expiresAt * 1000)
     : null;
   const isExpired = tokenExpiry ? tokenExpiry < new Date() : false;
+  const canManageOura = isSensitiveUser(session?.user?.email);
+  const canManageProfile = isPrimarySensitiveUser(session?.user?.email);
+  const grantedScopes = new Set(
+    (tokens[0]?.scope ?? "").split(/\s+/).filter(Boolean)
+  );
+  const missingScopes = OURA_SCOPES.filter(
+    (scope) => !grantedScopes.has(scope)
+  );
+  const needsReauthorization = isConnected && missingScopes.length > 0;
 
   const recentSyncs = await db
     .select()
@@ -36,7 +50,7 @@ export default async function SettingsPage() {
     .limit(5);
 
   let bipolarType = "unspecified";
-  if (session?.user?.id) {
+  if (canManageProfile && session?.user?.id) {
     const userRows = await db
       .select({ bipolarType: users.bipolarType })
       .from(users)
@@ -57,7 +71,14 @@ export default async function SettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <BipolarTypeSelector initial={bipolarType} />
+          {canManageProfile ? (
+            <BipolarTypeSelector initial={bipolarType} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Only the primary private-data owner can change the profile used
+              by detection.
+            </p>
+          )}
         </CardContent>
       </Card>
 
@@ -101,29 +122,56 @@ export default async function SettingsPage() {
                 Status:{" "}
                 <span
                   className={
-                    isExpired
-                      ? "text-red-500 font-medium"
+                    isExpired || needsReauthorization
+                      ? "text-amber-500 font-medium"
                       : "text-green-500 font-medium"
                   }
                 >
-                  {isExpired ? "Token expired" : "Connected"}
+                  {needsReauthorization
+                    ? "Reconnect required"
+                    : isExpired
+                      ? "Connected · refresh due"
+                      : "Connected"}
                 </span>
               </p>
               {tokenExpiry && (
                 <p className="text-sm text-muted-foreground">
-                  Token expires: {tokenExpiry.toLocaleString("en-US", { timeZone: "America/New_York" })}
+                  Current access token expiry: {tokenExpiry.toLocaleString("en-US", { timeZone: "America/New_York" })}
                 </p>
               )}
-              {isExpired && <OuraConnectButton label="Reconnect Oura" />}
-              <DisconnectButton />
+              {isExpired && !needsReauthorization && (
+                <p className="text-xs text-muted-foreground">
+                  The access token refreshes automatically on the next sync.
+                </p>
+              )}
+              {needsReauthorization && (
+                <p className="text-xs text-muted-foreground">
+                  Reconnect once to grant access to the newly supported Oura
+                  datasets.
+                </p>
+              )}
+              {canManageOura && needsReauthorization && (
+                  <OuraConnectButton label="Reconnect Oura" />
+                )}
+              {canManageOura ? (
+                <DisconnectButton />
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  The private-data owner manages this connection.
+                </p>
+              )}
             </div>
-          ) : (
+          ) : canManageOura ? (
             <OuraConnectButton label="Connect Oura Ring" />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              The private-data owner manages this connection.
+            </p>
           )}
         </CardContent>
       </Card>
 
-      {isConnected && !isExpired && (
+      {isConnected && canManageOura && (
         <Card>
           <CardHeader>
             <CardTitle>Data Sync</CardTitle>
@@ -138,7 +186,7 @@ export default async function SettingsPage() {
         </Card>
       )}
 
-      {isConnected && !isExpired && (
+      {isConnected && canManageOura && (
         <Card>
           <CardHeader>
             <CardTitle>Anomaly Detection</CardTitle>
@@ -176,7 +224,9 @@ export default async function SettingsPage() {
                     className={
                       sync.status === "success"
                         ? "text-green-500"
-                        : "text-red-500"
+                        : sync.status === "partial"
+                          ? "text-amber-500"
+                          : "text-red-500"
                     }
                   >
                     {sync.status} - {sync.recordsFetched ?? 0} records

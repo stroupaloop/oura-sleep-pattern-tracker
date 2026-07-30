@@ -3,6 +3,12 @@ export interface OuraApiResponse<T> {
   next_token: string | null;
 }
 
+export interface OuraTimeSeries {
+  interval: number;
+  items: (number | null)[];
+  timestamp: string;
+}
+
 export interface OuraSleepPeriod {
   id: string;
   day: string;
@@ -19,13 +25,13 @@ export interface OuraSleepPeriod {
   average_heart_rate: number | null;
   lowest_heart_rate: number | null;
   average_hrv: number | null;
-  temperature_delta: number | null;
   average_breath: number | null;
   restless_periods: number | null;
   time_in_bed: number | null;
-  heart_rate: { interval: number; items: (number | null)[]; timestamp: string } | null;
-  hrv: { interval: number; items: (number | null)[]; timestamp: string } | null;
+  heart_rate: OuraTimeSeries | null;
+  hrv: OuraTimeSeries | null;
   sleep_phase_5_min: string | null;
+  app_sleep_phase_5_min: string | null;
 }
 
 export interface OuraDailySleep {
@@ -60,6 +66,7 @@ export interface OuraDailyReadiness {
     recovery_index: number | null;
     resting_heart_rate: number | null;
     sleep_balance: number | null;
+    sleep_regularity: number | null;
   };
 }
 
@@ -77,7 +84,7 @@ export interface OuraDailyActivity {
   resting_time: number | null;
   non_wear_time: number | null;
   average_met_minutes: number | null;
-  class_5min: string | null;
+  class_5_min: string | null;
   met: {
     interval: number;
     items: number[];
@@ -132,17 +139,19 @@ export interface OuraSession {
   mood: string | null;
   start_datetime: string | null;
   end_datetime: string | null;
-  heart_rate: { average: number | null } | null;
-  heart_rate_variability: { average: number | null } | null;
+  heart_rate: OuraTimeSeries | null;
+  heart_rate_variability: OuraTimeSeries | null;
 }
 
 export interface OuraEnhancedTag {
   id: string;
-  day: string;
+  start_day: string | null;
+  end_day: string | null;
   tag_type_code: string | null;
   start_time: string | null;
   end_time: string | null;
   comment: string | null;
+  custom_name: string | null;
 }
 
 export interface OuraRestModePeriod {

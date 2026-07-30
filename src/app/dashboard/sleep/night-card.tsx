@@ -9,6 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { HypnogramChart } from "@/components/charts/hypnogram-chart";
+import { formatIsoLocalTime } from "@/lib/date-utils";
 
 export interface NightData {
   id: string;
@@ -39,22 +40,18 @@ export interface AnalysisData {
 }
 
 function formatDuration(seconds: number | null): string {
-  if (!seconds) return "--";
+  if (seconds == null) return "--";
   const hours = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   return `${hours}h ${mins}m`;
 }
 
 function formatTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  });
+  return formatIsoLocalTime(iso) ?? "--";
 }
 
 function pct(part: number | null, total: number | null): string {
-  if (!part || !total || total === 0) return "--";
+  if (part == null || total == null || total === 0) return "--";
   return `${Math.round((part / total) * 100)}%`;
 }
 
@@ -68,9 +65,9 @@ function getStatus(value: number | null, good: [number, number], fair: [number, 
 }
 
 const STATUS_STYLE: Record<Status, { color: string; label: string }> = {
-  good: { color: "text-green-400", label: "Healthy" },
-  fair: { color: "text-amber-400", label: "Fair" },
-  poor: { color: "text-red-400", label: "Low" },
+  good: { color: "text-green-400", label: "General range" },
+  fair: { color: "text-amber-400", label: "Near range" },
+  poor: { color: "text-red-400", label: "Outside range" },
 };
 
 function StatusBadge({ status }: { status: Status | null }) {
@@ -79,7 +76,7 @@ function StatusBadge({ status }: { status: Status | null }) {
   return <span className={`text-[10px] ${s.color}`}>{s.label}</span>;
 }
 
-function MetricNote({ label, note }: { label: string; note: string }) {
+function MetricNote({ note }: { note: string }) {
   return (
     <p className="text-xs text-amber-400/80 mt-1">
       {note}
@@ -87,31 +84,33 @@ function MetricNote({ label, note }: { label: string; note: string }) {
   );
 }
 
-export function NightCardContent({ night, score, analysis }: { night: NightData; score: number | null; analysis?: AnalysisData }) {
+export function NightCardContent({
+  night,
+  analysis,
+}: {
+  night: NightData;
+  analysis?: AnalysisData;
+}) {
   const [expanded, setExpanded] = useState(false);
   const hasHypnogram = !!night.hypnogram5min;
 
   return (
     <>
       {(() => {
-        const totalHrs = night.totalSleepDuration ? night.totalSleepDuration / 3600 : null;
-        const deepPct = night.deepSleepDuration && night.totalSleepDuration
-          ? (night.deepSleepDuration / night.totalSleepDuration) * 100 : null;
-        const remPct = night.remSleepDuration && night.totalSleepDuration
-          ? (night.remSleepDuration / night.totalSleepDuration) * 100 : null;
-        const latencyMin = night.latency ? night.latency / 60 : null;
-        const tempAbs = night.temperatureDelta != null ? Math.abs(night.temperatureDelta) : null;
+        const totalHrs =
+          night.totalSleepDuration != null
+            ? night.totalSleepDuration / 3600
+            : null;
+        const latencyMin =
+          night.latency != null ? night.latency / 60 : null;
 
-        const sleepStatus = getStatus(totalHrs, [7, 24], [6, 7]);
-        const effStatus = getStatus(night.efficiency, [85, 100], [75, 85]);
-        const latencyStatus = latencyMin != null
-          ? (latencyMin <= 15 ? "good" : latencyMin <= 30 ? "fair" : "poor") as Status
-          : null;
-        const deepStatus = getStatus(deepPct, [15, 50], [10, 15]);
-        const remStatus = getStatus(remPct, [20, 50], [15, 20]);
-        const tempStatus = tempAbs != null
-          ? (tempAbs <= 0.5 ? "good" : tempAbs <= 1 ? "fair" : "poor") as Status
-          : null;
+        const sleepStatus = getStatus(totalHrs, [7, 9], [6, 10]);
+        const effStatus = getStatus(
+          night.efficiency,
+          [85, 100],
+          [75, 100]
+        );
+        const latencyStatus = getStatus(latencyMin, [10, 20], [0, 30]);
 
         return (
           <>
@@ -131,7 +130,7 @@ export function NightCardContent({ night, score, analysis }: { night: NightData;
                   <StatusBadge status={effStatus} />
                 </div>
                 <p className="font-medium text-lg">
-                  {night.efficiency ? `${night.efficiency}%` : "--"}
+                  {night.efficiency != null ? `${night.efficiency}%` : "--"}
                 </p>
               </div>
               <div>
@@ -140,7 +139,9 @@ export function NightCardContent({ night, score, analysis }: { night: NightData;
                   <StatusBadge status={latencyStatus} />
                 </div>
                 <p className="font-medium text-lg">
-                  {latencyMin ? `${Math.round(latencyMin)}min` : "--"}
+                  {latencyMin != null
+                    ? `${Math.round(latencyMin)}min`
+                    : "--"}
                 </p>
               </div>
               <div>
@@ -153,10 +154,7 @@ export function NightCardContent({ night, score, analysis }: { night: NightData;
 
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 text-sm">
               <div>
-                <div className="flex items-center gap-1.5">
-                  <p className="text-muted-foreground">Deep</p>
-                  <StatusBadge status={deepStatus} />
-                </div>
+                <p className="text-muted-foreground">Deep</p>
                 <p className="font-medium">
                   {formatDuration(night.deepSleepDuration)}{" "}
                   <span className="text-muted-foreground">
@@ -165,10 +163,7 @@ export function NightCardContent({ night, score, analysis }: { night: NightData;
                 </p>
               </div>
               <div>
-                <div className="flex items-center gap-1.5">
-                  <p className="text-muted-foreground">REM</p>
-                  <StatusBadge status={remStatus} />
-                </div>
+                <p className="text-muted-foreground">REM</p>
                 <p className="font-medium">
                   {formatDuration(night.remSleepDuration)}{" "}
                   <span className="text-muted-foreground">
@@ -207,13 +202,12 @@ export function NightCardContent({ night, score, analysis }: { night: NightData;
                 </p>
               </div>
               <div>
-                <div className="flex items-center gap-1.5">
-                  <p className="text-muted-foreground">Temp Delta</p>
-                  <StatusBadge status={tempStatus} />
-                </div>
+                <p className="text-muted-foreground">
+                  Night Temp Deviation
+                </p>
                 <p className="font-medium">
                   {night.temperatureDelta != null
-                    ? `${night.temperatureDelta > 0 ? "+" : ""}${night.temperatureDelta.toFixed(2)}°`
+                    ? `${night.temperatureDelta > 0 ? "+" : ""}${night.temperatureDelta.toFixed(2)} °C`
                     : "--"}
                 </p>
               </div>
@@ -226,20 +220,17 @@ export function NightCardContent({ night, score, analysis }: { night: NightData;
         <div className="mt-3 space-y-1 border-t pt-3">
           {Math.abs(analysis.hrvZScore) > 2 && (
             <MetricNote
-              label="HRV"
-              note={`HRV is significantly ${analysis.hrvZScore < 0 ? "below" : "above"} your baseline. Changes in HRV can reflect shifts in autonomic nervous system activity. Research shows HRV changes of 17-18% are associated with mood state transitions.`}
+              note={`HRV is well ${analysis.hrvZScore < 0 ? "below" : "above"} your personal baseline. HRV is nonspecific and can change with recovery, stress, illness, alcohol, and other factors.`}
             />
           )}
           {Math.abs(analysis.sleepDurationZScore) > 2 && (
             <MetricNote
-              label="Sleep"
-              note={`Sleep duration is significantly ${analysis.sleepDurationZScore < 0 ? "below" : "above"} your baseline. 69-99% of individuals in manic episodes report reduced sleep need.`}
+              note={`Sleep duration is well ${analysis.sleepDurationZScore < 0 ? "below" : "above"} your personal baseline. Wearable sleep duration alone cannot identify a mood episode.`}
             />
           )}
           {Math.abs(analysis.efficiencyZScore) > 2 && (
             <MetricNote
-              label="Efficiency"
-              note={`Sleep efficiency is significantly ${analysis.efficiencyZScore < 0 ? "below" : "above"} your baseline. Persistent sleep disturbance is common across all bipolar stages.`}
+              note={`Sleep efficiency is well ${analysis.efficiencyZScore < 0 ? "below" : "above"} your personal baseline. Consider the pattern alongside symptoms and other context.`}
             />
           )}
         </div>
@@ -283,7 +274,7 @@ export function NightCard({ night, score, analysis }: { night: NightData; score:
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <NightCardContent night={night} score={score} analysis={analysis} />
+        <NightCardContent night={night} analysis={analysis} />
       </CardContent>
     </Card>
   );

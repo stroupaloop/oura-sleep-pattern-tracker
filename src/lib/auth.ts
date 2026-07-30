@@ -1,7 +1,6 @@
 import NextAuth from "next-auth";
 import Resend from "next-auth/providers/resend";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
-import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   users,
@@ -9,58 +8,30 @@ import {
   sessions,
   verificationTokens,
 } from "@/lib/db/schema";
+import {
+  getAllowedEmails,
+  isSensitiveEmail,
+  isPrimarySensitiveEmail,
+} from "@/lib/access";
 
 function getAdapter() {
   if (!db) throw new Error("Database not initialized – check TURSO_DATABASE_URL");
-  const base = DrizzleAdapter(db, {
+  return DrizzleAdapter(db, {
     usersTable: users,
     accountsTable: accounts,
     sessionsTable: sessions,
     verificationTokensTable: verificationTokens,
   });
-  return {
-    ...base,
-    async useVerificationToken(params: { identifier: string; token: string }) {
-      const [result] = await db
-        .select()
-        .from(verificationTokens)
-        .where(
-          and(
-            eq(verificationTokens.identifier, params.identifier),
-            eq(verificationTokens.token, params.token)
-          )
-        )
-        .limit(1);
-      if (!result) return null;
-      if (result.expires < new Date()) {
-        await db
-          .delete(verificationTokens)
-          .where(
-            and(
-              eq(verificationTokens.identifier, params.identifier),
-              eq(verificationTokens.token, params.token)
-            )
-          );
-        return null;
-      }
-      return result;
-    },
-  };
 }
 
-const allowedEmails = (process.env.ALLOWED_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
-
-const sensitiveEmails = (process.env.SENSITIVE_EMAILS ?? "")
-  .split(",")
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
-
 export function isSensitiveUser(email: string | null | undefined): boolean {
-  if (!email) return false;
-  return sensitiveEmails.includes(email.toLowerCase());
+  return isSensitiveEmail(email);
+}
+
+export function isPrimarySensitiveUser(
+  email: string | null | undefined
+): boolean {
+  return isPrimarySensitiveEmail(email);
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -76,7 +47,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     signIn({ user }) {
       if (!user.email) return false;
-      if (allowedEmails.length === 0) return true;
+      const allowedEmails = getAllowedEmails();
+      if (allowedEmails.length === 0) {
+        return process.env.NODE_ENV !== "production";
+      }
       return allowedEmails.includes(user.email.toLowerCase());
     },
   },
@@ -96,5 +70,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     verifyRequest: "/login?verify=1",
     error: "/login",
   },
-  debug: true,
+  debug: process.env.NODE_ENV !== "production",
 });

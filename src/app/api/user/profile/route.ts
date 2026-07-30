@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isPrimarySensitiveUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -8,6 +8,15 @@ export async function PATCH(request: Request) {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isPrimarySensitiveUser(session.user.email)) {
+    return NextResponse.json(
+      {
+        error:
+          "Only the primary private-data owner can update the detection profile",
+      },
+      { status: 403 }
+    );
   }
 
   const body = await request.json().catch(() => ({}));
@@ -32,6 +41,15 @@ export async function GET() {
   const session = await auth();
   if (!session?.user?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isPrimarySensitiveUser(session.user.email)) {
+    return NextResponse.json(
+      {
+        error:
+          "Only the primary private-data owner can view the detection profile",
+      },
+      { status: 403 }
+    );
   }
 
   const rows = await db

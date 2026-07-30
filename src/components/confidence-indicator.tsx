@@ -5,7 +5,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-interface DataConfidence {
+interface DataCoverage {
   overall: number;
   oura: { days: number; total: number; rate: number };
   mood: { days: number; total: number; rate: number };
@@ -13,14 +13,14 @@ interface DataConfidence {
   suggestions: string[];
 }
 
-export function ConfidenceIndicator({ data }: { data: DataConfidence }) {
+export function DataCoverageIndicator({ data }: { data: DataCoverage }) {
   const pct = data.overall;
   const filledBlocks = Math.round(pct / 10);
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm">Data Confidence</CardTitle>
+        <CardTitle className="text-sm">Data Coverage</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
         <div className="flex items-center gap-2">
@@ -53,11 +53,14 @@ export function ConfidenceIndicator({ data }: { data: DataConfidence }) {
         </div>
         {data.suggestions.length > 0 && (
           <div className="text-xs text-amber-400/80 space-y-0.5">
-            {data.suggestions.map((s, i) => (
-              <p key={i}>{s}</p>
+            {data.suggestions.map((suggestion) => (
+              <p key={suggestion}>{suggestion}</p>
             ))}
           </div>
         )}
+        <p className="text-[10px] text-muted-foreground">
+          Coverage measures completeness, not prediction accuracy.
+        </p>
       </CardContent>
     </Card>
   );

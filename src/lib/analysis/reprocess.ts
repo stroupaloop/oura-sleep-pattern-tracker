@@ -30,11 +30,35 @@ import {
   computeInterdailyStability,
   computeRollingCV,
 } from "./variability";
+import { circularVariation, isNextCalendarDay } from "./baseline";
 
 export interface ReprocessResult {
   daysProcessed: number;
   episodes: { watch: number; warning: number; alert: number };
   processingTimeMs: number;
+}
+
+function shiftCalendarDay(day: string, offset: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function trailingConsecutiveDays(
+  sortedDays: string[],
+  endIndex: number,
+  maximumDays: number
+): string[] {
+  const days = [sortedDays[endIndex]];
+  for (
+    let index = endIndex - 1;
+    index >= 0 && days.length < maximumDays;
+    index--
+  ) {
+    if (!isNextCalendarDay(sortedDays[index], days[0])) break;
+    days.unshift(sortedDays[index]);
+  }
+  return days;
 }
 
 export async function reprocessAll(
@@ -92,15 +116,21 @@ export async function reprocessAll(
           m.sleepStageTransitions = computeSleepStageTransitions(stages);
           m.hypnogramFragmentation = computeHypnogramFragmentation(stages);
         }
-        m.lowestHeartRate = row.lowestHeartRate ?? 0;
-        m.averageBreath = row.averageBreath ?? 0;
+        m.lowestHeartRate = row.lowestHeartRate ?? Number.NaN;
+        m.averageBreath = row.averageBreath ?? Number.NaN;
 
         const activity = activityByDay.get(row.day);
         if (activity) {
-          m.steps = activity.steps ?? 0;
-          m.activeMinutes = Math.round(
-            ((activity.highActivityTime ?? 0) + (activity.mediumActivityTime ?? 0)) / 60
-          );
+          m.steps = activity.steps ?? Number.NaN;
+          m.activeMinutes =
+            activity.highActivityTime == null &&
+            activity.mediumActivityTime == null
+              ? Number.NaN
+              : Math.round(
+                  ((activity.highActivityTime ?? 0) +
+                    (activity.mediumActivityTime ?? 0)) /
+                    60
+                );
           if (activity.class5min) {
             m.activityClassFragmentation = computeIntradailyVariability(activity.class5min);
           }
@@ -108,8 +138,8 @@ export async function reprocessAll(
 
         const stress = stressByDay.get(row.day);
         if (stress) {
-          m.stressHigh = stress.stressHigh ?? 0;
-          m.recoveryHigh = stress.recoveryHigh ?? 0;
+          m.stressHigh = stress.stressHigh ?? Number.NaN;
+          m.recoveryHigh = stress.recoveryHigh ?? Number.NaN;
         }
 
         const resilience = resilienceByDay.get(row.day);
@@ -119,14 +149,17 @@ export async function reprocessAll(
 
         const ds = dailySleepByDay.get(row.day);
         if (ds) {
-          m.sleepTimingScore = ds.contributorTiming ?? 0;
+          m.sleepTimingScore = ds.contributorTiming ?? Number.NaN;
         }
 
         const readiness = readinessByDay.get(row.day);
         if (readiness) {
-          m.readinessScore = readiness.score ?? 0;
-          m.temperatureDeviation = readiness.temperatureDeviation ?? 0;
-          m.temperatureTrendDeviation = readiness.temperatureTrendDeviation ?? 0;
+          m.readinessScore = readiness.score ?? Number.NaN;
+          m.temperatureDeviation =
+            readiness.temperatureDeviation ?? Number.NaN;
+          m.temperatureDelta = m.temperatureDeviation;
+          m.temperatureTrendDeviation =
+            readiness.temperatureTrendDeviation ?? Number.NaN;
         }
 
         const mood = moodByDay.get(row.day);
@@ -163,18 +196,23 @@ export async function reprocessAll(
     const m = allMetricsByDay.get(day);
     if (!m) continue;
 
-    const windowStart = Math.max(0, i - 6);
-    const sleepWindow = sortedDays.slice(windowStart, i + 1).map((d) => allMetricsByDay.get(d)).filter((x): x is DayMetrics => !!x);
+    const consecutiveDays = trailingConsecutiveDays(sortedDays, i, 7);
+    const sleepWindow = consecutiveDays
+      .map((d) => allMetricsByDay.get(d))
+      .filter((x): x is DayMetrics => !!x);
     if (sleepWindow.length >= 3) {
       m.dayToDaySleepCV = computeRollingCV(sleepWindow.map((x) => x.totalSleepMinutes), sleepWindow.length);
-      m.dayToDayBedtimeCV = computeRollingCV(sleepWindow.map((x) => x.bedtimeMinutes), sleepWindow.length);
-      m.dayToDayWakeCV = computeRollingCV(sleepWindow.map((x) => x.wakeTimeMinutes), sleepWindow.length);
+      m.dayToDayBedtimeCV = circularVariation(
+        sleepWindow.map((x) => x.bedtimeMinutes)
+      );
+      m.dayToDayWakeCV = circularVariation(
+        sleepWindow.map((x) => x.wakeTimeMinutes)
+      );
     }
 
-    const circStart = Math.max(0, i - 2);
-    const circDays = sortedDays.slice(circStart, i + 1);
+    const circDays = trailingConsecutiveDays(sortedDays, i, 3);
     const circClass5min = circDays.map((d) => class5minByDay.get(d)).filter((x): x is string => !!x);
-    if (circClass5min.length >= 3) {
+    if (circDays.length === 3 && circClass5min.length === 3) {
       m.circadianIS = computeInterdailyStability(circClass5min);
     }
     const todayClass = class5minByDay.get(day);
@@ -192,8 +230,10 @@ export async function reprocessAll(
     const metrics = allMetricsByDay.get(day);
     if (!metrics) continue;
 
-    const dayIndex = sortedDays.indexOf(day);
-    const priorDays = sortedDays.slice(Math.max(0, dayIndex - config.baselineDays), dayIndex);
+    const baselineStart = shiftCalendarDay(day, -config.baselineDays);
+    const priorDays = sortedDays.filter(
+      (priorDay) => priorDay >= baselineStart && priorDay < day
+    );
     const priorMetrics = priorDays
       .map((d) => allMetricsByDay.get(d))
       .filter((m): m is DayMetrics => m !== undefined);
@@ -209,32 +249,19 @@ export async function reprocessAll(
     }
   }
 
-  const allCalendarDays: string[] = [];
-  if (sortedDays.length > 0) {
-    const first = new Date(sortedDays[0]);
-    const last = new Date(sortedDays[sortedDays.length - 1]);
-    for (let d = new Date(first); d <= last; d.setDate(d.getDate() + 1)) {
-      allCalendarDays.push(d.toISOString().slice(0, 10));
-    }
-  }
-
   for (const day of uniqueFilteredDays) {
     const dayIndex = sortedDays.indexOf(day);
     if (dayIndex < 0) continue;
 
-    const calendarIndex = allCalendarDays.indexOf(day);
     const expectedDaysByWindow: Record<number, number> = {};
     for (const size of [3, 5, 7]) {
-      if (calendarIndex >= 0) {
-        const windowStartCal = Math.max(0, calendarIndex - size + 1);
-        expectedDaysByWindow[size] = calendarIndex - windowStartCal + 1;
-      } else {
-        expectedDaysByWindow[size] = size;
-      }
+      expectedDaysByWindow[size] = size;
     }
 
-    const windowStart = Math.max(0, dayIndex - 7);
-    const recentDays = sortedDays.slice(windowStart, dayIndex + 1);
+    const recentStart = shiftCalendarDay(day, -6);
+    const recentDays = sortedDays.filter(
+      (recentDay) => recentDay >= recentStart && recentDay <= day
+    );
     const recentResults = recentDays
       .map((d) => dailyResults.get(d))
       .filter((r): r is DailyAnalysisResult => r !== undefined);

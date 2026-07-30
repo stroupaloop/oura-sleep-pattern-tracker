@@ -11,14 +11,17 @@ interface ScoreRingProps {
 
 function getColor(score: number): string {
   if (score < 60) return "#ef4444";
-  if (score < 75) return "#f59e0b";
+  if (score < 70) return "#f59e0b";
   if (score < 85) return "#22c55e";
   return "#4ade80";
 }
 
 export function ScoreRing({ score, label, size = 120, sublabel }: ScoreRingProps) {
   const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(frame);
+  }, []);
 
   const strokeWidth = 8;
   const radius = (size - strokeWidth) / 2;

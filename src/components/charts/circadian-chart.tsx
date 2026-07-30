@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceArea,
+  ReferenceLine,
 } from "recharts";
 import {
   Card,
@@ -52,7 +53,7 @@ function CircadianTooltipContent({
       {p.iv != null && <p style={{ color: "#f59e0b" }}>IV (Variability): {p.iv.toFixed(3)}</p>}
       {p.ra != null && <p style={{ color: "#a78bfa" }}>RA (Amplitude): {p.ra.toFixed(3)}</p>}
       {p.isEpisode && (
-        <p className="text-red-400 text-xs mt-1">Episode: {p.episodeTier}</p>
+        <p className="text-red-400 text-xs mt-1">Pattern flag: {p.episodeTier}</p>
       )}
     </div>
   );
@@ -85,13 +86,13 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
           <ResearchTooltip metric="circadianIS" />
         </CardTitle>
         <CardDescription>
-          Interdaily Stability (IS), Intradaily Variability (IV), Relative Amplitude (RA) — all 0-1 scale
+          IS and RA use a 0–1 scale; IV uses a separate fragmentation scale
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
           <span className="font-medium text-blue-300">What to watch for:</span>{" "}
-          Dropping IS (stability) suggests your daily rhythm is becoming less consistent — a known predictor of mood episode relapse.
+          Dropping IS (stability) suggests your daily rhythm is becoming less consistent and has been associated with mood episode relapse.
           Rising IV (variability) means your activity pattern is more fragmented within the day.
           Low RA (amplitude) suggests flattened activity cycles (less difference between active and rest periods).
         </div>
@@ -106,7 +107,15 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               interval="preserveStartEnd"
             />
             <YAxis
+              yAxisId="bounded"
               domain={[0, 1]}
+              fontSize={11}
+              tick={{ fill: "oklch(0.708 0 0)" }}
+            />
+            <YAxis
+              yAxisId="iv"
+              orientation="right"
+              domain={[0, "auto"]}
               fontSize={11}
               tick={{ fill: "oklch(0.708 0 0)" }}
             />
@@ -115,38 +124,50 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
             {episodeRanges.map((r, i) => (
               <ReferenceArea
                 key={i}
+                yAxisId="bounded"
                 x1={r.start}
                 x2={r.end}
                 fill={r.tier === "alert" ? "#ef4444" : r.tier === "warning" ? "#f59e0b" : "#3b82f6"}
                 fillOpacity={0.1}
               />
             ))}
+            <ReferenceLine
+              yAxisId="iv"
+              y={2}
+              stroke="#f59e0b"
+              strokeDasharray="3 3"
+              strokeOpacity={0.35}
+              ifOverflow="extendDomain"
+            />
             <Line
+              yAxisId="bounded"
               type="monotone"
               dataKey="is"
               stroke="#34d399"
               strokeWidth={2}
               dot={false}
               name="IS (Stability)"
-              connectNulls
+              connectNulls={false}
             />
             <Line
+              yAxisId="iv"
               type="monotone"
               dataKey="iv"
               stroke="#f59e0b"
               strokeWidth={2}
               dot={false}
               name="IV (Variability)"
-              connectNulls
+              connectNulls={false}
             />
             <Line
+              yAxisId="bounded"
               type="monotone"
               dataKey="ra"
               stroke="#a78bfa"
               strokeWidth={2}
               dot={false}
               name="RA (Amplitude)"
-              connectNulls
+              connectNulls={false}
             />
           </LineChart>
         </ResponsiveContainer>

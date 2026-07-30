@@ -1,13 +1,16 @@
 import { db } from "@/lib/db";
-import { sleepPeriods, dailyAnalysis } from "@/lib/db/schema";
-import { desc, sql, and, lt, eq } from "drizzle-orm";
+import { sleepPeriods, dailyAnalysis, dailyReadiness } from "@/lib/db/schema";
+import { desc, sql, and, lt, eq, inArray } from "drizzle-orm";
 import {
+  circularMeanMinutes,
+  circularStandardDeviationMinutes,
+  circularZScore,
   trimmedMean,
   standardDeviation,
   zScore,
   minutesFromMidnight,
 } from "./baseline";
-import { DetectionConfigValues, DEFAULT_CONFIG, BipolarType, getBipolarProfile } from "./config";
+import { DetectionConfigValues, DEFAULT_CONFIG, BipolarType } from "./config";
 
 export interface DayMetrics {
   day: string;
@@ -65,52 +68,60 @@ export interface DailyAnalysisResult {
   hrvCrash: boolean;
 }
 
+function finiteValues(values: number[]): number[] {
+  return values.filter(Number.isFinite);
+}
+
+function finiteOrNull(value: number): number | null {
+  return Number.isFinite(value) ? value : null;
+}
+
 export function extractMetrics(
   s: typeof sleepPeriods.$inferSelect
 ): DayMetrics | null {
-  if (!s.totalSleepDuration) return null;
+  if (s.totalSleepDuration == null || s.totalSleepDuration <= 0) return null;
   const totalMin = s.totalSleepDuration / 60;
   return {
     day: s.day,
     totalSleepMinutes: totalMin,
     bedtimeMinutes: minutesFromMidnight(s.bedtimeStart),
     wakeTimeMinutes: minutesFromMidnight(s.bedtimeEnd),
-    avgHrv: s.averageHrv ?? 0,
-    avgHeartRate: s.averageHeartRate ?? 0,
-    onsetLatencyMinutes: (s.latency ?? 0) / 60,
+    avgHrv: s.averageHrv ?? Number.NaN,
+    avgHeartRate: s.averageHeartRate ?? Number.NaN,
+    onsetLatencyMinutes: s.latency == null ? Number.NaN : s.latency / 60,
     remPct:
-      s.totalSleepDuration > 0
-        ? ((s.remSleepDuration ?? 0) / s.totalSleepDuration) * 100
-        : 0,
+      s.remSleepDuration == null
+        ? Number.NaN
+        : (s.remSleepDuration / s.totalSleepDuration) * 100,
     deepPct:
-      s.totalSleepDuration > 0
-        ? ((s.deepSleepDuration ?? 0) / s.totalSleepDuration) * 100
-        : 0,
-    efficiency: s.efficiency ?? 0,
-    temperatureDelta: s.temperatureDelta ?? 0,
-    restlessPeriods: s.restlessPeriods ?? 0,
-    lowestHeartRate: s.lowestHeartRate ?? 0,
-    averageBreath: s.averageBreath ?? 0,
-    withinNightHrvCV: 0,
-    withinNightHrCV: 0,
-    sleepStageTransitions: 0,
-    hypnogramFragmentation: 0,
-    steps: 0,
-    activeMinutes: 0,
-    activityClassFragmentation: 0,
-    stressHigh: 0,
-    recoveryHigh: 0,
+      s.deepSleepDuration == null
+        ? Number.NaN
+        : (s.deepSleepDuration / s.totalSleepDuration) * 100,
+    efficiency: s.efficiency ?? Number.NaN,
+    temperatureDelta: Number.NaN,
+    restlessPeriods: s.restlessPeriods ?? Number.NaN,
+    lowestHeartRate: s.lowestHeartRate ?? Number.NaN,
+    averageBreath: s.averageBreath ?? Number.NaN,
+    withinNightHrvCV: Number.NaN,
+    withinNightHrCV: Number.NaN,
+    sleepStageTransitions: Number.NaN,
+    hypnogramFragmentation: Number.NaN,
+    steps: Number.NaN,
+    activeMinutes: Number.NaN,
+    activityClassFragmentation: Number.NaN,
+    stressHigh: Number.NaN,
+    recoveryHigh: Number.NaN,
     resilienceLevel: null,
-    sleepTimingScore: 0,
-    readinessScore: 0,
-    temperatureDeviation: 0,
-    temperatureTrendDeviation: 0,
-    dayToDaySleepCV: 0,
-    dayToDayBedtimeCV: 0,
-    dayToDayWakeCV: 0,
-    circadianIS: 0,
-    circadianIV: 0,
-    circadianRA: 0,
+    sleepTimingScore: Number.NaN,
+    readinessScore: Number.NaN,
+    temperatureDeviation: Number.NaN,
+    temperatureTrendDeviation: Number.NaN,
+    dayToDaySleepCV: Number.NaN,
+    dayToDayBedtimeCV: Number.NaN,
+    dayToDayWakeCV: Number.NaN,
+    circadianIS: Number.NaN,
+    circadianIV: Number.NaN,
+    circadianRA: Number.NaN,
     moodScore: null,
     energyScore: null,
     irritabilityScore: null,
@@ -124,43 +135,26 @@ export function extractMetrics(
 function classifyDirection(
   zScores: Record<string, number>,
   metrics: DayMetrics,
-  config: DetectionConfigValues,
-  bipolarType: BipolarType = "unspecified"
+  config: DetectionConfigValues
 ): "hyper" | "hypo" | null {
   const t = config.dailyAnomalyThreshold;
-  const abs = config.absoluteThresholds;
-  const profile = getBipolarProfile(bipolarType);
-
   const ep = metrics.episodeState;
 
   const hyperSignals =
     (zScores.sleep < -t ? 1 : 0) +
     (Math.abs(zScores.bedtime) > t && zScores.sleep < 0 ? 1 : 0) +
     (zScores.wake < -t ? 1 : 0) +
-    (zScores.temperature > t ? 1 : 0) +
-    (zScores.hrv > t ? 1 : 0) +
     (zScores.activity > t ? 1 : 0) +
-    (zScores.withinNightVar > t ? 1 : 0) +
-    (zScores.circadianIV > t ? 1 : 0) +
     (ep === "hypomanic" || ep === "mixed" ? 1 : 0);
 
   const hypoSignals =
     (zScores.sleep > t ? 1 : 0) +
     (zScores.bedtime > t ? 1 : 0) +
     (zScores.wake > t ? 1 : 0) +
-    (zScores.hrv < -t ? 1 : 0) +
-    (zScores.hr > t ? 1 : 0) +
-    (zScores.efficiency < -t ? 1 : 0) +
-    (metrics.totalSleepMinutes < abs.minSleepMinutes ? 1 : 0) +
-    (metrics.avgHeartRate > abs.maxHeartRate ? 1 : 0) +
-    (metrics.avgHrv > 0 && metrics.avgHrv < abs.minHrv ? 1 : 0) +
-    (metrics.efficiency > 0 && metrics.efficiency < abs.minEfficiency ? 1 : 0) +
     (zScores.activity < -t ? 1 : 0) +
-    (zScores.circadianIV < -t ? 1 : 0) +
     (ep === "depressive" || ep === "mixed" ? 1 : 0);
 
-  const hyperThreshold = bipolarType === "bp2" ? 2 : 2;
-  if (hyperSignals >= hyperThreshold) return "hyper";
+  if (hyperSignals >= 2) return "hyper";
   if (hypoSignals >= 2) return "hypo";
   return null;
 }
@@ -225,89 +219,88 @@ export function computeDailyAnalysis(
 
   const trimPct = config.baselineTrimPct;
   const w = config.metricWeights;
-  const profile = getBipolarProfile(bipolarType);
 
-  const sleepVals = priorMetrics.map((m) => m.totalSleepMinutes);
-  const bedtimeVals = priorMetrics.map((m) => m.bedtimeMinutes);
-  const wakeVals = priorMetrics.map((m) => m.wakeTimeMinutes);
-  const hrvVals = priorMetrics.filter((m) => m.avgHrv > 0).map((m) => m.avgHrv);
-  const hrVals = priorMetrics.filter((m) => m.avgHeartRate > 0).map((m) => m.avgHeartRate);
-  const latencyVals = priorMetrics.map((m) => m.onsetLatencyMinutes);
-  const tempVals = priorMetrics.map((m) => m.temperatureDelta);
-  const restlessVals = priorMetrics.map((m) => m.restlessPeriods);
-  const efficiencyVals = priorMetrics.filter((m) => m.efficiency > 0).map((m) => m.efficiency);
-  const deepPctVals = priorMetrics.filter((m) => m.deepPct > 0).map((m) => m.deepPct);
-  const remPctVals = priorMetrics.filter((m) => m.remPct > 0).map((m) => m.remPct);
+  const sleepVals = finiteValues(priorMetrics.map((m) => m.totalSleepMinutes));
+  const bedtimeVals = finiteValues(priorMetrics.map((m) => m.bedtimeMinutes));
+  const wakeVals = finiteValues(priorMetrics.map((m) => m.wakeTimeMinutes));
+  const hrvVals = finiteValues(priorMetrics.map((m) => m.avgHrv));
+  const hrVals = finiteValues(priorMetrics.map((m) => m.avgHeartRate));
+  const latencyVals = finiteValues(priorMetrics.map((m) => m.onsetLatencyMinutes));
+  const tempVals = finiteValues(priorMetrics.map((m) => m.temperatureDeviation));
+  const restlessVals = finiteValues(priorMetrics.map((m) => m.restlessPeriods));
+  const efficiencyVals = finiteValues(priorMetrics.map((m) => m.efficiency));
+  const deepPctVals = finiteValues(priorMetrics.map((m) => m.deepPct));
+  const remPctVals = finiteValues(priorMetrics.map((m) => m.remPct));
 
-  const withinNightHrvCVVals = priorMetrics.filter((m) => m.withinNightHrvCV > 0).map((m) => m.withinNightHrvCV);
-  const withinNightHrCVVals = priorMetrics.filter((m) => m.withinNightHrCV > 0).map((m) => m.withinNightHrCV);
-  const hypnogramFragVals = priorMetrics.filter((m) => m.hypnogramFragmentation > 0).map((m) => m.hypnogramFragmentation);
-  const stepsVals = priorMetrics.filter((m) => m.steps > 0).map((m) => m.steps);
-  const activeMinVals = priorMetrics.filter((m) => m.activeMinutes > 0).map((m) => m.activeMinutes);
-  const circadianIVVals = priorMetrics.filter((m) => m.circadianIV > 0).map((m) => m.circadianIV);
-  const circadianISVals = priorMetrics.filter((m) => m.circadianIS > 0).map((m) => m.circadianIS);
+  const withinNightHrvCVVals = finiteValues(priorMetrics.map((m) => m.withinNightHrvCV));
+  const withinNightHrCVVals = finiteValues(priorMetrics.map((m) => m.withinNightHrCV));
+  const hypnogramFragVals = finiteValues(priorMetrics.map((m) => m.hypnogramFragmentation));
+  const stepsVals = finiteValues(priorMetrics.map((m) => m.steps));
+  const activeMinVals = finiteValues(priorMetrics.map((m) => m.activeMinutes));
+  const circadianIVVals = finiteValues(priorMetrics.map((m) => m.circadianIV));
+  const circadianISVals = finiteValues(priorMetrics.map((m) => m.circadianIS));
 
   const baselines: Record<string, number> = {
     sleep: trimmedMean(sleepVals, trimPct),
-    bedtime: trimmedMean(bedtimeVals, trimPct),
-    wake: trimmedMean(wakeVals, trimPct),
-    hrv: hrvVals.length > 0 ? trimmedMean(hrvVals, trimPct) : 0,
-    hr: hrVals.length > 0 ? trimmedMean(hrVals, trimPct) : 0,
+    bedtime: circularMeanMinutes(bedtimeVals),
+    wake: circularMeanMinutes(wakeVals),
+    hrv: trimmedMean(hrvVals, trimPct),
+    hr: trimmedMean(hrVals, trimPct),
     latency: trimmedMean(latencyVals, trimPct),
     temperature: trimmedMean(tempVals, trimPct),
     restlessness: trimmedMean(restlessVals, trimPct),
-    efficiency: efficiencyVals.length > 0 ? trimmedMean(efficiencyVals, trimPct) : 0,
-    deepPct: deepPctVals.length > 0 ? trimmedMean(deepPctVals, trimPct) : 0,
-    remPct: remPctVals.length > 0 ? trimmedMean(remPctVals, trimPct) : 0,
-    withinNightHrvCV: withinNightHrvCVVals.length > 0 ? trimmedMean(withinNightHrvCVVals, trimPct) : 0,
-    withinNightHrCV: withinNightHrCVVals.length > 0 ? trimmedMean(withinNightHrCVVals, trimPct) : 0,
-    hypnogramFrag: hypnogramFragVals.length > 0 ? trimmedMean(hypnogramFragVals, trimPct) : 0,
-    steps: stepsVals.length > 0 ? trimmedMean(stepsVals, trimPct) : 0,
-    activeMinutes: activeMinVals.length > 0 ? trimmedMean(activeMinVals, trimPct) : 0,
-    circadianIV: circadianIVVals.length > 0 ? trimmedMean(circadianIVVals, trimPct) : 0,
-    circadianIS: circadianISVals.length > 0 ? trimmedMean(circadianISVals, trimPct) : 0,
+    efficiency: trimmedMean(efficiencyVals, trimPct),
+    deepPct: trimmedMean(deepPctVals, trimPct),
+    remPct: trimmedMean(remPctVals, trimPct),
+    withinNightHrvCV: trimmedMean(withinNightHrvCVVals, trimPct),
+    withinNightHrCV: trimmedMean(withinNightHrCVVals, trimPct),
+    hypnogramFrag: trimmedMean(hypnogramFragVals, trimPct),
+    steps: trimmedMean(stepsVals, trimPct),
+    activeMinutes: trimmedMean(activeMinVals, trimPct),
+    circadianIV: trimmedMean(circadianIVVals, trimPct),
+    circadianIS: trimmedMean(circadianISVals, trimPct),
   };
 
   const stds: Record<string, number> = {
     sleep: standardDeviation(sleepVals, baselines.sleep),
-    bedtime: standardDeviation(bedtimeVals, baselines.bedtime),
-    wake: standardDeviation(wakeVals, baselines.wake),
-    hrv: hrvVals.length > 0 ? standardDeviation(hrvVals, baselines.hrv) : 0,
-    hr: hrVals.length > 0 ? standardDeviation(hrVals, baselines.hr) : 0,
+    bedtime: circularStandardDeviationMinutes(bedtimeVals, baselines.bedtime),
+    wake: circularStandardDeviationMinutes(wakeVals, baselines.wake),
+    hrv: standardDeviation(hrvVals, baselines.hrv),
+    hr: standardDeviation(hrVals, baselines.hr),
     latency: standardDeviation(latencyVals, baselines.latency),
     temperature: standardDeviation(tempVals, baselines.temperature),
     restlessness: standardDeviation(restlessVals, baselines.restlessness),
-    efficiency: efficiencyVals.length > 0 ? standardDeviation(efficiencyVals, baselines.efficiency) : 0,
-    deepPct: deepPctVals.length > 0 ? standardDeviation(deepPctVals, baselines.deepPct) : 0,
-    remPct: remPctVals.length > 0 ? standardDeviation(remPctVals, baselines.remPct) : 0,
-    withinNightHrvCV: withinNightHrvCVVals.length > 0 ? standardDeviation(withinNightHrvCVVals, baselines.withinNightHrvCV) : 0,
-    withinNightHrCV: withinNightHrCVVals.length > 0 ? standardDeviation(withinNightHrCVVals, baselines.withinNightHrCV) : 0,
-    hypnogramFrag: hypnogramFragVals.length > 0 ? standardDeviation(hypnogramFragVals, baselines.hypnogramFrag) : 0,
-    steps: stepsVals.length > 0 ? standardDeviation(stepsVals, baselines.steps) : 0,
-    activeMinutes: activeMinVals.length > 0 ? standardDeviation(activeMinVals, baselines.activeMinutes) : 0,
-    circadianIV: circadianIVVals.length > 0 ? standardDeviation(circadianIVVals, baselines.circadianIV) : 0,
-    circadianIS: circadianISVals.length > 0 ? standardDeviation(circadianISVals, baselines.circadianIS) : 0,
+    efficiency: standardDeviation(efficiencyVals, baselines.efficiency),
+    deepPct: standardDeviation(deepPctVals, baselines.deepPct),
+    remPct: standardDeviation(remPctVals, baselines.remPct),
+    withinNightHrvCV: standardDeviation(withinNightHrvCVVals, baselines.withinNightHrvCV),
+    withinNightHrCV: standardDeviation(withinNightHrCVVals, baselines.withinNightHrCV),
+    hypnogramFrag: standardDeviation(hypnogramFragVals, baselines.hypnogramFrag),
+    steps: standardDeviation(stepsVals, baselines.steps),
+    activeMinutes: standardDeviation(activeMinVals, baselines.activeMinutes),
+    circadianIV: standardDeviation(circadianIVVals, baselines.circadianIV),
+    circadianIS: standardDeviation(circadianISVals, baselines.circadianIS),
   };
 
   const zScores: Record<string, number> = {
     sleep: zScore(metrics.totalSleepMinutes, baselines.sleep, stds.sleep),
-    bedtime: zScore(metrics.bedtimeMinutes, baselines.bedtime, stds.bedtime),
-    wake: zScore(metrics.wakeTimeMinutes, baselines.wake, stds.wake),
-    hrv: metrics.avgHrv > 0 ? zScore(metrics.avgHrv, baselines.hrv, stds.hrv) : 0,
-    hr: metrics.avgHeartRate > 0 ? zScore(metrics.avgHeartRate, baselines.hr, stds.hr) : 0,
+    bedtime: circularZScore(metrics.bedtimeMinutes, baselines.bedtime, stds.bedtime),
+    wake: circularZScore(metrics.wakeTimeMinutes, baselines.wake, stds.wake),
+    hrv: zScore(metrics.avgHrv, baselines.hrv, stds.hrv),
+    hr: zScore(metrics.avgHeartRate, baselines.hr, stds.hr),
     latency: zScore(metrics.onsetLatencyMinutes, baselines.latency, stds.latency),
-    temperature: zScore(metrics.temperatureDelta, baselines.temperature, stds.temperature),
+    temperature: zScore(metrics.temperatureDeviation, baselines.temperature, stds.temperature),
     restlessness: zScore(metrics.restlessPeriods, baselines.restlessness, stds.restlessness),
-    efficiency: metrics.efficiency > 0 ? zScore(metrics.efficiency, baselines.efficiency, stds.efficiency) : 0,
-    deepPct: metrics.deepPct > 0 ? zScore(metrics.deepPct, baselines.deepPct, stds.deepPct) : 0,
-    remPct: metrics.remPct > 0 ? zScore(metrics.remPct, baselines.remPct, stds.remPct) : 0,
-    withinNightHrvCV: metrics.withinNightHrvCV > 0 ? zScore(metrics.withinNightHrvCV, baselines.withinNightHrvCV, stds.withinNightHrvCV) : 0,
-    withinNightHrCV: metrics.withinNightHrCV > 0 ? zScore(metrics.withinNightHrCV, baselines.withinNightHrCV, stds.withinNightHrCV) : 0,
-    hypnogramFrag: metrics.hypnogramFragmentation > 0 ? zScore(metrics.hypnogramFragmentation, baselines.hypnogramFrag, stds.hypnogramFrag) : 0,
-    steps: metrics.steps > 0 ? zScore(metrics.steps, baselines.steps, stds.steps) : 0,
-    activeMinutes: metrics.activeMinutes > 0 ? zScore(metrics.activeMinutes, baselines.activeMinutes, stds.activeMinutes) : 0,
-    circadianIV: metrics.circadianIV > 0 ? zScore(metrics.circadianIV, baselines.circadianIV, stds.circadianIV) : 0,
-    circadianIS: metrics.circadianIS > 0 ? zScore(metrics.circadianIS, baselines.circadianIS, stds.circadianIS) : 0,
+    efficiency: zScore(metrics.efficiency, baselines.efficiency, stds.efficiency),
+    deepPct: zScore(metrics.deepPct, baselines.deepPct, stds.deepPct),
+    remPct: zScore(metrics.remPct, baselines.remPct, stds.remPct),
+    withinNightHrvCV: zScore(metrics.withinNightHrvCV, baselines.withinNightHrvCV, stds.withinNightHrvCV),
+    withinNightHrCV: zScore(metrics.withinNightHrCV, baselines.withinNightHrCV, stds.withinNightHrCV),
+    hypnogramFrag: zScore(metrics.hypnogramFragmentation, baselines.hypnogramFrag, stds.hypnogramFrag),
+    steps: zScore(metrics.steps, baselines.steps, stds.steps),
+    activeMinutes: zScore(metrics.activeMinutes, baselines.activeMinutes, stds.activeMinutes),
+    circadianIV: zScore(metrics.circadianIV, baselines.circadianIV, stds.circadianIV),
+    circadianIS: zScore(metrics.circadianIS, baselines.circadianIS, stds.circadianIS),
   };
 
   const moodVals = priorMetrics.filter((m) => m.moodScore != null).map((m) => m.moodScore!);
@@ -337,7 +330,9 @@ export function computeDailyAnalysis(
   );
   zScores.withinNightVar = withinNightVarZ;
 
-  const activityZ = metrics.steps > 0 ? zScores.steps : zScores.activeMinutes;
+  const activityZ = Number.isFinite(metrics.steps)
+    ? zScores.steps
+    : zScores.activeMinutes;
   zScores.activity = activityZ;
 
   const circadianZ = zScores.circadianIV;
@@ -373,24 +368,41 @@ export function computeDailyAnalysis(
   }
 
   const hrvCrash =
-    metrics.avgHrv > 0 &&
-    baselines.hrv > 0 &&
+    Number.isFinite(metrics.avgHrv) &&
+    Number.isFinite(baselines.hrv) &&
     metrics.avgHrv < baselines.hrv * 0.7 &&
     zScores.hr > 1.0;
 
   const abs = config.absoluteThresholds;
   let absoluteBonus = 0;
-  if (metrics.totalSleepMinutes < abs.minSleepMinutes) absoluteBonus += 0.5;
-  if (metrics.avgHeartRate > abs.maxHeartRate) absoluteBonus += 0.5;
-  if (metrics.avgHrv > 0 && metrics.avgHrv < abs.minHrv) absoluteBonus += 0.5;
-  if (metrics.efficiency > 0 && metrics.efficiency < abs.minEfficiency) absoluteBonus += 0.3;
+  if (
+    Number.isFinite(metrics.totalSleepMinutes) &&
+    metrics.totalSleepMinutes < abs.minSleepMinutes
+  ) {
+    absoluteBonus += 0.5;
+  }
+  if (
+    Number.isFinite(metrics.avgHeartRate) &&
+    metrics.avgHeartRate > abs.maxHeartRate
+  ) {
+    absoluteBonus += 0.5;
+  }
+  if (Number.isFinite(metrics.avgHrv) && metrics.avgHrv < abs.minHrv) {
+    absoluteBonus += 0.5;
+  }
+  if (
+    Number.isFinite(metrics.efficiency) &&
+    metrics.efficiency < abs.minEfficiency
+  ) {
+    absoluteBonus += 0.3;
+  }
   compositeScore += absoluteBonus;
 
   const isAnomaly =
     compositeScore > config.dailyAnomalyThreshold ||
     Math.abs(zScores.sleep) > 2.0;
 
-  const direction = isAnomaly ? classifyDirection(zScores, metrics, config, bipolarType) : null;
+  const direction = isAnomaly ? classifyDirection(zScores, metrics, config) : null;
   const notes = isAnomaly
     ? buildNotes(metrics, baselines, zScores, config.dailyAnomalyThreshold)
     : "";
@@ -427,21 +439,69 @@ export async function analyzeDay(targetDay: string, config?: DetectionConfigValu
   const metrics = extractMetrics(todaySleep[0]);
   if (!metrics) return null;
 
-  const priorSleep = await db
-    .select()
-    .from(sleepPeriods)
-    .where(
-      and(
-        lt(sleepPeriods.day, targetDay),
-        sql`${sleepPeriods.type} = 'long_sleep'`
+  const [todayReadiness, priorSleep] = await Promise.all([
+    db
+      .select({
+        temperatureDeviation: dailyReadiness.temperatureDeviation,
+        temperatureTrendDeviation: dailyReadiness.temperatureTrendDeviation,
+        score: dailyReadiness.score,
+      })
+      .from(dailyReadiness)
+      .where(eq(dailyReadiness.day, targetDay))
+      .limit(1),
+    db
+      .select()
+      .from(sleepPeriods)
+      .where(
+        and(
+          lt(sleepPeriods.day, targetDay),
+          sql`${sleepPeriods.type} = 'long_sleep'`
+        )
       )
-    )
-    .orderBy(desc(sleepPeriods.day))
-    .limit(cfg.baselineDays);
+      .orderBy(desc(sleepPeriods.day))
+      .limit(cfg.baselineDays),
+  ]);
+
+  const readiness = todayReadiness[0];
+  if (readiness) {
+    metrics.readinessScore = readiness.score ?? Number.NaN;
+    metrics.temperatureDeviation =
+      readiness.temperatureDeviation ?? Number.NaN;
+    metrics.temperatureDelta = metrics.temperatureDeviation;
+    metrics.temperatureTrendDeviation =
+      readiness.temperatureTrendDeviation ?? Number.NaN;
+  }
 
   const priorMetrics = priorSleep
     .map(extractMetrics)
     .filter((m): m is DayMetrics => m !== null);
+
+  const priorDays = priorMetrics.map((metric) => metric.day);
+  if (priorDays.length > 0) {
+    const priorReadiness = await db
+      .select({
+        day: dailyReadiness.day,
+        temperatureDeviation: dailyReadiness.temperatureDeviation,
+        temperatureTrendDeviation: dailyReadiness.temperatureTrendDeviation,
+        score: dailyReadiness.score,
+      })
+      .from(dailyReadiness)
+      .where(inArray(dailyReadiness.day, priorDays));
+    const readinessByDay = new Map(
+      priorReadiness.map((row) => [row.day, row])
+    );
+    for (const priorMetric of priorMetrics) {
+      const priorDayReadiness = readinessByDay.get(priorMetric.day);
+      if (!priorDayReadiness) continue;
+      priorMetric.readinessScore =
+        priorDayReadiness.score ?? Number.NaN;
+      priorMetric.temperatureDeviation =
+        priorDayReadiness.temperatureDeviation ?? Number.NaN;
+      priorMetric.temperatureDelta = priorMetric.temperatureDeviation;
+      priorMetric.temperatureTrendDeviation =
+        priorDayReadiness.temperatureTrendDeviation ?? Number.NaN;
+    }
+  }
 
   const result = computeDailyAnalysis(metrics, priorMetrics, cfg);
   if (!result) return null;
@@ -466,66 +526,66 @@ export async function upsertDailyAnalysis(result: DailyAnalysisResult) {
     .values({
       day: result.day,
       totalSleepMinutes: metrics.totalSleepMinutes,
-      baselineSleepMinutes: baselines.sleep,
-      sleepDurationZScore: zScores.sleep,
-      bedtimeStartMinutes: metrics.bedtimeMinutes,
-      baselineBedtimeMinutes: baselines.bedtime,
-      bedtimeZScore: zScores.bedtime,
-      wakeTimeMinutes: metrics.wakeTimeMinutes,
-      baselineWakeMinutes: baselines.wake,
-      wakeTimeZScore: zScores.wake,
-      remPercentage: metrics.remPct,
-      deepPercentage: metrics.deepPct,
-      efficiency: metrics.efficiency,
-      avgHrv: metrics.avgHrv,
-      baselineHrv: baselines.hrv,
-      hrvZScore: zScores.hrv,
-      avgHeartRate: metrics.avgHeartRate,
-      baselineHeartRate: baselines.hr,
-      heartRateZScore: zScores.hr,
-      temperatureDelta: metrics.temperatureDelta,
-      onsetLatencyMinutes: metrics.onsetLatencyMinutes,
-      baselineLatency: baselines.latency,
-      latencyZScore: zScores.latency,
-      temperatureZScore: zScores.temperature,
-      baselineTemperature: baselines.temperature,
-      restlessnessZScore: zScores.restlessness,
-      baselineRestlessness: baselines.restlessness,
-      efficiencyZScore: zScores.efficiency,
-      baselineEfficiency: baselines.efficiency,
-      deepPctZScore: zScores.deepPct,
-      baselineDeepPct: baselines.deepPct,
-      remPctZScore: zScores.remPct,
-      baselineRemPct: baselines.remPct,
-      restlessPeriods: metrics.restlessPeriods,
+      baselineSleepMinutes: finiteOrNull(baselines.sleep),
+      sleepDurationZScore: finiteOrNull(zScores.sleep),
+      bedtimeStartMinutes: finiteOrNull(metrics.bedtimeMinutes),
+      baselineBedtimeMinutes: finiteOrNull(baselines.bedtime),
+      bedtimeZScore: finiteOrNull(zScores.bedtime),
+      wakeTimeMinutes: finiteOrNull(metrics.wakeTimeMinutes),
+      baselineWakeMinutes: finiteOrNull(baselines.wake),
+      wakeTimeZScore: finiteOrNull(zScores.wake),
+      remPercentage: finiteOrNull(metrics.remPct),
+      deepPercentage: finiteOrNull(metrics.deepPct),
+      efficiency: finiteOrNull(metrics.efficiency),
+      avgHrv: finiteOrNull(metrics.avgHrv),
+      baselineHrv: finiteOrNull(baselines.hrv),
+      hrvZScore: finiteOrNull(zScores.hrv),
+      avgHeartRate: finiteOrNull(metrics.avgHeartRate),
+      baselineHeartRate: finiteOrNull(baselines.hr),
+      heartRateZScore: finiteOrNull(zScores.hr),
+      temperatureDelta: finiteOrNull(metrics.temperatureDeviation),
+      onsetLatencyMinutes: finiteOrNull(metrics.onsetLatencyMinutes),
+      baselineLatency: finiteOrNull(baselines.latency),
+      latencyZScore: finiteOrNull(zScores.latency),
+      temperatureZScore: finiteOrNull(zScores.temperature),
+      baselineTemperature: finiteOrNull(baselines.temperature),
+      restlessnessZScore: finiteOrNull(zScores.restlessness),
+      baselineRestlessness: finiteOrNull(baselines.restlessness),
+      efficiencyZScore: finiteOrNull(zScores.efficiency),
+      baselineEfficiency: finiteOrNull(baselines.efficiency),
+      deepPctZScore: finiteOrNull(zScores.deepPct),
+      baselineDeepPct: finiteOrNull(baselines.deepPct),
+      remPctZScore: finiteOrNull(zScores.remPct),
+      baselineRemPct: finiteOrNull(baselines.remPct),
+      restlessPeriods: finiteOrNull(metrics.restlessPeriods),
       anomalyScore: compositeScore,
       isAnomaly: isAnomaly ? 1 : 0,
       anomalyDirection: direction,
       anomalyNotes: notes || null,
-      withinNightHrvCV: metrics.withinNightHrvCV ?? null,
-      withinNightHrCV: metrics.withinNightHrCV ?? null,
-      sleepStageTransitions: metrics.sleepStageTransitions ?? null,
-      hypnogramFragmentation: metrics.hypnogramFragmentation ?? null,
-      lowestHeartRate: metrics.lowestHeartRate ?? null,
-      averageBreath: metrics.averageBreath ?? null,
+      withinNightHrvCV: finiteOrNull(metrics.withinNightHrvCV),
+      withinNightHrCV: finiteOrNull(metrics.withinNightHrCV),
+      sleepStageTransitions: finiteOrNull(metrics.sleepStageTransitions),
+      hypnogramFragmentation: finiteOrNull(metrics.hypnogramFragmentation),
+      lowestHeartRate: finiteOrNull(metrics.lowestHeartRate),
+      averageBreath: finiteOrNull(metrics.averageBreath),
       activityScore: null,
-      steps: metrics.steps ?? null,
-      activeMinutes: metrics.activeMinutes ?? null,
+      steps: finiteOrNull(metrics.steps),
+      activeMinutes: finiteOrNull(metrics.activeMinutes),
       sedentaryMinutes: null,
-      activityClassFragmentation: metrics.activityClassFragmentation ?? null,
-      stressHigh: metrics.stressHigh ?? null,
-      recoveryHigh: metrics.recoveryHigh ?? null,
+      activityClassFragmentation: finiteOrNull(metrics.activityClassFragmentation),
+      stressHigh: finiteOrNull(metrics.stressHigh),
+      recoveryHigh: finiteOrNull(metrics.recoveryHigh),
       resilienceLevel: metrics.resilienceLevel,
-      sleepTimingScore: metrics.sleepTimingScore ?? null,
-      readinessScore: metrics.readinessScore ?? null,
-      temperatureDeviation: metrics.temperatureDeviation ?? null,
-      temperatureTrendDeviation: metrics.temperatureTrendDeviation ?? null,
-      dayToDaySleepCV: metrics.dayToDaySleepCV ?? null,
-      dayToDayBedtimeCV: metrics.dayToDayBedtimeCV ?? null,
-      dayToDayWakeCV: metrics.dayToDayWakeCV ?? null,
-      circadianIS: metrics.circadianIS ?? null,
-      circadianIV: metrics.circadianIV ?? null,
-      circadianRA: metrics.circadianRA ?? null,
+      sleepTimingScore: finiteOrNull(metrics.sleepTimingScore),
+      readinessScore: finiteOrNull(metrics.readinessScore),
+      temperatureDeviation: finiteOrNull(metrics.temperatureDeviation),
+      temperatureTrendDeviation: finiteOrNull(metrics.temperatureTrendDeviation),
+      dayToDaySleepCV: finiteOrNull(metrics.dayToDaySleepCV),
+      dayToDayBedtimeCV: finiteOrNull(metrics.dayToDayBedtimeCV),
+      dayToDayWakeCV: finiteOrNull(metrics.dayToDayWakeCV),
+      circadianIS: finiteOrNull(metrics.circadianIS),
+      circadianIV: finiteOrNull(metrics.circadianIV),
+      circadianRA: finiteOrNull(metrics.circadianRA),
       averageSpo2: metrics.averageSpo2 ?? null,
       breathingDisturbanceIndex: metrics.breathingDisturbanceIndex ?? null,
       moodScore: metrics.moodScore ?? null,

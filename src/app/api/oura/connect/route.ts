@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isSensitiveUser } from "@/lib/auth";
 import { getOuraAuthUrl } from "@/lib/oura/oauth";
 import { randomBytes } from "crypto";
 
@@ -7,6 +7,11 @@ export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.redirect(new URL("/login", request.url));
+  }
+  if (!isSensitiveUser(session.user.email)) {
+    return NextResponse.redirect(
+      new URL("/dashboard/settings?error=forbidden", request.url)
+    );
   }
 
   const state = randomBytes(16).toString("hex");

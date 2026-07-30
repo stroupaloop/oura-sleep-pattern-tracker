@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { notificationSettings } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
+import { requireApiUser, unauthorizedResponse } from "@/lib/api-auth";
 
 export async function GET() {
+  const user = await requireApiUser();
+  if (!user) return unauthorizedResponse();
+
   try {
     const rows = await db.select().from(notificationSettings);
     return NextResponse.json(rows);
@@ -16,6 +20,9 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const user = await requireApiUser();
+  if (!user) return unauthorizedResponse();
+
   try {
     const body = await req.json();
     const { type, destination, reminderHour } = body;
@@ -42,6 +49,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PUT(req: NextRequest) {
+  const user = await requireApiUser();
+  if (!user) return unauthorizedResponse();
+
   try {
     const body = await req.json();
     const { id, enabled, reminderHour } = body;
@@ -73,6 +83,9 @@ export async function PUT(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  const user = await requireApiUser();
+  if (!user) return unauthorizedResponse();
+
   try {
     const { searchParams } = new URL(req.url);
     const id = searchParams.get("id");

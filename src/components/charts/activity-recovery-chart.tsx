@@ -31,7 +31,7 @@ interface ActivityPoint {
   recoveryHigh: number | null;
   resilienceLevel: string | null;
   workoutCount?: number;
-  workoutCalories?: number;
+  workoutCalories?: number | null;
   workoutTypes?: string[];
 }
 
@@ -66,7 +66,17 @@ function ActivityTooltipContent({ active, payload }: { active?: boolean; payload
       {p.resilienceLevel && <p className="text-muted-foreground">Resilience: {p.resilienceLevel}</p>}
       {(p.workoutCount ?? 0) > 0 && (
         <>
-          <p style={{ color: "#fb923c" }}>Workouts: {p.workoutCount} ({p.workoutCalories?.toFixed(0) ?? 0} cal)</p>
+          <p style={{ color: "#fb923c" }}>
+            Workouts: {p.workoutCount}
+            {p.workoutCalories != null
+              ? ` (${p.workoutCalories.toFixed(0)} cal)`
+              : ""}
+          </p>
+          {p.workoutCalories == null && (
+            <p className="text-muted-foreground text-xs">
+              Calories unavailable
+            </p>
+          )}
           {p.workoutTypes && p.workoutTypes.length > 0 && (
             <p className="text-muted-foreground text-xs">{p.workoutTypes.join(", ")}</p>
           )}
@@ -109,9 +119,9 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
         <CardContent>
           <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
             <span className="font-medium text-blue-300">What to watch for:</span>{" "}
-            Sudden drops in daily steps and active minutes can signal the onset of a depressive episode (detected up
-            to 7 days ahead). Conversely, unusually high activity with reduced recovery may accompany hypomania. Watch
-            the stress-to-recovery ratio — sustained high stress with low recovery is a red flag.
+            Compare sustained activity changes with your personal baseline. Research has linked specialized
+            step-variability signals with later depressive symptoms, but a simple drop in steps or active minutes is
+            not a validated episode predictor. Oura stress reflects physiological load, not necessarily emotional stress.
           </div>
           <ResponsiveContainer width="100%" height={240}>
             <ComposedChart data={data}>
@@ -153,7 +163,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                 strokeWidth={2}
                 dot={false}
                 name="Active Min"
-                connectNulls
+                connectNulls={false}
               />
               {data.map((d, i) =>
                 (d.workoutCount ?? 0) > 0 ? (
@@ -205,7 +215,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                 fill="#f87171"
                 fillOpacity={0.4}
                 name="Stress"
-                connectNulls
+                connectNulls={false}
               />
               <Area
                 type="monotone"
@@ -215,7 +225,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                 fill="#a78bfa"
                 fillOpacity={0.4}
                 name="Recovery"
-                connectNulls
+                connectNulls={false}
               />
             </AreaChart>
           </ResponsiveContainer>

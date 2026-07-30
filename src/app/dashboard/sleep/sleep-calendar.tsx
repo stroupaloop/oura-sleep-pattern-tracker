@@ -8,23 +8,21 @@ import {
   eachDayOfInterval,
   subWeeks,
   format,
-  isSameDay,
   isAfter,
-  isToday,
 } from "date-fns";
 import { Card, CardContent } from "@/components/ui/card";
 import { NightCardContent, type NightData, type AnalysisData } from "./night-card";
 
 function getScoreColor(score: number): string {
   if (score < 60) return "#ef4444";
-  if (score < 75) return "#f59e0b";
+  if (score < 70) return "#f59e0b";
   if (score < 85) return "#22c55e";
   return "#4ade80";
 }
 
 function getScoreBg(score: number): string {
   if (score < 60) return "bg-red-500/10";
-  if (score < 75) return "bg-amber-500/10";
+  if (score < 70) return "bg-amber-500/10";
   if (score < 85) return "bg-green-500/10";
   return "bg-emerald-500/10";
 }
@@ -82,16 +80,25 @@ export function SleepCalendar({ nights, scores, analyses }: SleepCalendarProps) 
               const analysis = analyses[key];
               const isFuture = isAfter(day, today);
               const isSelected = selectedDay === key;
-              const isTodayCell = isToday(day);
+              const isTodayCell = key === format(today, "yyyy-MM-dd");
               const hasData = !!night;
 
-              const total = night?.totalSleepDuration ?? 0;
-              const deep = night?.deepSleepDuration ?? 0;
-              const rem = night?.remSleepDuration ?? 0;
-              const light = night?.lightSleepDuration ?? 0;
-              const deepPct = total > 0 ? (deep / total) * 100 : 0;
-              const remPct = total > 0 ? (rem / total) * 100 : 0;
-              const lightPct = total > 0 ? (light / total) * 100 : 0;
+              const total = night?.totalSleepDuration ?? null;
+              const deep = night?.deepSleepDuration ?? null;
+              const rem = night?.remSleepDuration ?? null;
+              const light = night?.lightSleepDuration ?? null;
+              const hasStageComposition =
+                total != null &&
+                total > 0 &&
+                deep != null &&
+                rem != null &&
+                light != null;
+              const deepPct =
+                hasStageComposition ? (deep / total) * 100 : null;
+              const remPct =
+                hasStageComposition ? (rem / total) * 100 : null;
+              const lightPct =
+                hasStageComposition ? (light / total) * 100 : null;
 
               return (
                 <button
@@ -135,19 +142,19 @@ export function SleepCalendar({ nights, scores, analyses }: SleepCalendarProps) 
                     />
                   )}
 
-                  {hasData && total > 0 && (
+                  {hasData && hasStageComposition && (
                     <div className="hidden md:flex w-full h-[3px] rounded-full overflow-hidden mt-auto">
                       <div
                         className="bg-indigo-500"
-                        style={{ width: `${deepPct}%` }}
+                        style={{ width: `${deepPct!}%` }}
                       />
                       <div
                         className="bg-cyan-400"
-                        style={{ width: `${remPct}%` }}
+                        style={{ width: `${remPct!}%` }}
                       />
                       <div
                         className="bg-slate-400"
-                        style={{ width: `${lightPct}%` }}
+                        style={{ width: `${lightPct!}%` }}
                       />
                     </div>
                   )}
@@ -175,7 +182,6 @@ export function SleepCalendar({ nights, scores, analyses }: SleepCalendarProps) 
               </div>
               <NightCardContent
                 night={selectedNight}
-                score={selectedScore}
                 analysis={selectedAnalysis}
               />
             </>

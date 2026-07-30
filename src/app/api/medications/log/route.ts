@@ -1,36 +1,72 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { medicationLogs } from "@/lib/db/schema";
+import { medicationLogs, medications } from "@/lib/db/schema";
 import { gte, lte, and, eq, isNull } from "drizzle-orm";
 import { sql } from "drizzle-orm";
-
-const VALID_SLOTS = ["morning", "afternoon", "evening", "night"] as const;
-type Slot = (typeof VALID_SLOTS)[number];
-
-function isValidSlot(s: unknown): s is Slot {
-  return typeof s === "string" && (VALID_SLOTS as readonly string[]).includes(s);
-}
+import { requireApiUser, unauthorizedResponse } from "@/lib/api-auth";
+import {
+  parseMedicationLogRange,
+  parseMedicationLogWrite,
+} from "@/lib/medication-log";
+import { slotsForMedication } from "@/lib/medication-schedule";
+import { getTodayET } from "@/lib/date-utils";
 
 export async function POST(req: NextRequest) {
-  try {
-    const body = await req.json();
-    const { medicationId, day, taken, slot } = body;
+  const user = await requireApiUser();
+  if (!user) return unauthorizedResponse();
 
-    if (!medicationId || !day || taken === undefined) {
+  try {
+    const parsed = parseMedicationLogWrite(await req.json());
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const { medicationId, day, taken, slot } = parsed;
+    if (day > getTodayET()) {
       return NextResponse.json(
-        { error: "medicationId, day, and taken are required" },
+        { error: "Future medication logs are not allowed" },
         { status: 400 }
       );
     }
 
-    let normalizedSlot: Slot | null;
-    if (slot === null || slot === undefined) {
-      normalizedSlot = null;
-    } else if (isValidSlot(slot)) {
-      normalizedSlot = slot;
-    } else {
+    const [medication] = await db
+      .select({
+        id: medications.id,
+        frequency: medications.frequency,
+        doseSchedule: medications.doseSchedule,
+        startDate: medications.startDate,
+        endDate: medications.endDate,
+      })
+      .from(medications)
+      .where(eq(medications.id, medicationId))
+      .limit(1);
+    if (!medication) {
       return NextResponse.json(
-        { error: `slot must be one of: ${VALID_SLOTS.join(", ")} or null` },
+        { error: "Medication not found" },
+        { status: 404 }
+      );
+    }
+
+    if (
+      (medication.startDate && day < medication.startDate) ||
+      (medication.endDate && day > medication.endDate)
+    ) {
+      return NextResponse.json(
+        { error: "day is outside this medication's tracking period" },
+        { status: 400 }
+      );
+    }
+
+    const scheduledSlots = slotsForMedication(medication);
+    if (medication.frequency === "as_needed") {
+      if (slot !== null) {
+        return NextResponse.json(
+          { error: "As-needed medication logs must use a null slot" },
+          { status: 400 }
+        );
+      }
+    } else if (slot === null || !scheduledSlots.includes(slot)) {
+      return NextResponse.json(
+        { error: "slot does not match this medication's schedule" },
         { status: 400 }
       );
     }
@@ -38,9 +74,7 @@ export async function POST(req: NextRequest) {
     const now = Math.floor(Date.now() / 1000);
     const takenInt = taken ? 1 : 0;
 
-    if (normalizedSlot === null) {
-      // As-needed entries can't use ON CONFLICT (no unique constraint covers NULL slot).
-      // Update existing same-day null-slot row if present, otherwise insert.
+    if (slot === null) {
       const existing = await db
         .select({ id: medicationLogs.id })
         .from(medicationLogs)
@@ -73,7 +107,7 @@ export async function POST(req: NextRequest) {
         .values({
           medicationId,
           day,
-          slot: normalizedSlot,
+          slot,
           taken: takenInt,
           createdAt: now,
         })
@@ -96,10 +130,19 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const user = await requireApiUser();
+  if (!user) return unauthorizedResponse();
+
   try {
     const { searchParams } = new URL(req.url);
-    const startDate = searchParams.get("start");
-    const endDate = searchParams.get("end");
+    const parsed = parseMedicationLogRange(
+      searchParams.get("start"),
+      searchParams.get("end")
+    );
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
+    }
+    const { start: startDate, end: endDate } = parsed;
 
     const conditions = [];
     if (startDate) conditions.push(gte(medicationLogs.day, startDate));
@@ -111,15 +154,7 @@ export async function GET(req: NextRequest) {
       .where(conditions.length > 0 ? and(...conditions) : undefined)
       .orderBy(medicationLogs.day);
 
-    if (rows.length === 0) {
-      return NextResponse.json({ adherence: null, logs: [] });
-    }
-
-    const total = rows.length;
-    const taken = rows.filter((r) => r.taken === 1).length;
-    const adherence = total > 0 ? taken / total : null;
-
-    return NextResponse.json({ adherence, logs: rows });
+    return NextResponse.json({ logs: rows });
   } catch (error) {
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "Unknown error" },

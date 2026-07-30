@@ -66,20 +66,19 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
             </CardDescription>
           </div>
           <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-medium">
-            Strongest Predictor
+            Exploratory Signal
           </span>
         </div>
       </CardHeader>
       <CardContent>
         <div className="rounded-md bg-amber-500/5 border border-amber-500/20 px-3 py-2 mb-4 text-xs text-amber-200/80">
-          Within-night sleep variability detected hypomanic episodes ~3 days before onset with 94% sensitivity
-          (Luykx et al., 2025)
+          One Oura study found a study-specific sleep-stage variability signal before some hypomanic episodes.
+          This chart&apos;s HR/HRV variability measures are exploratory and are not the same validated method.
         </div>
         <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
           <span className="font-medium text-blue-300">What to watch for:</span>{" "}
-          Spikes in HRV CV or HR CV mean your heart rate was unusually erratic during sleep — research links this to
-          hypomanic episodes ~3 days before onset. Rising fragmentation means more frequent sleep stage transitions
-          (restless sleep). Watch for 2–3 consecutive days of elevated values rather than single-night spikes.
+          Spikes show more variation than usual within the night. Rising fragmentation means more frequent sleep-stage
+          transitions. Compare sustained changes with your own baseline rather than treating a single spike as an episode signal.
         </div>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={data}>
@@ -105,7 +104,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
               strokeWidth={2}
               dot={false}
               name="HRV CV"
-              connectNulls
+              connectNulls={false}
             />
             <Line
               type="monotone"
@@ -114,7 +113,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
               strokeWidth={2}
               dot={false}
               name="HR CV"
-              connectNulls
+              connectNulls={false}
             />
             <Line
               type="monotone"
@@ -124,7 +123,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
               strokeDasharray="4 3"
               dot={false}
               name="Fragmentation"
-              connectNulls
+              connectNulls={false}
             />
           </LineChart>
         </ResponsiveContainer>

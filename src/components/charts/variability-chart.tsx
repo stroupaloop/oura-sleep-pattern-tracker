@@ -42,10 +42,14 @@ function VariabilityTooltipContent({ active, payload }: { active?: boolean; payl
         <p style={{ color: "#3b82f6" }}>Sleep Duration CV: {(p.sleepCV * 100).toFixed(1)}%</p>
       )}
       {p.bedtimeCV != null && (
-        <p style={{ color: "#f59e0b" }}>Bedtime CV: {(p.bedtimeCV * 100).toFixed(1)}%</p>
+        <p style={{ color: "#f59e0b" }}>
+          Bedtime variation index: {(p.bedtimeCV * 100).toFixed(1)}
+        </p>
       )}
       {p.wakeCV != null && (
-        <p style={{ color: "#34d399" }}>Wake Time CV: {(p.wakeCV * 100).toFixed(1)}%</p>
+        <p style={{ color: "#34d399" }}>
+          Wake-time variation index: {(p.wakeCV * 100).toFixed(1)}
+        </p>
       )}
     </div>
   );
@@ -60,15 +64,15 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
           <ResearchTooltip metric="sleepDuration" />
         </CardTitle>
         <CardDescription>
-          Coefficient of variation for sleep duration, bedtime, and wake time (7-day rolling window)
+          Sleep-duration CV and circular clock-time variation (7-day rolling window)
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
           <span className="font-medium text-blue-300">What to watch for:</span>{" "}
-          Rising CV values mean your sleep schedule is becoming more irregular. Bedtime CV is especially important —
-          erratic bedtimes disrupt circadian rhythm and are an early warning sign. Activity variability predicts
-          depressive episodes up to 7 days before onset. Stable, low CV values generally indicate euthymia.
+          Rising values mean the measured schedule is becoming more variable.
+          Compare sustained changes with your own baseline; these rolling
+          metrics do not determine mood state or predict an episode on their own.
         </div>
         <ResponsiveContainer width="100%" height={280}>
           <LineChart data={data}>
@@ -83,7 +87,7 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
             <YAxis
               fontSize={11}
               tick={{ fill: "oklch(0.708 0 0)" }}
-              tickFormatter={(v) => `${(v * 100).toFixed(0)}%`}
+              tickFormatter={(v) => `${(v * 100).toFixed(0)}`}
             />
             <Tooltip content={<VariabilityTooltipContent />} />
             <Legend />
@@ -94,7 +98,7 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
               strokeWidth={2}
               dot={false}
               name="Sleep Duration CV"
-              connectNulls
+              connectNulls={false}
             />
             <Line
               type="monotone"
@@ -102,8 +106,8 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
               stroke="#f59e0b"
               strokeWidth={2}
               dot={false}
-              name="Bedtime CV"
-              connectNulls
+              name="Bedtime variation"
+              connectNulls={false}
             />
             <Line
               type="monotone"
@@ -111,8 +115,8 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
               stroke="#34d399"
               strokeWidth={2}
               dot={false}
-              name="Wake Time CV"
-              connectNulls
+              name="Wake-time variation"
+              connectNulls={false}
             />
           </LineChart>
         </ResponsiveContainer>

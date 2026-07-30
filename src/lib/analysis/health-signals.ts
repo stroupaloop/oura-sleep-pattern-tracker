@@ -7,44 +7,177 @@ import {
   cyclePredictions,
   healthSignals,
 } from "@/lib/db/schema";
-import { gte, desc, and, isNotNull, eq } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { gte, desc, and, isNotNull, eq, lt } from "drizzle-orm";
 import { format, subDays, differenceInDays, parseISO } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
+import { isNextCalendarDay } from "./baseline";
+
+type SignalType =
+  | "sustained_temperature"
+  | "acute_illness"
+  | "thermal_shift_timing";
 
 interface HealthSignal {
   day: string;
-  signalType: "early_pregnancy" | "acute_illness" | "cycle_irregularity";
+  signalType: SignalType;
   status: "detected" | "resolved";
-  confidence: number;
+  evidenceStrength: number;
   indicators: string[];
   summary: string;
   details: string;
 }
 
-export async function runHealthSignalDetection(): Promise<{ signals: number }> {
+interface DatedValue {
+  day: string;
+  value: number;
+}
+
+function orderedUnique<T extends { day: string }>(rows: T[]): T[] {
+  const byDay = new Map(rows.map((row) => [row.day, row]));
+  return [...byDay.values()].sort((a, b) => a.day.localeCompare(b.day));
+}
+
+export function latestConsecutiveValues(
+  rows: DatedValue[],
+  maximumDays: number
+): DatedValue[] {
+  const ordered = orderedUnique(rows);
+  if (ordered.length === 0) return [];
+
+  const result = [ordered[ordered.length - 1]];
+  for (
+    let index = ordered.length - 2;
+    index >= 0 && result.length < maximumDays;
+    index--
+  ) {
+    if (!isNextCalendarDay(ordered[index].day, result[0].day)) break;
+    result.unshift(ordered[index]);
+  }
+  return result;
+}
+
+export function longestConsecutiveMatchingRun(
+  rows: DatedValue[],
+  predicate: (value: number) => boolean
+): number {
+  const ordered = orderedUnique(rows);
+  let longest = 0;
+  let current = 0;
+  let previousDay: string | null = null;
+
+  for (const row of ordered) {
+    const isConsecutive =
+      previousDay == null || isNextCalendarDay(previousDay, row.day);
+    current = isConsecutive && predicate(row.value) ? current + 1 : predicate(row.value) ? 1 : 0;
+    longest = Math.max(longest, current);
+    previousDay = row.day;
+  }
+  return longest;
+}
+
+export function latestConsecutiveMatchingRun(
+  rows: DatedValue[],
+  predicate: (value: number) => boolean
+): number {
+  const ordered = orderedUnique(rows);
+  let run = 0;
+  let nextDay: string | null = null;
+
+  for (let index = ordered.length - 1; index >= 0; index--) {
+    const row = ordered[index];
+    if (!predicate(row.value)) break;
+    if (nextDay != null && !isNextCalendarDay(row.day, nextDay)) break;
+    run++;
+    nextDay = row.day;
+  }
+
+  return run;
+}
+
+export function isRecentMeasurementDay(
+  measurementDay: string,
+  today: string
+): boolean {
+  return (
+    measurementDay === today || isNextCalendarDay(measurementDay, today)
+  );
+}
+
+export function isWithinRecentCalendarDays(
+  measurementDay: string,
+  today: string,
+  maximumAgeDays: number
+): boolean {
+  const age = differenceInDays(parseISO(today), parseISO(measurementDay));
+  return age >= 0 && age <= maximumAgeDays;
+}
+
+function resolvedSummary(signalType: string): string {
+  if (
+    signalType === "early_pregnancy" ||
+    signalType === "sustained_temperature"
+  ) {
+    return "The previously observed sustained temperature pattern is not present in the latest eligible data.";
+  }
+  if (signalType === "acute_illness") {
+    return "The previously observed physiological strain pattern is not present in the latest eligible data.";
+  }
+  return "The previously observed cycle-variation pattern is not present in the latest eligible data.";
+}
+
+export async function runHealthSignalDetection(): Promise<{
+  signals: number;
+  resolved: number;
+}> {
   const todayStr = getTodayET();
-  const todayDate = new Date(todayStr + "T12:00:00");
+  const todayDate = new Date(`${todayStr}T12:00:00`);
   const now = Math.floor(Date.now() / 1000);
 
-  const signals: HealthSignal[] = [];
+  const detectedSignals = (
+    await Promise.all([
+      detectSustainedTemperaturePattern(todayStr, todayDate),
+      detectAcuteIllness(todayStr, todayDate),
+      detectThermalShiftTimingChange(todayStr),
+    ])
+  ).flat();
 
-  const [pregnancySignals, illnessSignals, cycleSignals] = await Promise.all([
-    detectEarlyPregnancy(todayStr, todayDate),
-    detectAcuteIllness(todayStr, todayDate),
-    detectCycleIrregularity(todayStr, todayDate),
-  ]);
+  const currentKeys = new Set(
+    detectedSignals.map((signal) => `${signal.day}:${signal.signalType}`)
+  );
+  const activeRows = await db
+    .select({
+      id: healthSignals.id,
+      day: healthSignals.day,
+      signalType: healthSignals.signalType,
+    })
+    .from(healthSignals)
+    .where(eq(healthSignals.status, "detected"));
 
-  signals.push(...pregnancySignals, ...illnessSignals, ...cycleSignals);
+  let resolved = 0;
+  for (const activeRow of activeRows) {
+    if (currentKeys.has(`${activeRow.day}:${activeRow.signalType}`)) continue;
+    await db
+      .update(healthSignals)
+      .set({
+        status: "resolved",
+        confidence: 0,
+        indicators: "[]",
+        summary: resolvedSummary(activeRow.signalType),
+        details: `Resolved on ${todayStr} after reevaluating current eligible data.`,
+        updatedAt: now,
+      })
+      .where(eq(healthSignals.id, activeRow.id));
+    resolved++;
+  }
 
-  for (const signal of signals) {
+  for (const signal of detectedSignals) {
     await db
       .insert(healthSignals)
       .values({
         day: signal.day,
         signalType: signal.signalType,
         status: signal.status,
-        confidence: signal.confidence,
+        confidence: signal.evidenceStrength,
         indicators: JSON.stringify(signal.indicators),
         summary: signal.summary,
         details: signal.details,
@@ -55,7 +188,7 @@ export async function runHealthSignalDetection(): Promise<{ signals: number }> {
         target: [healthSignals.day, healthSignals.signalType],
         set: {
           status: signal.status,
-          confidence: signal.confidence,
+          confidence: signal.evidenceStrength,
           indicators: JSON.stringify(signal.indicators),
           summary: signal.summary,
           details: signal.details,
@@ -64,10 +197,10 @@ export async function runHealthSignalDetection(): Promise<{ signals: number }> {
       });
   }
 
-  return { signals: signals.length };
+  return { signals: detectedSignals.length, resolved };
 }
 
-async function detectEarlyPregnancy(
+async function detectSustainedTemperaturePattern(
   todayStr: string,
   todayDate: Date
 ): Promise<HealthSignal[]> {
@@ -76,324 +209,411 @@ async function detectEarlyPregnancy(
     .from(cyclePredictions)
     .orderBy(desc(cyclePredictions.cycleNumber))
     .limit(3);
+  const latestWithShift = cycles.find(
+    (cycle) =>
+      cycle.ovulationDay != null &&
+      cycle.periodStartDay == null &&
+      cycle.nextPeriodDay == null &&
+      cycle.confidence != null &&
+      cycle.confidence > 0.3
+  );
+  if (!latestWithShift?.ovulationDay) return [];
 
-  if (cycles.length === 0) return [];
+  const shiftDate = parseISO(latestWithShift.ovulationDay);
+  const daysSinceShift = differenceInDays(todayDate, shiftDate);
+  if (daysSinceShift < 10 || daysSinceShift > 30) return [];
 
-  const latestWithOvulation = cycles.find((c) => c.ovulationDay && c.confidence && c.confidence > 0.3);
-  if (!latestWithOvulation?.ovulationDay) return [];
-
-  const ovDate = parseISO(latestWithOvulation.ovulationDay);
-  const daysSinceOv = differenceInDays(todayDate, ovDate);
-
-  if (daysSinceOv < 7 || daysSinceOv > 50) return [];
-
-  const cutoff = latestWithOvulation.ovulationDay;
-  const [tempData, hrData] = await Promise.all([
-    db
-      .select({
-        day: dailyReadiness.day,
-        tempDev: dailyReadiness.temperatureDeviation,
-      })
-      .from(dailyReadiness)
-      .where(and(gte(dailyReadiness.day, cutoff), isNotNull(dailyReadiness.temperatureDeviation)))
-      .orderBy(dailyReadiness.day),
-    db
-      .select({ day: dailyHeartrate.day, restingBpm: dailyHeartrate.restingBpm })
-      .from(dailyHeartrate)
-      .where(and(gte(dailyHeartrate.day, cutoff), isNotNull(dailyHeartrate.restingBpm)))
-      .orderBy(dailyHeartrate.day),
-  ]);
-
-  if (tempData.length < 7) return [];
-
-  const preOvCutoff = format(subDays(ovDate, 14), "yyyy-MM-dd");
-  const [baselineTemp, baselineHr] = await Promise.all([
-    db
-      .select({ tempDev: dailyReadiness.temperatureDeviation })
-      .from(dailyReadiness)
-      .where(
-        and(
-          gte(dailyReadiness.day, preOvCutoff),
-          isNotNull(dailyReadiness.temperatureDeviation)
+  const postShiftCutoff = latestWithShift.ovulationDay;
+  const preShiftCutoff = format(
+    subDays(shiftDate, 14),
+    "yyyy-MM-dd"
+  );
+  const [postShiftTemps, postShiftHr, baselineTemps, baselineHr] =
+    await Promise.all([
+      db
+        .select({
+          day: dailyReadiness.day,
+          value: dailyReadiness.temperatureDeviation,
+        })
+        .from(dailyReadiness)
+        .where(
+          and(
+            gte(dailyReadiness.day, postShiftCutoff),
+            isNotNull(dailyReadiness.temperatureDeviation)
+          )
         )
-      )
-      .orderBy(dailyReadiness.day),
-    db
-      .select({ restingBpm: dailyHeartrate.restingBpm })
-      .from(dailyHeartrate)
-      .where(and(gte(dailyHeartrate.day, preOvCutoff), isNotNull(dailyHeartrate.restingBpm)))
-      .orderBy(dailyHeartrate.day),
-  ]);
+        .orderBy(dailyReadiness.day),
+      db
+        .select({
+          day: dailyHeartrate.day,
+          value: dailyHeartrate.restingBpm,
+        })
+        .from(dailyHeartrate)
+        .where(
+          and(
+            gte(dailyHeartrate.day, postShiftCutoff),
+            isNotNull(dailyHeartrate.restingBpm)
+          )
+        )
+        .orderBy(dailyHeartrate.day),
+      db
+        .select({
+          day: dailyReadiness.day,
+          value: dailyReadiness.temperatureDeviation,
+        })
+        .from(dailyReadiness)
+        .where(
+          and(
+            gte(dailyReadiness.day, preShiftCutoff),
+            lt(dailyReadiness.day, postShiftCutoff),
+            isNotNull(dailyReadiness.temperatureDeviation)
+          )
+        )
+        .orderBy(dailyReadiness.day),
+      db
+        .select({
+          day: dailyHeartrate.day,
+          value: dailyHeartrate.restingBpm,
+        })
+        .from(dailyHeartrate)
+        .where(
+          and(
+            gte(dailyHeartrate.day, preShiftCutoff),
+            lt(dailyHeartrate.day, postShiftCutoff),
+            isNotNull(dailyHeartrate.restingBpm)
+          )
+        )
+        .orderBy(dailyHeartrate.day),
+    ]);
 
-  const preOvTemps = baselineTemp
-    .map((r) => r.tempDev!)
-    .filter((_, i) => i < 14);
-  const preOvHrs = baselineHr
-    .map((r) => r.restingBpm!)
-    .filter((_, i) => i < 14);
+  const baselineTemperatureRun = latestConsecutiveValues(
+    baselineTemps.filter(
+      (row): row is DatedValue => row.value != null
+    ),
+    14
+  );
+  if (baselineTemperatureRun.length < 7) return [];
 
-  if (preOvTemps.length < 5) return [];
-
-  const baselineTempMean = preOvTemps.reduce((a, b) => a + b, 0) / preOvTemps.length;
-  const baselineHrMean = preOvHrs.length > 0
-    ? preOvHrs.reduce((a, b) => a + b, 0) / preOvHrs.length
-    : null;
-
-  let consecutiveElevatedTemp = 0;
-  let maxConsecutiveTemp = 0;
-  for (const row of tempData) {
-    if (row.tempDev! > baselineTempMean + 0.15) {
-      consecutiveElevatedTemp++;
-      maxConsecutiveTemp = Math.max(maxConsecutiveTemp, consecutiveElevatedTemp);
-    } else {
-      consecutiveElevatedTemp = 0;
-    }
-  }
-
-  let consecutiveElevatedHr = 0;
-  let maxConsecutiveHr = 0;
-  if (baselineHrMean) {
-    for (const row of hrData) {
-      if (row.restingBpm! > baselineHrMean + 3) {
-        consecutiveElevatedHr++;
-        maxConsecutiveHr = Math.max(maxConsecutiveHr, consecutiveElevatedHr);
-      } else {
-        consecutiveElevatedHr = 0;
-      }
-    }
-  }
-
-  const indicators: string[] = [];
-  let confidence = 0;
-
-  if (maxConsecutiveTemp >= 18) {
-    confidence += 0.45;
-    indicators.push(`Temperature elevated ${maxConsecutiveTemp} consecutive days post-ovulation`);
-  } else if (maxConsecutiveTemp >= 14) {
-    confidence += 0.35;
-    indicators.push(`Temperature elevated ${maxConsecutiveTemp} consecutive days post-ovulation`);
-  } else if (maxConsecutiveTemp >= 10) {
-    confidence += 0.15;
-    indicators.push(`Temperature elevated ${maxConsecutiveTemp} consecutive days post-ovulation`);
-  } else {
+  const eligiblePostShiftTemperatures = postShiftTemps.filter(
+    (row): row is DatedValue => row.value != null
+  );
+  const latestTemperatureDay =
+    eligiblePostShiftTemperatures[eligiblePostShiftTemperatures.length - 1]
+      ?.day;
+  if (
+    !latestTemperatureDay ||
+    !isRecentMeasurementDay(latestTemperatureDay, todayStr)
+  ) {
     return [];
   }
 
-  if (maxConsecutiveHr >= 14) {
-    confidence += 0.3;
-    indicators.push(`Resting HR elevated ${maxConsecutiveHr} consecutive days (+${baselineHrMean ? Math.round(hrData[hrData.length - 1]?.restingBpm! - baselineHrMean) : "?"}bpm above baseline)`);
-  } else if (maxConsecutiveHr >= 7) {
-    confidence += 0.15;
-    indicators.push(`Resting HR elevated ${maxConsecutiveHr} consecutive days`);
-  }
+  const baselineTemperature =
+    baselineTemperatureRun.reduce((sum, row) => sum + row.value, 0) /
+    baselineTemperatureRun.length;
+  const consecutiveTemperatureDays = latestConsecutiveMatchingRun(
+    eligiblePostShiftTemperatures,
+    (value) => value > baselineTemperature + 0.15
+  );
+  if (consecutiveTemperatureDays < 10) return [];
 
-  const expectedPeriod = latestWithOvulation.nextPeriodDay;
-  if (expectedPeriod && todayStr > expectedPeriod) {
-    const daysLate = differenceInDays(todayDate, parseISO(expectedPeriod));
-    if (daysLate >= 3) {
-      confidence += 0.2;
-      indicators.push(`Period ${daysLate} days late (expected ${expectedPeriod})`);
+  const indicators = [
+    `Nighttime skin-temperature deviation remained elevated for ${consecutiveTemperatureDays} calendar-consecutive days after a detected thermal shift`,
+  ];
+  let evidenceStrength =
+    consecutiveTemperatureDays >= 18
+      ? 0.55
+      : consecutiveTemperatureDays >= 14
+        ? 0.4
+        : 0.25;
+
+  const baselineHeartRateRun = latestConsecutiveValues(
+    baselineHr.filter((row): row is DatedValue => row.value != null),
+    14
+  );
+  if (baselineHeartRateRun.length >= 7) {
+    const baselineHeartRate =
+      baselineHeartRateRun.reduce((sum, row) => sum + row.value, 0) /
+      baselineHeartRateRun.length;
+    const eligiblePostShiftHeartRate = postShiftHr.filter(
+      (row): row is DatedValue => row.value != null
+    );
+    const latestHeartRateDay =
+      eligiblePostShiftHeartRate[eligiblePostShiftHeartRate.length - 1]?.day;
+    const consecutiveHeartRateDays =
+      latestHeartRateDay === latestTemperatureDay
+        ? latestConsecutiveMatchingRun(
+            eligiblePostShiftHeartRate,
+            (value) => value > baselineHeartRate + 3
+          )
+        : 0;
+    if (consecutiveHeartRateDays >= 7) {
+      evidenceStrength += consecutiveHeartRateDays >= 14 ? 0.15 : 0.08;
+      indicators.push(
+        `Rest-labelled heart-rate estimate was elevated for ${consecutiveHeartRateDays} calendar-consecutive days`
+      );
     }
   }
 
-  confidence = Math.min(confidence, 1);
-
-  if (confidence < 0.2) return [];
-
-  return [{
-    day: todayStr,
-    signalType: "early_pregnancy",
-    status: "detected",
-    confidence,
-    indicators,
-    summary: confidence >= 0.6
-      ? "Sustained post-ovulation temperature and HR elevation — consider taking a pregnancy test"
-      : "Extended luteal phase detected — monitoring for possible pregnancy indicators",
-    details: `${maxConsecutiveTemp} days elevated temp, ${maxConsecutiveHr} days elevated HR, ${daysSinceOv} days post-ovulation`,
-  }];
+  return [
+    {
+      day: latestTemperatureDay,
+      signalType: "sustained_temperature",
+      status: "detected",
+      evidenceStrength: Math.min(evidenceStrength, 1),
+      indicators,
+      summary:
+        "A sustained temperature pattern followed an app-detected thermal shift. This pattern is nonspecific.",
+      details: `${consecutiveTemperatureDays} consecutive elevated temperature-deviation days; ${daysSinceShift} days after the detected thermal shift.`,
+    },
+  ];
 }
 
 async function detectAcuteIllness(
-  todayStr: string,
+  _todayStr: string,
   todayDate: Date
 ): Promise<HealthSignal[]> {
   const baselineCutoff = format(subDays(todayDate, 21), "yyyy-MM-dd");
   const recentCutoff = format(subDays(todayDate, 2), "yyyy-MM-dd");
 
-  const [hrData, tempData, hrvData, spo2Data] = await Promise.all([
+  const [hrData, temperatureData, hrvData, spo2Data] = await Promise.all([
     db
-      .select({ day: dailyHeartrate.day, restingBpm: dailyHeartrate.restingBpm })
+      .select({
+        day: dailyHeartrate.day,
+        value: dailyHeartrate.restingBpm,
+      })
       .from(dailyHeartrate)
-      .where(and(gte(dailyHeartrate.day, baselineCutoff), isNotNull(dailyHeartrate.restingBpm)))
+      .where(
+        and(
+          gte(dailyHeartrate.day, baselineCutoff),
+          isNotNull(dailyHeartrate.restingBpm)
+        )
+      )
       .orderBy(dailyHeartrate.day),
     db
-      .select({ day: dailyReadiness.day, tempDev: dailyReadiness.temperatureDeviation })
+      .select({
+        day: dailyReadiness.day,
+        value: dailyReadiness.temperatureDeviation,
+      })
       .from(dailyReadiness)
-      .where(and(gte(dailyReadiness.day, baselineCutoff), isNotNull(dailyReadiness.temperatureDeviation)))
+      .where(
+        and(
+          gte(dailyReadiness.day, baselineCutoff),
+          isNotNull(dailyReadiness.temperatureDeviation)
+        )
+      )
       .orderBy(dailyReadiness.day),
     db
-      .select({ day: sleepPeriods.day, hrv: sleepPeriods.averageHrv })
+      .select({ day: sleepPeriods.day, value: sleepPeriods.averageHrv })
       .from(sleepPeriods)
-      .where(and(gte(sleepPeriods.day, baselineCutoff), isNotNull(sleepPeriods.averageHrv), eq(sleepPeriods.type, "long_sleep")))
+      .where(
+        and(
+          gte(sleepPeriods.day, baselineCutoff),
+          isNotNull(sleepPeriods.averageHrv),
+          eq(sleepPeriods.type, "long_sleep")
+        )
+      )
       .orderBy(sleepPeriods.day),
     db
-      .select({ day: dailySpo2.day, spo2: dailySpo2.averageSpo2 })
+      .select({ day: dailySpo2.day, value: dailySpo2.averageSpo2 })
       .from(dailySpo2)
-      .where(and(gte(dailySpo2.day, baselineCutoff), isNotNull(dailySpo2.averageSpo2)))
+      .where(
+        and(
+          gte(dailySpo2.day, baselineCutoff),
+          isNotNull(dailySpo2.averageSpo2)
+        )
+      )
       .orderBy(dailySpo2.day),
   ]);
 
-  if (hrData.length < 10) return [];
+  const baselineHeartRate = latestConsecutiveValues(
+    hrData
+      .filter(
+        (row): row is DatedValue =>
+          row.value != null && row.day < recentCutoff
+      ),
+    14
+  );
+  const recentHeartRate = hrData
+    .filter(
+      (row): row is DatedValue =>
+        row.value != null && row.day >= recentCutoff
+    )
+    .sort((a, b) => a.day.localeCompare(b.day));
+  if (baselineHeartRate.length < 7 || recentHeartRate.length === 0) return [];
 
-  const baselineHr = hrData.filter((r) => r.day < recentCutoff);
-  const recentHr = hrData.filter((r) => r.day >= recentCutoff);
-  if (baselineHr.length < 7 || recentHr.length === 0) return [];
+  const latestHeartRate = recentHeartRate[recentHeartRate.length - 1];
+  const heartRateMean =
+    baselineHeartRate.reduce((sum, row) => sum + row.value, 0) /
+    baselineHeartRate.length;
+  const heartRateSd = Math.sqrt(
+    baselineHeartRate.reduce(
+      (sum, row) => sum + (row.value - heartRateMean) ** 2,
+      0
+    ) /
+      (baselineHeartRate.length - 1)
+  );
+  const heartRateZ =
+    heartRateSd > 0
+      ? (latestHeartRate.value - heartRateMean) / heartRateSd
+      : 0;
+  if (heartRateZ <= 2) return [];
 
-  const hrVals = baselineHr.map((r) => r.restingBpm!);
-  const hrMean = hrVals.reduce((a, b) => a + b, 0) / hrVals.length;
-  const hrSd = Math.sqrt(hrVals.reduce((a, b) => a + (b - hrMean) ** 2, 0) / hrVals.length);
+  const indicators = [
+    `Rest-labelled heart-rate estimate was ${heartRateZ.toFixed(1)} standard deviations above its recent baseline`,
+  ];
+  let evidenceStrength = 0.4;
 
-  const baselineHrv = hrvData.filter((r) => r.day < recentCutoff);
-  const recentHrv = hrvData.filter((r) => r.day >= recentCutoff);
-  const hrvMean = baselineHrv.length > 0
-    ? baselineHrv.map((r) => r.hrv!).reduce((a, b) => a + b, 0) / baselineHrv.length
-    : null;
-
-  const baselineTemp = tempData.filter((r) => r.day < recentCutoff);
-  const recentTemp = tempData.filter((r) => r.day >= recentCutoff);
-  const tempMean = baselineTemp.length > 0
-    ? baselineTemp.map((r) => r.tempDev!).reduce((a, b) => a + b, 0) / baselineTemp.length
-    : null;
-
-  const signals: HealthSignal[] = [];
-
-  for (const day of recentHr) {
-    const indicators: string[] = [];
-    let confidence = 0;
-
-    const hrZ = hrSd > 0 ? (day.restingBpm! - hrMean) / hrSd : 0;
-    if (hrZ > 2) {
-      confidence += 0.4;
-      indicators.push(`Resting HR ${Math.round(day.restingBpm!)} bpm (${hrZ.toFixed(1)} SD above baseline ${Math.round(hrMean)})`);
-    } else {
-      continue;
+  const baselineHrv = latestConsecutiveValues(
+    hrvData
+      .filter(
+        (row): row is DatedValue =>
+          row.value != null && row.day < recentCutoff
+      ),
+    14
+  );
+  const currentHrv = hrvData.find(
+    (row) => row.day === latestHeartRate.day && row.value != null
+  );
+  if (baselineHrv.length >= 5 && currentHrv?.value != null) {
+    const hrvMean =
+      baselineHrv.reduce((sum, row) => sum + row.value, 0) /
+      baselineHrv.length;
+    const hrvDrop = (hrvMean - currentHrv.value) / hrvMean;
+    if (hrvDrop > 0.15) {
+      evidenceStrength += 0.2;
+      indicators.push(
+        `Nighttime HRV was ${Math.round(hrvDrop * 100)}% below its recent baseline`
+      );
     }
-
-    const dayHrv = recentHrv.find((r) => r.day === day.day)
-      ?? hrvData.find((r) => r.day === format(subDays(new Date(day.day + "T12:00:00"), 1), "yyyy-MM-dd"));
-    if (dayHrv && hrvMean) {
-      const hrvDrop = (hrvMean - dayHrv.hrv!) / hrvMean;
-      if (hrvDrop > 0.15) {
-        confidence += 0.25;
-        const label = dayHrv.day !== day.day ? ` (from ${dayHrv.day} sleep)` : "";
-        indicators.push(`HRV dropped ${Math.round(hrvDrop * 100)}% (${Math.round(dayHrv.hrv!)} vs baseline ${Math.round(hrvMean)})${label}`);
-      }
-    }
-
-    const dayTemp = recentTemp.find((r) => r.day === day.day);
-    if (dayTemp && tempMean != null) {
-      const tempElev = dayTemp.tempDev! - tempMean;
-      if (tempElev > 0.2) {
-        confidence += 0.2;
-        indicators.push(`Temperature +${tempElev.toFixed(2)}°C above baseline`);
-      }
-    }
-
-    const daySpo2 = spo2Data.find((r) => r.day === day.day);
-    if (daySpo2 && daySpo2.spo2! < 95) {
-      confidence += 0.15;
-      indicators.push(`SpO2 ${daySpo2.spo2!}% (below 95% threshold)`);
-    }
-
-    confidence = Math.min(confidence, 1);
-    if (confidence < 0.4) continue;
-
-    signals.push({
-      day: day.day,
-      signalType: "acute_illness",
-      status: "detected",
-      confidence,
-      indicators,
-      summary: confidence >= 0.7
-        ? "Multiple physiological signs suggest possible illness — monitor symptoms"
-        : "Elevated resting heart rate with supporting indicators — possible illness onset",
-      details: `HR z-score: ${hrZ.toFixed(1)}, indicators: ${indicators.length}`,
-    });
   }
 
-  return signals;
+  const baselineTemperature = latestConsecutiveValues(
+    temperatureData
+      .filter(
+        (row): row is DatedValue =>
+          row.value != null && row.day < recentCutoff
+      ),
+    14
+  );
+  const currentTemperature = temperatureData.find(
+    (row) => row.day === latestHeartRate.day && row.value != null
+  );
+  if (
+    baselineTemperature.length >= 5 &&
+    currentTemperature?.value != null
+  ) {
+    const temperatureMean =
+      baselineTemperature.reduce((sum, row) => sum + row.value, 0) /
+      baselineTemperature.length;
+    const temperatureElevation = currentTemperature.value - temperatureMean;
+    if (temperatureElevation > 0.2) {
+      evidenceStrength += 0.2;
+      indicators.push(
+        `Nighttime skin-temperature deviation was ${temperatureElevation.toFixed(2)}°C above its recent baseline`
+      );
+    }
+  }
+
+  const currentSpo2 = spo2Data.find(
+    (row) => row.day === latestHeartRate.day && row.value != null
+  );
+  if (currentSpo2?.value != null && currentSpo2.value < 95) {
+    evidenceStrength += 0.1;
+    indicators.push(
+      `Average overnight SpO₂ was ${currentSpo2.value}%`
+    );
+  }
+
+  if (indicators.length < 2) return [];
+
+  return [
+    {
+      day: latestHeartRate.day,
+      signalType: "acute_illness",
+      status: "detected",
+      evidenceStrength: Math.min(evidenceStrength, 1),
+      indicators,
+      summary:
+        "Multiple measurements show a physiological strain pattern. This pattern is not specific to illness.",
+      details: `Heart-rate z-score ${heartRateZ.toFixed(1)} with ${indicators.length - 1} supporting measurement${indicators.length === 2 ? "" : "s"}.`,
+    },
+  ];
 }
 
-async function detectCycleIrregularity(
-  todayStr: string,
-  todayDate: Date
+async function detectThermalShiftTimingChange(
+  todayStr: string
 ): Promise<HealthSignal[]> {
   const cycles = await db
     .select()
     .from(cyclePredictions)
     .orderBy(desc(cyclePredictions.cycleNumber))
     .limit(12);
+  const observedShifts = cycles.filter(
+    (cycle) =>
+      cycle.ovulationDay != null &&
+      cycle.ovulationDay <= todayStr &&
+      cycle.periodStartDay == null &&
+      cycle.nextPeriodDay == null &&
+      cycle.confidence != null &&
+      cycle.confidence >= 0.3
+  );
+  if (observedShifts.length === 0) return [];
 
-  if (cycles.length < 3) return [];
+  const latest = observedShifts[0];
+  if (
+    !latest.ovulationDay ||
+    !isWithinRecentCalendarDays(latest.ovulationDay, todayStr, 7)
+  ) {
+    return [];
+  }
+  const indicators: string[] = [];
+  let evidenceStrength = 0;
 
-  const signals: HealthSignal[] = [];
-
-  const validLengths = cycles
-    .map((c) => c.cycleLength)
-    .filter((l): l is number => l != null && l >= 20 && l <= 50);
-
-  if (validLengths.length >= 3) {
-    const mean = validLengths.reduce((a, b) => a + b, 0) / validLengths.length;
-    const sd = Math.sqrt(validLengths.reduce((a, b) => a + (b - mean) ** 2, 0) / validLengths.length);
-
-    const latest = cycles[0];
-    if (latest.cycleLength != null && sd > 0) {
-      const zScore = Math.abs(latest.cycleLength - mean) / sd;
-      if (zScore > 2) {
-        const indicators = [
-          `Latest cycle: ${latest.cycleLength} days (mean: ${Math.round(mean)}, SD: ${sd.toFixed(1)})`,
-          `Deviation: ${zScore.toFixed(1)} standard deviations from average`,
-        ];
-        signals.push({
-          day: todayStr,
-          signalType: "cycle_irregularity",
-          status: "detected",
-          confidence: Math.min(zScore / 4, 1),
-          indicators,
-          summary: `Cycle length (${latest.cycleLength} days) is significantly different from your average (${Math.round(mean)} days)`,
-          details: `z-score: ${zScore.toFixed(1)}, cycle: ${latest.cycleLength}d, mean: ${mean.toFixed(1)}d`,
-        });
-      }
+  const priorLengths = observedShifts
+    .slice(1)
+    .map((cycle) => cycle.cycleLength)
+    .filter(
+      (cycleLength): cycleLength is number =>
+        cycleLength != null && cycleLength >= 20 && cycleLength <= 50
+    );
+  if (
+    latest.cycleLength != null &&
+    priorLengths.length >= 3
+  ) {
+    const mean =
+      priorLengths.reduce((sum, value) => sum + value, 0) /
+      priorLengths.length;
+    const standardDeviation = Math.sqrt(
+      priorLengths.reduce(
+        (sum, value) => sum + (value - mean) ** 2,
+        0
+      ) /
+        (priorLengths.length - 1)
+    );
+    const deviation =
+      standardDeviation > 0
+        ? Math.abs(latest.cycleLength - mean) / standardDeviation
+        : 0;
+    if (deviation > 2) {
+      evidenceStrength = Math.min(0.7, 0.35 + deviation / 10);
+      indicators.push(
+        `Latest detected thermal-shift interval was ${latest.cycleLength} days versus a prior mean of ${Math.round(mean)} days`
+      );
     }
   }
 
-  const latest = cycles[0];
-  if (latest.nextPeriodDay && todayStr > latest.nextPeriodDay) {
-    const daysLate = differenceInDays(todayDate, parseISO(latest.nextPeriodDay));
-    if (daysLate >= 7) {
-      const indicators = [
-        `Period is ${daysLate} days late (expected ${latest.nextPeriodDay})`,
-      ];
-      const confidence = Math.min(daysLate / 21, 1);
+  if (indicators.length === 0) return [];
 
-      const existing = signals.find((s) => s.signalType === "cycle_irregularity");
-      if (existing) {
-        existing.indicators.push(...indicators);
-        existing.confidence = Math.min(Math.max(existing.confidence, confidence), 1);
-        existing.summary += ` Period is ${daysLate} days late.`;
-      } else {
-        signals.push({
-          day: todayStr,
-          signalType: "cycle_irregularity",
-          status: "detected",
-          confidence,
-          indicators,
-          summary: `Period is ${daysLate} days overdue`,
-          details: `${daysLate} days past expected date ${latest.nextPeriodDay}`,
-        });
-      }
-    }
-  }
-
-  return signals;
+  return [
+    {
+      day: latest.ovulationDay,
+      signalType: "thermal_shift_timing",
+      status: "detected",
+      evidenceStrength,
+      indicators,
+      summary:
+        "The interval between detected thermal shifts differs from the recent pattern. Temperature patterns can vary for many reasons.",
+      details: `${indicators.length} thermal-shift timing indicator${indicators.length === 1 ? "" : "s"} present.`,
+    },
+  ];
 }

@@ -29,7 +29,7 @@ interface ScoreBreakdownProps {
 
 function getBarColor(score: number): string {
   if (score < 60) return "#ef4444";
-  if (score < 75) return "#f59e0b";
+  if (score < 70) return "#f59e0b";
   if (score < 85) return "#22c55e";
   return "#86efac";
 }

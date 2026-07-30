@@ -13,9 +13,11 @@ import {
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { computeCalendarRollingAverage } from "@/lib/dashboard-metrics";
 
 interface HrPoint {
   day: string;
@@ -31,20 +33,34 @@ interface RestingHrChartProps {
 
 export function RestingHrChart({ data }: RestingHrChartProps) {
   const filtered = data.filter((d) => d.restingBpm != null || d.awakeBpm != null);
+  const rollingAverages = computeCalendarRollingAverage(
+    filtered.map((point) => ({
+      day: point.day,
+      value:
+        point.restingBpm != null && point.restingBpm > 0
+          ? point.restingBpm
+          : null,
+    })),
+    7
+  );
 
   const withRolling = filtered.map((point, i) => {
-    const window = filtered.slice(Math.max(0, i - 6), i + 1);
-    const vals = window.map((w) => w.restingBpm).filter((v): v is number => v != null);
     return {
       ...point,
-      rollingAvg: vals.length > 0 ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null,
+      rollingAvg:
+        rollingAverages[i] != null
+          ? Math.round(rollingAverages[i]! * 10) / 10
+          : null,
     };
   });
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Resting Heart Rate</CardTitle>
+        <CardTitle>Rest-Labelled Heart Rate</CardTitle>
+        <CardDescription>
+          App-derived hourly averages from Oura samples labelled rest
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -87,7 +103,7 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
               dataKey="minBpm"
               fill="oklch(0.65 0.15 15 / 10%)"
               stroke="none"
-              connectNulls
+              connectNulls={false}
             />
             <Line
               type="monotone"
@@ -95,7 +111,7 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
               stroke="#f87171"
               strokeWidth={2}
               dot={false}
-              connectNulls
+              connectNulls={false}
             />
             <Line
               type="monotone"
@@ -104,7 +120,7 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
               strokeWidth={1.5}
               strokeDasharray="4 4"
               dot={false}
-              connectNulls
+              connectNulls={false}
             />
             <Line
               type="monotone"
@@ -112,7 +128,7 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
               stroke="oklch(0.708 0 0)"
               strokeWidth={1}
               dot={false}
-              connectNulls
+              connectNulls={false}
               opacity={0.5}
             />
           </ComposedChart>
