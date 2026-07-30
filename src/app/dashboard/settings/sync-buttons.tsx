@@ -2,10 +2,16 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { formatOuraSyncSummary } from "@/lib/oura/sync-summary";
+
+interface ResultMessage {
+  message: string;
+  kind: "status" | "error";
+}
 
 export function BackfillButton() {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const [result, setResult] = useState<ResultMessage | null>(null);
 
   async function handleBackfill() {
     setLoading(true);
@@ -18,21 +24,21 @@ export function BackfillButton() {
       });
       const data = await res.json();
       if (res.ok) {
-        const warningCount = Array.isArray(data.warnings)
-          ? data.warnings.length
-          : 0;
-        setResult(
-          `Synced ${data.records} records (${data.startDate} to ${data.endDate})${
-            warningCount > 0
-              ? `; ${warningCount} source${warningCount === 1 ? "" : "s"} unavailable`
-              : ""
-          }`
-        );
+        setResult({
+          message: formatOuraSyncSummary(data, {
+            operation: "Backfill",
+            includeRange: true,
+          }),
+          kind: "status",
+        });
       } else {
-        setResult(`Error: ${data.error}`);
+        setResult({ message: `Error: ${data.error}`, kind: "error" });
       }
     } catch (e) {
-      setResult(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setResult({
+        message: `Error: ${e instanceof Error ? e.message : String(e)}`,
+        kind: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -44,7 +50,14 @@ export function BackfillButton() {
         {loading ? "Syncing last 90 days..." : "Backfill Last 90 Days"}
       </Button>
       {result && (
-        <p className="text-sm text-muted-foreground">{result}</p>
+        <p
+          className="text-sm text-muted-foreground"
+          role={result.kind === "error" ? "alert" : "status"}
+          aria-live={result.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
+        >
+          {result.message}
+        </p>
       )}
     </div>
   );
@@ -52,7 +65,7 @@ export function BackfillButton() {
 
 export function ManualSyncButton() {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<string | null>(null);
+  const [result, setResult] = useState<ResultMessage | null>(null);
 
   async function handleSync() {
     setLoading(true);
@@ -63,21 +76,18 @@ export function ManualSyncButton() {
       });
       const data = await res.json();
       if (res.ok) {
-        const warningCount = Array.isArray(data.warnings)
-          ? data.warnings.length
-          : 0;
-        setResult(
-          `Synced ${data.records} records${
-            warningCount > 0
-              ? `; ${warningCount} source${warningCount === 1 ? "" : "s"} unavailable`
-              : ""
-          }`
-        );
+        setResult({
+          message: formatOuraSyncSummary(data, { operation: "Sync" }),
+          kind: "status",
+        });
       } else {
-        setResult(`Error: ${data.error}`);
+        setResult({ message: `Error: ${data.error}`, kind: "error" });
       }
     } catch (e) {
-      setResult(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setResult({
+        message: `Error: ${e instanceof Error ? e.message : String(e)}`,
+        kind: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -89,7 +99,14 @@ export function ManualSyncButton() {
         {loading ? "Syncing..." : "Sync Last 7 Days"}
       </Button>
       {result && (
-        <p className="text-sm text-muted-foreground">{result}</p>
+        <p
+          className="text-sm text-muted-foreground"
+          role={result.kind === "error" ? "alert" : "status"}
+          aria-live={result.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
+        >
+          {result.message}
+        </p>
       )}
     </div>
   );
