@@ -1,61 +1,78 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
-import { sleepPeriods, dailySleep, dailyAnalysis } from "@/lib/db/schema";
+import {
+  sleepPeriods,
+  dailySleep,
+  dailyAnalysis,
+  dailyReadiness,
+} from "@/lib/db/schema";
 import { desc, sql } from "drizzle-orm";
 import { SleepCalendar } from "./sleep-calendar";
 import type { NightData, AnalysisData } from "./night-card";
+import { summarizeStoredSamples } from "@/lib/dashboard-metrics";
 
 export default async function SleepPage() {
-  const nights = await db
-    .select()
-    .from(sleepPeriods)
-    .where(sql`${sleepPeriods.type} = 'long_sleep'`)
-    .orderBy(desc(sleepPeriods.day))
-    .limit(35);
+  const [nights, scores, analyses, readiness] = await Promise.all([
+    db
+      .select()
+      .from(sleepPeriods)
+      .where(sql`${sleepPeriods.type} = 'long_sleep'`)
+      .orderBy(desc(sleepPeriods.day))
+      .limit(35),
+    db.select().from(dailySleep).orderBy(desc(dailySleep.day)).limit(35),
+    db
+      .select({
+        day: dailyAnalysis.day,
+        hrvZScore: dailyAnalysis.hrvZScore,
+        sleepDurationZScore: dailyAnalysis.sleepDurationZScore,
+        efficiencyZScore: dailyAnalysis.efficiencyZScore,
+        isAnomaly: dailyAnalysis.isAnomaly,
+        anomalyDirection: dailyAnalysis.anomalyDirection,
+      })
+      .from(dailyAnalysis)
+      .orderBy(desc(dailyAnalysis.day))
+      .limit(35),
+    db
+      .select({
+        day: dailyReadiness.day,
+        temperatureDeviation: dailyReadiness.temperatureDeviation,
+      })
+      .from(dailyReadiness)
+      .orderBy(desc(dailyReadiness.day))
+      .limit(35),
+  ]);
 
-  const scores = await db
-    .select()
-    .from(dailySleep)
-    .orderBy(desc(dailySleep.day))
-    .limit(35);
-
-  const analyses = await db
-    .select({
-      day: dailyAnalysis.day,
-      hrvZScore: dailyAnalysis.hrvZScore,
-      sleepDurationZScore: dailyAnalysis.sleepDurationZScore,
-      efficiencyZScore: dailyAnalysis.efficiencyZScore,
-      isAnomaly: dailyAnalysis.isAnomaly,
-      anomalyDirection: dailyAnalysis.anomalyDirection,
-    })
-    .from(dailyAnalysis)
-    .orderBy(desc(dailyAnalysis.day))
-    .limit(35);
+  const readinessTemperature = new Map(
+    readiness.map((row) => [row.day, row.temperatureDeviation])
+  );
 
   const nightsRecord: Record<string, NightData> = Object.fromEntries(
-    nights.map((night) => [
-      night.day,
-      {
-        id: night.id,
-        day: night.day,
-        bedtimeStart: night.bedtimeStart,
-        bedtimeEnd: night.bedtimeEnd,
-        totalSleepDuration: night.totalSleepDuration,
-        deepSleepDuration: night.deepSleepDuration,
-        lightSleepDuration: night.lightSleepDuration,
-        remSleepDuration: night.remSleepDuration,
-        efficiency: night.efficiency,
-        latency: night.latency,
-        restlessPeriods: night.restlessPeriods,
-        averageHeartRate: night.averageHeartRate,
-        lowestHeartRate: night.lowestHeartRate,
-        averageHrv: night.averageHrv,
-        temperatureDelta: night.temperatureDelta,
-        hypnogram5min: night.hypnogram5min,
-        hr5min: night.hr5min,
-      },
-    ])
+    nights.map((night) => {
+      const heartRate = summarizeStoredSamples(night.hr5min);
+      return [
+        night.day,
+        {
+          id: night.id,
+          day: night.day,
+          bedtimeStart: night.bedtimeStart,
+          bedtimeEnd: night.bedtimeEnd,
+          totalSleepDuration: night.totalSleepDuration,
+          deepSleepDuration: night.deepSleepDuration,
+          lightSleepDuration: night.lightSleepDuration,
+          remSleepDuration: night.remSleepDuration,
+          efficiency: night.efficiency,
+          latency: night.latency,
+          restlessPeriods: night.restlessPeriods,
+          averageHeartRate: heartRate.average ?? night.averageHeartRate,
+          lowestHeartRate: heartRate.minimum ?? night.lowestHeartRate,
+          averageHrv: night.averageHrv,
+          temperatureDelta: readinessTemperature.get(night.day) ?? null,
+          hypnogram5min: night.hypnogram5min,
+          hr5min: night.hr5min,
+        },
+      ];
+    })
   );
 
   const scoresRecord: Record<string, number> = Object.fromEntries(

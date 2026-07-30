@@ -12,6 +12,7 @@ import {
   sleepTime,
   personalInfo,
   cyclePredictions,
+  restModePeriods,
   sleepPeriods,
   dailyReadiness,
   healthSignals,
@@ -19,16 +20,41 @@ import {
   dailyMood,
 } from "@/lib/db/schema";
 import { desc, gte, eq, and } from "drizzle-orm";
-import { format, subDays } from "date-fns";
-import { getTodayET } from "@/lib/date-utils";
+import { format, parseISO, subDays } from "date-fns";
+import {
+  getIsoLocalClockMinutes,
+  getTodayET,
+  shiftIsoDay,
+} from "@/lib/date-utils";
+import { longestConsecutiveTemperatureRun } from "@/lib/analysis/cycle";
 import { PrivateTabs } from "./private-tabs";
+
+function parseIndicators(value: string | null): string[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      Array.isArray(parsed) &&
+      parsed.every((indicator) => typeof indicator === "string")
+    ) {
+      return parsed;
+    }
+  } catch {
+    return [];
+  }
+  return [];
+}
 
 export default async function PrivatePage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (!isSensitiveUser(session.user.email)) redirect("/dashboard");
 
-  const cutoff = format(subDays(new Date(getTodayET() + "T12:00:00"), 90), "yyyy-MM-dd");
+  const currentDay = getTodayET();
+  const today = parseISO(currentDay);
+  const cutoff = format(subDays(today, 89), "yyyy-MM-dd");
+  const fourteenDayCutoff = format(subDays(today, 13), "yyyy-MM-dd");
+  const thirtyDayCutoff = format(subDays(today, 29), "yyyy-MM-dd");
 
   const [
     cvAgeData,
@@ -38,6 +64,7 @@ export default async function PrivatePage() {
     cycleData,
     sleepData,
     readinessTempData,
+    restModeData,
     hrData,
     hourlyHrData,
   ] = await Promise.all([
@@ -79,11 +106,16 @@ export default async function PrivatePage() {
       .where(gte(dailyReadiness.day, cutoff))
       .orderBy(dailyReadiness.day),
     db
+      .select({
+        startDay: restModePeriods.startDay,
+        endDay: restModePeriods.endDay,
+      })
+      .from(restModePeriods),
+    db
       .select()
       .from(dailyHeartrate)
       .where(gte(dailyHeartrate.day, cutoff))
-      .orderBy(dailyHeartrate.day)
-      .catch(() => [] as { id: number; day: string; avgBpm: number | null; minBpm: number | null; maxBpm: number | null; restingBpm: number | null; awakeBpm: number | null; sampleCount: number | null; createdAt: number }[]),
+      .orderBy(dailyHeartrate.day),
     db
       .select({
         day: hourlyHeartrate.day,
@@ -94,7 +126,7 @@ export default async function PrivatePage() {
         source: hourlyHeartrate.source,
       })
       .from(hourlyHeartrate)
-      .where(gte(hourlyHeartrate.day, format(subDays(new Date(getTodayET() + "T12:00:00"), 14), "yyyy-MM-dd")))
+      .where(gte(hourlyHeartrate.day, fourteenDayCutoff))
       .orderBy(hourlyHeartrate.day, hourlyHeartrate.hour),
   ]);
 
@@ -110,9 +142,8 @@ export default async function PrivatePage() {
       restingTime: dailyActivity.restingTime,
     })
     .from(dailyActivity)
-    .where(gte(dailyActivity.day, format(subDays(new Date(getTodayET() + "T12:00:00"), 14), "yyyy-MM-dd")))
-    .orderBy(dailyActivity.day)
-    .catch(() => [] as { day: string; class5min: string | null; nonWearTime: number | null; highActivityTime: number | null; mediumActivityTime: number | null; lowActivityTime: number | null; sedentaryTime: number | null; restingTime: number | null }[]);
+    .where(gte(dailyActivity.day, fourteenDayCutoff))
+    .orderBy(dailyActivity.day);
 
   const [cyclePhaseAnalysis, cyclePhaseMoods] = await Promise.all([
     db
@@ -121,7 +152,6 @@ export default async function PrivatePage() {
         totalSleepMinutes: dailyAnalysis.totalSleepMinutes,
         efficiency: dailyAnalysis.efficiency,
         avgHrv: dailyAnalysis.avgHrv,
-        temperatureDelta: dailyAnalysis.temperatureDelta,
       })
       .from(dailyAnalysis)
       .where(gte(dailyAnalysis.day, cutoff))
@@ -137,13 +167,42 @@ export default async function PrivatePage() {
   ]);
 
   const moodByDay = new Map(cyclePhaseMoods.map((m) => [m.day, m.moodScore]));
+  const readinessTemperatureByDay = new Map(
+    readinessTempData.map((r) => [r.day, r.temperatureDeviation])
+  );
+  const restModeDays = new Set<string>();
+  for (const period of restModeData) {
+    if (!period.startDay || !period.endDay) continue;
+    let day: string | null = period.startDay;
+    let guard = 0;
+    while (day != null && day <= period.endDay && guard < 400) {
+      restModeDays.add(day);
+      day = shiftIsoDay(day, 1);
+      guard++;
+    }
+  }
+  const eligibleTemperatureRun = longestConsecutiveTemperatureRun(
+    readinessTempData
+      .filter(
+        (
+          row
+        ): row is { day: string; temperatureDeviation: number } =>
+          row.temperatureDeviation != null
+      )
+      .map((row) => ({
+        day: row.day,
+        temperatureDelta: row.temperatureDeviation,
+      })),
+    restModeDays
+  );
   const cyclePhaseDaily = cyclePhaseAnalysis.map((a) => ({
     day: a.day,
-    sleepHours: a.totalSleepMinutes ? a.totalSleepMinutes / 60 : null,
+    sleepHours:
+      a.totalSleepMinutes != null ? a.totalSleepMinutes / 60 : null,
     efficiency: a.efficiency,
     avgHrv: a.avgHrv,
     moodScore: moodByDay.get(a.day) ?? null,
-    temperatureDelta: a.temperatureDelta,
+    temperatureDelta: readinessTemperatureByDay.get(a.day) ?? null,
   }));
 
   const healthSignalData = await db
@@ -153,19 +212,19 @@ export default async function PrivatePage() {
       status: healthSignals.status,
       confidence: healthSignals.confidence,
       indicators: healthSignals.indicators,
-      summary: healthSignals.summary,
     })
     .from(healthSignals)
-    .where(gte(healthSignals.day, format(subDays(new Date(getTodayET() + "T12:00:00"), 30), "yyyy-MM-dd")))
-    .orderBy(desc(healthSignals.day))
-    .catch(() => [] as { day: string; signalType: string; status: string; confidence: number; indicators: string | null; summary: string | null }[]);
+    .where(gte(healthSignals.day, thirtyDayCutoff))
+    .orderBy(desc(healthSignals.day));
 
   const person = personalInfoData[0] ?? null;
 
   function normalizeOffsetMinutes(offsetSeconds: string | null | undefined): number | null {
     if (!offsetSeconds) return null;
-    let mins = Number(offsetSeconds) / 60;
-    if (mins < 0) mins += 1440;
+    const seconds = Number(offsetSeconds);
+    if (!Number.isFinite(seconds)) return null;
+    let mins = Math.round(seconds / 60);
+    mins = ((mins % 1440) + 1440) % 1440;
     if (mins < 720) mins += 1440;
     return mins;
   }
@@ -174,18 +233,13 @@ export default async function PrivatePage() {
     const st = sleepTimeData.find((s) => s.day === t.day);
     let actualMinutes: number | null = null;
     if (t.bedtimeStart) {
-      const d = new Date(t.bedtimeStart);
-      const parts = new Intl.DateTimeFormat("en-US", {
-        timeZone: "America/New_York",
-        hour: "numeric",
-        minute: "numeric",
-        hour12: false,
-      }).formatToParts(d);
-      const h = parseInt(parts.find((p) => p.type === "hour")!.value, 10);
-      const m = parseInt(parts.find((p) => p.type === "minute")!.value, 10);
-      let mins = h * 60 + m;
-      if (mins < 720) mins += 1440;
-      actualMinutes = mins;
+      const localClockMinutes = getIsoLocalClockMinutes(t.bedtimeStart);
+      if (localClockMinutes != null) {
+        actualMinutes =
+          localClockMinutes < 720
+            ? localClockMinutes + 1440
+            : localClockMinutes;
+      }
     }
     return {
       day: t.day,
@@ -199,11 +253,13 @@ export default async function PrivatePage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl md:text-3xl font-bold">Private Data</h1>
       <PrivateTabs
+        currentDay={currentDay}
         cvAgeData={cvAgeData.map((c) => ({ day: c.day, vascularAge: c.vascularAge }))}
         vo2Data={vo2Data.map((v) => ({ day: v.day, vo2Max: v.vo2Max }))}
         personalInfo={person ? { age: person.age, height: person.height, weight: person.weight, biologicalSex: person.biologicalSex } : null}
-        cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, ovulationDay: c.ovulationDay, nextPeriodDay: c.nextPeriodDay, cycleLength: c.cycleLength, confidence: c.confidence }))}
+        cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, ovulationDay: c.ovulationDay, nextPeriodDay: c.nextPeriodDay, cycleLength: c.cycleLength, evidenceScore: c.confidence }))}
         temperatureData={readinessTempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDeviation }))}
+        eligibleTemperatureRun={eligibleTemperatureRun}
         bedtimeData={bedtimeData}
         hrData={hrData.map((h) => ({ day: h.day, restingBpm: h.restingBpm, awakeBpm: h.awakeBpm, minBpm: h.minBpm, maxBpm: h.maxBpm }))}
         hourlyHrData={hourlyHrData}
@@ -211,20 +267,33 @@ export default async function PrivatePage() {
           day: s.day,
           signalType: s.signalType,
           status: s.status,
-          confidence: s.confidence,
-          indicators: s.indicators ? JSON.parse(s.indicators) : [],
-          summary: s.summary ?? "",
+          evidenceScore: s.confidence,
+          indicators: parseIndicators(s.indicators),
         }))}
         cyclePhaseDaily={cyclePhaseDaily}
         wearActivityData={wearActivityData.map((d) => ({
           day: d.day,
           class5min: d.class5min,
-          nonWearTime: d.nonWearTime,
-          highActivityTime: d.highActivityTime,
-          mediumActivityTime: d.mediumActivityTime,
-          lowActivityTime: d.lowActivityTime,
-          sedentaryTime: d.sedentaryTime,
-          restingTime: d.restingTime,
+          nonWearMinutes:
+            d.nonWearTime != null ? Math.round(d.nonWearTime / 60) : null,
+          highActivityMinutes:
+            d.highActivityTime != null
+              ? Math.round(d.highActivityTime / 60)
+              : null,
+          mediumActivityMinutes:
+            d.mediumActivityTime != null
+              ? Math.round(d.mediumActivityTime / 60)
+              : null,
+          lowActivityMinutes:
+            d.lowActivityTime != null
+              ? Math.round(d.lowActivityTime / 60)
+              : null,
+          sedentaryMinutes:
+            d.sedentaryTime != null
+              ? Math.round(d.sedentaryTime / 60)
+              : null,
+          restingMinutes:
+            d.restingTime != null ? Math.round(d.restingTime / 60) : null,
         }))}
         wearActivityHrData={hourlyHrData}
       />

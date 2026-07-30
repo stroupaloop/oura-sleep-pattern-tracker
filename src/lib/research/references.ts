@@ -12,57 +12,57 @@ export interface ResearchReference {
 export const RESEARCH_REFERENCES: ResearchReference[] = [
   {
     id: "oura-hypomania-2025",
-    title: "Changes in sleep can signal hypomanic episodes days before they begin",
+    title: "Within-night sleep-stage variability before hypomanic episodes",
     authors: "Luykx et al.",
     journal: "Journal of Affective Disorders",
     year: 2025,
     url: "https://pubmed.ncbi.nlm.nih.gov/39793618/",
     finding:
-      "Within-day sleep variability detected hypomanic episodes ~3 days before onset with 87% balanced accuracy and >90% sensitivity in 164 Oura Ring wearers.",
-    relevantMetrics: ["withinNightVariability", "sleepStageTransitions"],
+      "A study-specific time-frequency signal derived from within-night sleep-stage variability preceded some hypomanic episodes by about three days. It does not validate this app's HR/HRV coefficient-of-variation metrics.",
+    relevantMetrics: ["sleepStageTransitions"],
   },
   {
     id: "activity-depression-2025",
-    title: "Day-to-day variability in step count anticipates depressive episodes",
-    authors: "Int. J. Bipolar Disorders",
+    title: "Frequency-domain step variability before depressive symptoms",
+    authors: "Study authors",
     journal: "International Journal of Bipolar Disorders",
     year: 2025,
     url: "https://journalbipolardisorders.springeropen.com/articles/10.1186/s40345-025-00379-6",
     finding:
-      "Activity variability detected depressive episode onset 7 days before occurrence with 79% sensitivity in 127 outpatients with bipolar disorder.",
+      "A frequency-domain step-variability method anticipated PHQ-9-defined depressive symptom onset by up to seven days with 79% sensitivity. It does not validate a simple drop in steps or active minutes.",
     relevantMetrics: ["activityLevel", "steps"],
   },
   {
     id: "hrv-bipolar-2024",
     title: "Bayesian analysis of HRV changes over acute bipolar episodes",
-    authors: "Nature npj Mental Health Research",
-    journal: "Nature",
+    authors: "Study authors",
+    journal: "npj Mental Health Research",
     year: 2024,
     url: "https://www.nature.com/articles/s44184-024-00090-x",
     finding:
-      "HRV increased by 17-18% during manic states compared to depressive and euthymic states, suggesting HRV is a state-dependent biomarker.",
-    relevantMetrics: ["hrv", "withinNightHrvCV"],
+      "In Empatica E4 data, lnRMSSD tended to increase as acute symptoms resolved toward euthymia; the study did not establish a polarity-specific 17-18% mania increase or validate Oura thresholds.",
+    relevantMetrics: ["hrv"],
   },
   {
     id: "temp-mania-2025",
     title: "State-dependent skin temperature increase during manic episodes",
-    authors: "Clinic-IDIBAPS, Barcelona",
+    authors: "Study authors",
     journal: "Journal of Affective Disorders",
     year: 2025,
     url: "https://www.sciencedirect.com/science/article/abs/pii/S0165032725310857",
     finding:
-      "Skin temperature was elevated during manic episodes (mid-morning through evening) and normalized upon remission, in a study of 104 bipolar patients.",
-    relevantMetrics: ["temperatureDelta", "temperatureDeviation"],
+      "Waking wrist temperature measured with Empatica E4 was elevated during manic episodes in a study of 104 participants. This does not validate thresholds for Oura's overnight temperature deviation.",
+    relevantMetrics: ["temperatureDeviation"],
   },
   {
     id: "circadian-relapse-2021",
     title: "Circadian activity rhythms predict mood episode relapse",
-    authors: "Nature Translational Psychiatry",
-    journal: "Nature Translational Psychiatry",
+    authors: "Study authors",
+    journal: "Translational Psychiatry",
     year: 2021,
     url: "https://www.nature.com/articles/s41398-021-01652-9",
     finding:
-      "Later timing of circadian activity rhythm was significantly associated with increased depressive episode relapses. Greater intradaily variability predicted earlier recurrence (AUC 0.75-0.82).",
+      "Actiwatch-derived circadian timing and fragmentation measures were associated with depressive relapse timing. The paper reports hazard associations, not AUC 0.75-0.82, and does not validate this app's implementation.",
     relevantMetrics: [
       "circadianIS",
       "circadianIV",
@@ -74,12 +74,12 @@ export const RESEARCH_REFERENCES: ResearchReference[] = [
     id: "composite-accuracy-2024",
     title:
       "Accurately predicting mood episodes with combined sleep and circadian features",
-    authors: "npj Digital Medicine",
-    journal: "Nature npj Digital Medicine",
+    authors: "Study authors",
+    journal: "npj Digital Medicine",
     year: 2024,
     url: "https://www.nature.com/articles/s41746-024-01333-z",
     finding:
-      "Combined sleep and circadian rhythm features achieved 87% accuracy for depression, 94% for mania, and 91% for hypomania prediction.",
+      "A Fitbit XGBoost model using 36 features plus prior mood history reported next-day AUCs of 0.80 for depression, 0.98 for mania, and 0.95 for hypomania. Those results do not validate this app's weighted score.",
     relevantMetrics: [
       "sleepDuration",
       "circadianRegularity",
@@ -90,24 +90,24 @@ export const RESEARCH_REFERENCES: ResearchReference[] = [
     id: "sleep-architecture-bipolar",
     title:
       "Sleep architecture as correlate and predictor of bipolar symptoms",
-    authors: "Harvey et al.",
-    journal: "PMC",
-    year: 2008,
+    authors: "Gold & Sylvia",
+    journal: "Nature and Science of Sleep",
+    year: 2016,
     url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC4935164/",
     finding:
-      "69-99% of individuals in manic episodes report reduced need for sleep. ~70% of bipolar patients have persistent sleep disturbance even during remission. Sleep onset latency is the most consistent abnormality across all bipolar stages.",
+      "This narrative review supports sleep disturbance as clinically important across bipolar states, but it does not validate Oura sleep-stage percentages or this app's thresholds.",
     relevantMetrics: ["sleepDuration", "latency", "remPct", "deepPct"],
   },
   {
     id: "circadian-causal-2024",
     title:
       "Circadian phase disruptions precede mood symptom variations",
-    authors: "Lancet eBioMedicine",
-    journal: "The Lancet eBioMedicine",
+    authors: "Study authors",
+    journal: "eBioMedicine",
     year: 2024,
     url: "https://www.thelancet.com/journals/ebiom/article/PIIS2352-3964(24)00129-4/fulltext",
     finding:
-      "Circadian phase disruptions \u2014 rather than sleep disruptions alone \u2014 preceded mood symptom variations, suggesting circadian rhythm is a potential upstream target for intervention.",
+      "Model-estimated circadian phase showed temporal associations with later mood variation. The causal interpretation is model-based and does not validate Oura activity-class IS/IV or this app's sleep timing score.",
     relevantMetrics: ["circadianIS", "circadianIV", "sleepTimingScore"],
   },
 ];

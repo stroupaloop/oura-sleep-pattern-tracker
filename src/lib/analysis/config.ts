@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { detectionConfig, users } from "@/lib/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
+import { getPrimarySensitiveEmail } from "@/lib/access";
 
 export interface MetricWeights {
   sleepDuration: number;
@@ -201,7 +202,13 @@ export async function loadActiveConfig(): Promise<DetectionConfigValues> {
 }
 
 export async function loadBipolarType(): Promise<BipolarType> {
-  const rows = await db.select({ bipolarType: users.bipolarType }).from(users).limit(1);
+  const ownerEmail = getPrimarySensitiveEmail();
+  if (!ownerEmail) return "unspecified";
+  const rows = await db
+    .select({ bipolarType: users.bipolarType })
+    .from(users)
+    .where(sql`lower(${users.email}) = ${ownerEmail}`)
+    .limit(1);
   if (rows.length === 0) return "unspecified";
   const val = rows[0].bipolarType;
   if (val === "bp1" || val === "bp2") return val;

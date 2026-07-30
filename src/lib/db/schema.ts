@@ -5,6 +5,7 @@ import {
   real,
   primaryKey,
   uniqueIndex,
+  type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
@@ -179,17 +180,28 @@ export const dailyMood = sqliteTable("daily_mood", {
   createdAt: integer("created_at").notNull(),
 });
 
-export const medications = sqliteTable("medications", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  name: text("name").notNull(),
-  dosage: text("dosage"),
-  frequency: text("frequency"),
-  doseSchedule: text("dose_schedule"),
-  isActive: integer("is_active").default(1),
-  startDate: text("start_date"),
-  endDate: text("end_date"),
-  createdAt: integer("created_at").notNull(),
-});
+export const medications = sqliteTable(
+  "medications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    name: text("name").notNull(),
+    dosage: text("dosage"),
+    frequency: text("frequency"),
+    doseSchedule: text("dose_schedule"),
+    isActive: integer("is_active").default(1),
+    startDate: text("start_date"),
+    endDate: text("end_date"),
+    previousVersionId: integer("previous_version_id").references(
+      (): AnySQLiteColumn => medications.id
+    ),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("medications_previous_version_id_uniq")
+      .on(table.previousVersionId)
+      .where(sql`${table.previousVersionId} IS NOT NULL`),
+  ]
+);
 
 export const medicationLogs = sqliteTable(
   "medication_logs",

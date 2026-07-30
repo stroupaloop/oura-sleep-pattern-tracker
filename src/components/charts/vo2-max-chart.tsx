@@ -12,6 +12,7 @@ import {
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -27,16 +28,19 @@ interface Vo2MaxChartProps {
 }
 
 export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
-  const filtered = data.slice(-days).filter((d) => d.vo2Max != null);
+  const chartData = data.slice(-days);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>VO2 Max</CardTitle>
+        <CardTitle>Oura-Estimated VO₂ Max</CardTitle>
+        <CardDescription>
+          Estimated aerobic capacity in mL/kg/min, not a laboratory measurement
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={filtered}>
+          <AreaChart data={chartData}>
             <defs>
               <linearGradient id="vo2MaxGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop
@@ -74,7 +78,7 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [
                 `${Number(value).toFixed(1)} mL/kg/min`,
-                "VO2 Max",
+                "Oura-Estimated VO₂ Max",
               ]}
               labelFormatter={(label) => `Date: ${label}`}
             />
@@ -84,8 +88,8 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
               stroke="oklch(0.65 0.2 150)"
               strokeWidth={2}
               fill="url(#vo2MaxGradient)"
-              connectNulls
-              name="VO2 Max"
+              connectNulls={false}
+              name="Oura-Estimated VO₂ Max"
             />
           </AreaChart>
         </ResponsiveContainer>

@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { exchangeCodeForTokens } from "@/lib/oura/oauth";
+import { auth, isSensitiveUser } from "@/lib/auth";
+import { exchangeCodeForTokens, resolveOuraScope } from "@/lib/oura/oauth";
 import { db } from "@/lib/db";
 import { oauthTokens } from "@/lib/db/schema";
+import { eq } from "drizzle-orm";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
+  if (!isSensitiveUser(session.user.email)) {
+    return NextResponse.redirect(
+      new URL("/dashboard/settings?error=forbidden", request.url)
+    );
+  }
 
   const code = request.nextUrl.searchParams.get("code");
   const error = request.nextUrl.searchParams.get("error");
   const state = request.nextUrl.searchParams.get("state");
+  const grantedScope = request.nextUrl.searchParams.get("scope");
   const storedState = request.cookies.get("oura_oauth_state")?.value;
 
   if (!storedState || storedState !== state) {
@@ -23,7 +30,10 @@ export async function GET(request: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      new URL(`/dashboard/settings?error=${error}`, request.url)
+      new URL(
+        `/dashboard/settings?error=${encodeURIComponent(error)}`,
+        request.url
+      )
     );
   }
 
@@ -37,14 +47,25 @@ export async function GET(request: NextRequest) {
     const tokens = await exchangeCodeForTokens(code);
     const now = Math.floor(Date.now() / 1000);
 
-    await db.delete(oauthTokens);
-    await db.insert(oauthTokens).values({
+    const values = {
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
       expiresAt: now + tokens.expires_in,
-      scope: "email personal daily heartrate spo2",
+      scope: resolveOuraScope(grantedScope, tokens.scope),
       updatedAt: now,
-    });
+    };
+    const [existingToken] = await db
+      .select({ id: oauthTokens.id })
+      .from(oauthTokens)
+      .limit(1);
+    if (existingToken) {
+      await db
+        .update(oauthTokens)
+        .set(values)
+        .where(eq(oauthTokens.id, existingToken.id));
+    } else {
+      await db.insert(oauthTokens).values(values);
+    }
 
     const response = NextResponse.redirect(
       new URL("/dashboard/settings?connected=1", request.url)

@@ -16,7 +16,8 @@ import {
   doseSlotLabel,
   slotsForMedication,
 } from "@/lib/medication-schedule";
-import { getTodayET } from "@/lib/date-utils";
+import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
+import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 
 const MOOD_OPTIONS = [
   { value: -3, label: "Very Low", color: "bg-blue-600" },
@@ -52,6 +53,8 @@ interface MedicationItem {
   dosage: string | null;
   frequency: string | null;
   doseSchedule: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
 }
 
 type MedCheckMap = Record<number, Record<string, boolean>>;
@@ -64,8 +67,7 @@ interface MedLog {
 
 function buildMedChecks(
   meds: MedicationItem[],
-  logs: MedLog[],
-  isFreshDay: boolean
+  logs: MedLog[]
 ): MedCheckMap {
   const map: MedCheckMap = {};
   for (const med of meds) {
@@ -74,16 +76,33 @@ function buildMedChecks(
     if (slots.length === 0) {
       inner[AS_NEEDED_KEY] = false;
     } else {
-      for (const s of slots) inner[s] = isFreshDay;
+      for (const s of slots) inner[s] = false;
     }
     map[med.id] = inner;
   }
-  for (const log of logs) {
+  const { editableLogs } = classifyMedicationLogsForEditing(meds, logs);
+  for (const log of editableLogs) {
     if (!map[log.medicationId]) continue;
     const key = log.slot ?? AS_NEEDED_KEY;
     map[log.medicationId][key] = log.taken === 1;
   }
   return map;
+}
+
+function buildMedTouched(
+  meds: MedicationItem[],
+  logs: MedLog[]
+): MedCheckMap {
+  const touched: MedCheckMap = {};
+  const { editableLogs } = classifyMedicationLogsForEditing(meds, logs);
+  for (const log of editableLogs) {
+    const key = log.slot ?? AS_NEEDED_KEY;
+    touched[log.medicationId] = {
+      ...(touched[log.medicationId] ?? {}),
+      [key]: true,
+    };
+  }
+  return touched;
 }
 
 interface ExistingMood {
@@ -107,10 +126,7 @@ interface MoodFormProps {
 
 function formatDisplayDate(dateStr: string): string {
   const todayStr = getTodayET();
-  const [ty, tm, td] = todayStr.split("-").map(Number);
-  const yesterday = new Date(ty, tm - 1, td);
-  yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().slice(0, 10);
+  const yesterdayStr = shiftIsoDay(todayStr, -1);
 
   if (dateStr === todayStr) return "Today";
   if (dateStr === yesterdayStr) return "Yesterday";
@@ -121,10 +137,7 @@ function formatDisplayDate(dateStr: string): string {
 }
 
 function shiftDay(dateStr: string, delta: number): string {
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + delta);
-  return date.toISOString().slice(0, 10);
+  return shiftIsoDay(dateStr, delta) ?? dateStr;
 }
 
 function parseTags(tags: string | null): string[] {
@@ -134,6 +147,17 @@ function parseTags(tags: string | null): string[] {
   } catch {
     return [];
   }
+}
+
+function medicationsForDay(
+  medications: MedicationItem[],
+  day: string
+): MedicationItem[] {
+  return medications.filter((medication) => {
+    if (medication.startDate && medication.startDate > day) return false;
+    if (medication.endDate && medication.endDate < day) return false;
+    return true;
+  });
 }
 
 export function MoodForm({ initialDay, existingMood, medications, existingMedLogs }: MoodFormProps) {
@@ -147,7 +171,15 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
   const [notes, setNotes] = useState(existingMood?.notes ?? "");
   const [selectedTags, setSelectedTags] = useState<string[]>(parseTags(existingMood?.tags ?? null));
   const [medChecks, setMedChecks] = useState<MedCheckMap>(() =>
-    buildMedChecks(medications, existingMedLogs, !existingMood)
+    buildMedChecks(medications, existingMedLogs)
+  );
+  const [medTouched, setMedTouched] = useState<MedCheckMap>(() =>
+    buildMedTouched(medications, existingMedLogs)
+  );
+  const [unclassifiedLegacyCount, setUnclassifiedLegacyCount] = useState(
+    () =>
+      classifyMedicationLogsForEditing(medications, existingMedLogs)
+        .unclassifiedLegacyCount
   );
   const [showOptional, setShowOptional] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -204,7 +236,13 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
         setShowOptional(false);
       }
 
-      setMedChecks(buildMedChecks(medications, medData?.logs ?? [], !moodData));
+      const loadedLogs = medData?.logs ?? [];
+      setMedChecks(buildMedChecks(medications, loadedLogs));
+      setMedTouched(buildMedTouched(medications, loadedLogs));
+      setUnclassifiedLegacyCount(
+        classifyMedicationLogsForEditing(medications, loadedLogs)
+          .unclassifiedLegacyCount
+      );
     } finally {
       setLoadingDay(false);
     }
@@ -243,9 +281,9 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
           irritabilityScore: showOptional ? irritability : undefined,
           anxietyScore: showOptional ? anxiety : undefined,
           sleepSubjective: showOptional ? sleepSubjective : undefined,
-          notes: notes || undefined,
-          tags: selectedTags.length > 0 ? selectedTags : undefined,
-          episodeState: episodeState ?? undefined,
+          notes: notes || null,
+          tags: selectedTags,
+          episodeState: episodeState ?? null,
         }),
       });
       if (!moodRes.ok) failed.push("mood");
@@ -259,14 +297,29 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
         if (!res.ok) failed.push(label);
       }
 
-      for (const med of medications) {
+      for (const med of medicationsForDay(medications, selectedDay)) {
+        if (med.frequency === "weekly") continue;
         const slots = slotsForMedication(med);
         const checks = medChecks[med.id] ?? {};
+        const touched = medTouched[med.id] ?? {};
         if (slots.length === 0) {
-          await saveMedLog(med.id, null, checks[AS_NEEDED_KEY] ?? false, med.name);
+          if (touched[AS_NEEDED_KEY]) {
+            await saveMedLog(
+              med.id,
+              null,
+              checks[AS_NEEDED_KEY] ?? false,
+              med.name
+            );
+          }
         } else {
           for (const slot of slots) {
-            await saveMedLog(med.id, slot, checks[slot] ?? false, `${med.name} (${doseSlotLabel(slot)})`);
+            if (!touched[slot]) continue;
+            await saveMedLog(
+              med.id,
+              slot,
+              checks[slot] ?? false,
+              `${med.name} (${doseSlotLabel(slot)})`
+            );
           }
         }
       }
@@ -289,6 +342,7 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
 
   const todayStr = getTodayET();
   const isToday = selectedDay === todayStr;
+  const dayMedications = medicationsForDay(medications, selectedDay);
 
   return (
     <div className="space-y-4">
@@ -471,26 +525,44 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
                 </CardContent>
               </Card>
 
-              {medications.length > 0 && (
+              {dayMedications.length > 0 && (
                 <Card>
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">Medications</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <MedicationDoseGroups
-                      medications={medications}
+                      medications={dayMedications}
                       checks={medChecks}
                       disabled={saving || loadingDay}
-                      onCheckedChange={(dose, checked) =>
+                      onCheckedChange={(dose, checked) => {
                         setMedChecks((prev) => ({
                           ...prev,
                           [dose.medId]: {
                             ...(prev[dose.medId] ?? {}),
                             [dose.slotKey]: checked,
                           },
-                        }))
-                      }
+                        }));
+                        setMedTouched((prev) => ({
+                          ...prev,
+                          [dose.medId]: {
+                            ...(prev[dose.medId] ?? {}),
+                            [dose.slotKey]: true,
+                          },
+                        }));
+                      }}
                     />
+                    {unclassifiedLegacyCount > 0 && (
+                      <p className="mt-3 text-xs text-amber-300">
+                        {unclassifiedLegacyCount} legacy medication{" "}
+                        {unclassifiedLegacyCount === 1
+                          ? "record has"
+                          : "records have"}{" "}
+                        an unknown dose-slot classification.{" "}
+                        {unclassifiedLegacyCount === 1 ? "It is" : "They are"}{" "}
+                        retained in reports but not editable here.
+                      </p>
+                    )}
                   </CardContent>
                 </Card>
               )}

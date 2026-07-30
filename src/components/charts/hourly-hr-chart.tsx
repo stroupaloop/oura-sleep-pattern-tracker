@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { type HourlyHrPoint, type HrAnomaly, detectHrAnomalies } from "@/lib/hr-anomalies";
+import { shiftIsoDay } from "@/lib/date-utils";
 
 interface HourlyHrChartProps {
   data: HourlyHrPoint[];
@@ -36,9 +37,7 @@ function formatHour(h: number): string {
 }
 
 function prevDay(day: string): string {
-  const d = new Date(day + "T12:00:00");
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return shiftIsoDay(day, -1) ?? day;
 }
 
 export function HourlyHrChart({ data }: HourlyHrChartProps) {
@@ -68,6 +67,7 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
       return hours.map((h) => {
         const p = byKey.get(h);
         return {
+          day: p?.day ?? (h < 0 ? prevDayStr : selectedDay),
           hour: h,
           actualHour: ((h % 24) + 24) % 24,
           label: formatHour(h),
@@ -75,7 +75,6 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
           minBpm: p?.minBpm ?? null,
           maxBpm: p?.maxBpm ?? null,
           source: p?.source ?? null,
-          hasData: p != null,
         };
       });
     }
@@ -85,6 +84,7 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
     return Array.from({ length: 24 }, (_, h) => {
       const p = byHour.get(h);
       return {
+        day: selectedDay,
         hour: h,
         actualHour: h,
         label: formatHour(h),
@@ -92,25 +92,30 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
         minBpm: p?.minBpm ?? null,
         maxBpm: p?.maxBpm ?? null,
         source: p?.source ?? null,
-        hasData: p != null,
       };
     });
   }, [data, selectedDay, viewMode]);
 
-  const filteredData = useMemo(
-    () => chartData.filter((d) => d.hasData),
-    [chartData]
-  );
-
-  const anomalies = useMemo(
-    () => detectHrAnomalies(selectedDay, data),
-    [selectedDay, data]
-  );
+  const anomalies = useMemo(() => {
+    const days =
+      viewMode === "night"
+        ? [prevDay(selectedDay), selectedDay]
+        : [selectedDay];
+    const chartKeys = new Set(
+      chartData.map((point) => `${point.day}:${point.actualHour}`)
+    );
+    return days
+      .flatMap((day) => detectHrAnomalies(day, data))
+      .filter((anomaly) =>
+        chartKeys.has(`${anomaly.day}:${anomaly.hour}`)
+      );
+  }, [selectedDay, data, viewMode, chartData]);
 
   const anomalyByHour = useMemo(() => {
-    const map = new Map<number, HrAnomaly>();
+    const map = new Map<string, HrAnomaly>();
     for (const a of anomalies) {
-      if (!map.has(a.hour)) map.set(a.hour, a);
+      const key = `${a.day}:${a.hour}`;
+      if (!map.has(key)) map.set(key, a);
     }
     return map;
   }, [anomalies]);
@@ -184,7 +189,7 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={filteredData}>
+          <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
             <XAxis
               dataKey="label"
@@ -217,7 +222,9 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
               labelFormatter={(_label, payload) => {
                 const entry = payload?.[0]?.payload;
                 if (!entry) return "";
-                const anomaly = anomalyByHour.get(entry.actualHour);
+                const anomaly = anomalyByHour.get(
+                  `${entry.day}:${entry.actualHour}`
+                );
                 const parts = [`Time: ${formatHour(entry.actualHour)}`];
                 if (entry.source) parts.push(`Source: ${entry.source}`);
                 if (anomaly) parts.push(anomaly.message);
@@ -244,11 +251,13 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
               dot={false}
             />
             {anomalies.map((a) => {
-              const point = filteredData.find((d) => d.actualHour === a.hour);
+              const point = chartData.find(
+                (d) => d.day === a.day && d.actualHour === a.hour
+              );
               if (!point || point.avgBpm == null) return null;
               return (
                 <ReferenceDot
-                  key={`anomaly-${a.hour}-${a.type}`}
+                  key={`anomaly-${a.day}-${a.hour}-${a.type}`}
                   x={point.label}
                   y={point.avgBpm}
                   r={5}

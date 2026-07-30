@@ -14,7 +14,13 @@ import {
 } from "@/lib/db/schema";
 import { desc, sql, and, gte, ne, eq } from "drizzle-orm";
 import { format, subDays } from "date-fns";
-import { getTodayET } from "@/lib/date-utils";
+import { formatIsoLocalTime, getTodayET } from "@/lib/date-utils";
+import {
+  averagePresent,
+  formatDuration,
+  formatDurationDelta,
+  summarizeStoredSamples,
+} from "@/lib/dashboard-metrics";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -31,24 +37,12 @@ import { SleepCompositionBar } from "@/components/charts/sleep-composition-bar";
 import { ScoreBreakdown } from "@/components/charts/score-breakdown";
 import { ResearchTooltip } from "@/components/research-tooltip";
 import { DailyLogCard } from "@/components/daily-log-card";
-import { ConfidenceIndicator } from "@/components/confidence-indicator";
-import { computeDataConfidence } from "@/lib/analysis/confidence";
-import type { AlertResearchContext } from "@/lib/analysis/episode";
-
-function formatDuration(seconds: number | null): string {
-  if (!seconds) return "--";
-  const hours = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  return `${hours}h ${mins}m`;
-}
+import { DataCoverageIndicator } from "@/components/confidence-indicator";
+import { computeDataCoverage } from "@/lib/analysis/confidence";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "--";
-  return new Date(iso).toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    timeZone: "America/New_York",
-  });
+  return formatIsoLocalTime(iso) ?? "--";
 }
 
 export default async function DashboardPage() {
@@ -76,17 +70,21 @@ export default async function DashboardPage() {
     .orderBy(desc(sleepPeriods.day))
     .limit(1);
 
-  const lastDailySleep = await db
-    .select()
-    .from(dailySleep)
-    .orderBy(desc(dailySleep.day))
-    .limit(1);
-
-  const lastReadiness = await db
-    .select()
-    .from(dailyReadiness)
-    .orderBy(desc(dailyReadiness.day))
-    .limit(1);
+  const latestSleepDay = lastSleep[0]?.day;
+  const [lastDailySleep, lastReadiness] = latestSleepDay
+    ? await Promise.all([
+        db
+          .select()
+          .from(dailySleep)
+          .where(eq(dailySleep.day, latestSleepDay))
+          .limit(1),
+        db
+          .select()
+          .from(dailyReadiness)
+          .where(eq(dailyReadiness.day, latestSleepDay))
+          .limit(1),
+      ])
+    : [[], []];
 
   const recentSleep = await db
     .select({
@@ -109,14 +107,8 @@ export default async function DashboardPage() {
     .orderBy(desc(sleepPeriods.day))
     .limit(30);
 
-  const recentScores = await db
-    .select({ day: dailySleep.day, score: dailySleep.score })
-    .from(dailySleep)
-    .orderBy(desc(dailySleep.day))
-    .limit(30);
-
   const todayDate = new Date(getTodayET() + "T12:00:00");
-  const fourteenDaysAgo = format(subDays(todayDate, 14), "yyyy-MM-dd");
+  const fourteenDaysAgo = format(subDays(todayDate, 13), "yyyy-MM-dd");
   const recentEpisodes = await db
     .select({
       id: episodeAssessments.id,
@@ -124,9 +116,6 @@ export default async function DashboardPage() {
       tier: episodeAssessments.tier,
       direction: episodeAssessments.direction,
       confidence: episodeAssessments.confidence,
-      summary: episodeAssessments.summary,
-      researchContext: episodeAssessments.researchContext,
-      primaryDrivers: episodeAssessments.primaryDrivers,
     })
     .from(episodeAssessments)
     .where(
@@ -139,12 +128,17 @@ export default async function DashboardPage() {
 
   const today = getTodayET();
   const todayMood = await db
-    .select({ moodScore: dailyMood.moodScore, episodeState: dailyMood.episodeState })
+    .select({
+      moodScore: dailyMood.moodScore,
+      episodeState: dailyMood.episodeState,
+      tags: dailyMood.tags,
+      notes: dailyMood.notes,
+    })
     .from(dailyMood)
     .where(eq(dailyMood.day, today))
     .limit(1);
 
-  let activeMeds = await db
+  const trackedMeds = await db
     .select({
       id: medications.id,
       name: medications.name,
@@ -154,33 +148,7 @@ export default async function DashboardPage() {
       startDate: medications.startDate,
       endDate: medications.endDate,
     })
-    .from(medications)
-    .where(eq(medications.isActive, 1));
-
-  if (activeMeds.length === 0) {
-    const now = Math.floor(Date.now() / 1000);
-    const defaults = ["Lithium", "Lamotrigine", "Wellbutrin", "Trazodone"];
-    await db.insert(medications).values(
-      defaults.map((name) => ({
-        name,
-        frequency: "daily",
-        doseSchedule: JSON.stringify(["morning"]),
-        createdAt: now,
-      }))
-    );
-    activeMeds = await db
-      .select({
-        id: medications.id,
-        name: medications.name,
-        dosage: medications.dosage,
-        frequency: medications.frequency,
-        doseSchedule: medications.doseSchedule,
-        startDate: medications.startDate,
-        endDate: medications.endDate,
-      })
-      .from(medications)
-      .where(eq(medications.isActive, 1));
-  }
+    .from(medications);
 
   const todayMedLogs = await db
     .select({
@@ -191,9 +159,9 @@ export default async function DashboardPage() {
     .from(medicationLogs)
     .where(eq(medicationLogs.day, today));
 
-  const confidenceData = await computeDataConfidence(30);
+  const coverageData = await computeDataCoverage(30);
 
-  const thirtyDaysAgo = format(subDays(todayDate, 30), "yyyy-MM-dd");
+  const thirtyDaysAgo = format(subDays(todayDate, 29), "yyyy-MM-dd");
   const recentAnalysis = await db
     .select({
       day: dailyAnalysis.day,
@@ -221,11 +189,12 @@ export default async function DashboardPage() {
   const score = lastDailySleep[0] ?? null;
   const readiness = lastReadiness[0] ?? null;
 
-  const avgSleep =
-    recentSleep.length > 0
-      ? recentSleep.reduce((sum, s) => sum + (s.totalSleepDuration ?? 0), 0) /
-        recentSleep.length
-      : null;
+  const avgSleep = averagePresent(
+    recentSleep.map((entry) => entry.totalSleepDuration)
+  );
+  const measuredSleepNights = recentSleep.filter(
+    (entry) => entry.totalSleepDuration != null && entry.totalSleepDuration > 0
+  ).length;
 
   const sleepDelta =
     sleep?.totalSleepDuration && avgSleep
@@ -233,16 +202,32 @@ export default async function DashboardPage() {
       : null;
 
   const chartData = recentSleep
-    .map((s) => ({
-      day: s.day,
-      hours: s.totalSleepDuration ? +(s.totalSleepDuration / 3600).toFixed(2) : 0,
-      deep: s.deepSleepDuration ? +(s.deepSleepDuration / 3600).toFixed(2) : 0,
-      rem: s.remSleepDuration ? +(s.remSleepDuration / 3600).toFixed(2) : 0,
-      light: s.lightSleepDuration ? +(s.lightSleepDuration / 3600).toFixed(2) : 0,
-      efficiency: s.efficiency ?? 0,
-      hrv: s.averageHrv ?? 0,
-      hr: s.averageHeartRate ?? 0,
-    }))
+    .filter(
+      (entry) =>
+        entry.totalSleepDuration != null && entry.totalSleepDuration > 0
+    )
+    .map((s) => {
+      const heartRate = summarizeStoredSamples(s.hr5min);
+      return {
+        day: s.day,
+        hours: +(s.totalSleepDuration! / 3600).toFixed(2),
+        deep:
+          s.deepSleepDuration != null
+            ? +(s.deepSleepDuration / 3600).toFixed(2)
+            : null,
+        rem:
+          s.remSleepDuration != null
+            ? +(s.remSleepDuration / 3600).toFixed(2)
+            : null,
+        light:
+          s.lightSleepDuration != null
+            ? +(s.lightSleepDuration / 3600).toFixed(2)
+            : null,
+        efficiency: s.efficiency,
+        hrv: s.averageHrv,
+        hr: heartRate.average ?? s.averageHeartRate,
+      };
+    })
     .reverse();
 
   const analysisChartData = recentAnalysis
@@ -260,31 +245,31 @@ export default async function DashboardPage() {
   const compositionData = recentSleep
     .slice(0, 14)
     .map((s) => {
-      const total = (s.totalSleepDuration ?? 0) + (s.awakeTime ?? 0);
-      if (total === 0)
-        return {
-          day: s.day,
-          deep: 0,
-          rem: 0,
-          light: 0,
-          awake: 0,
-          deepMin: 0,
-          remMin: 0,
-          lightMin: 0,
-          awakeMin: 0,
-        };
+      if (
+        s.totalSleepDuration == null ||
+        s.awakeTime == null ||
+        s.totalSleepDuration + s.awakeTime <= 0
+      ) {
+        return null;
+      }
+      const total = s.totalSleepDuration + s.awakeTime;
+      const percentOfTimeInBed = (duration: number | null): number | null =>
+        duration != null ? +(((duration / total) * 100).toFixed(1)) : null;
       return {
         day: s.day,
-        deep: +((((s.deepSleepDuration ?? 0) / total) * 100).toFixed(1)),
-        rem: +((((s.remSleepDuration ?? 0) / total) * 100).toFixed(1)),
-        light: +((((s.lightSleepDuration ?? 0) / total) * 100).toFixed(1)),
-        awake: +((((s.awakeTime ?? 0) / total) * 100).toFixed(1)),
-        deepMin: (s.deepSleepDuration ?? 0) / 60,
-        remMin: (s.remSleepDuration ?? 0) / 60,
-        lightMin: (s.lightSleepDuration ?? 0) / 60,
-        awakeMin: (s.awakeTime ?? 0) / 60,
+        deep: percentOfTimeInBed(s.deepSleepDuration),
+        rem: percentOfTimeInBed(s.remSleepDuration),
+        light: percentOfTimeInBed(s.lightSleepDuration),
+        awake: percentOfTimeInBed(s.awakeTime),
+        deepMin:
+          s.deepSleepDuration != null ? s.deepSleepDuration / 60 : null,
+        remMin: s.remSleepDuration != null ? s.remSleepDuration / 60 : null,
+        lightMin:
+          s.lightSleepDuration != null ? s.lightSleepDuration / 60 : null,
+        awakeMin: s.awakeTime / 60,
       };
     })
+    .filter((entry): entry is NonNullable<typeof entry> => entry != null)
     .reverse();
 
   const lastNightHypnogram = recentSleep[0]?.hypnogram5min ?? null;
@@ -297,10 +282,9 @@ export default async function DashboardPage() {
 
       <DailyLogCard
         initialDay={today}
-        medications={activeMeds}
+        medications={trackedMeds}
         initialMood={todayMood[0] ?? null}
         initialMedLogs={todayMedLogs}
-        initialEpisodeState={todayMood[0]?.episodeState ?? null}
       />
 
       {highestTier && (
@@ -326,21 +310,17 @@ export default async function DashboardPage() {
               {highestTier.tier.toUpperCase()}
             </span>
             <p className="font-medium">
-              {recentEpisodes.length} episode{recentEpisodes.length !== 1 ? "s" : ""} detected in the last 14 days
+              {recentEpisodes.length} flagged day{recentEpisodes.length !== 1 ? "s" : ""} in the last 14 days
             </p>
           </div>
-          {(() => {
-            let headline = highestTier.summary;
-            try {
-              const ctx: AlertResearchContext | null = highestTier.researchContext
-                ? JSON.parse(highestTier.researchContext)
-                : null;
-              if (ctx?.headline) headline = ctx.headline;
-            } catch {}
-            return headline ? (
-              <p className="text-sm mt-1 opacity-80">{headline}</p>
-            ) : null;
-          })()}
+          <p className="text-sm mt-1 opacity-80">
+            {highestTier.direction === "hyper"
+              ? "Higher-activation"
+              : highestTier.direction === "hypo"
+                ? "Lower-activation"
+                : "Mixed"}{" "}
+            personal-baseline pattern; this is not a mood-episode diagnosis.
+          </p>
           <Link
             href="/dashboard/alerts"
             className="text-sm underline mt-2 inline-block"
@@ -372,8 +352,7 @@ export default async function DashboardPage() {
                     : "text-green-400"
                 }`}
               >
-                {sleepDelta > 0 ? "+" : ""}
-                {formatDuration(sleepDelta)} vs avg
+                {formatDurationDelta(sleepDelta)} vs avg
               </p>
             )}
             {sleep && (
@@ -402,14 +381,14 @@ export default async function DashboardPage() {
 
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>30-Day Avg Sleep</CardDescription>
+            <CardDescription>Last 30 Recorded Nights · Avg Sleep</CardDescription>
             <CardTitle className="text-2xl">
               {formatDuration(avgSleep)}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-muted-foreground">
-              Based on {recentSleep.length} nights
+              Based on {measuredSleepNights} nights
             </p>
           </CardContent>
         </Card>
@@ -474,7 +453,7 @@ export default async function DashboardPage() {
         <SleepCompositionBar data={compositionData} />
       )}
 
-      <ConfidenceIndicator data={confidenceData} />
+      <DataCoverageIndicator data={coverageData} />
     </div>
   );
 }

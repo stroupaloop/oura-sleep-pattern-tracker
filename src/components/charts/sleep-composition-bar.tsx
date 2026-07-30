@@ -8,7 +8,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
-  ReferenceLine,
 } from "recharts";
 import {
   Card,
@@ -20,25 +19,31 @@ import {
 
 interface CompositionData {
   day: string;
-  deep: number;
-  rem: number;
-  light: number;
-  awake: number;
-  deepMin: number;
-  remMin: number;
-  lightMin: number;
-  awakeMin: number;
+  deep: number | null;
+  rem: number | null;
+  light: number | null;
+  awake: number | null;
+  deepMin: number | null;
+  remMin: number | null;
+  lightMin: number | null;
+  awakeMin: number | null;
 }
 
-function formatMins(mins: number): string {
+function formatMins(mins: number | null): string {
+  if (mins == null) return "--";
   const h = Math.floor(mins / 60);
   const m = Math.round(mins % 60);
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function formatStage(percent: number | null, minutes: number | null): string {
+  if (percent == null || minutes == null) return "--";
+  return `${percent.toFixed(0)}% (${formatMins(minutes)})`;
+}
+
 interface TooltipPayloadItem {
   name: string;
-  value: number;
+  value: number | null;
   color: string;
   payload: CompositionData;
 }
@@ -58,16 +63,16 @@ function CustomTooltip({
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-foreground mb-1">{label}</p>
       <p style={{ color: "#3b82f6" }}>
-        Deep: {d.deep.toFixed(0)}% ({formatMins(d.deepMin)})
+        Deep: {formatStage(d.deep, d.deepMin)}
       </p>
       <p style={{ color: "#a78bfa" }}>
-        REM: {d.rem.toFixed(0)}% ({formatMins(d.remMin)})
+        REM: {formatStage(d.rem, d.remMin)}
       </p>
       <p style={{ color: "#67e8f9" }}>
-        Light: {d.light.toFixed(0)}% ({formatMins(d.lightMin)})
+        Light: {formatStage(d.light, d.lightMin)}
       </p>
       <p style={{ color: "#f97316" }}>
-        Awake: {d.awake.toFixed(0)}% ({formatMins(d.awakeMin)})
+        Awake: {formatStage(d.awake, d.awakeMin)}
       </p>
     </div>
   );
@@ -77,9 +82,9 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Sleep Stage Composition</CardTitle>
+        <CardTitle>Time-in-Bed Composition</CardTitle>
         <CardDescription>
-          Nightly sleep stage proportions (last {data.length} nights)
+          Sleep stages plus awake time as a share of time in bed (last {data.length} nights)
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -106,8 +111,6 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
             />
             <Tooltip content={<CustomTooltip />} />
             <Legend />
-            <ReferenceLine x={17.5} stroke="#3b82f6" strokeDasharray="3 3" strokeOpacity={0.4} />
-            <ReferenceLine x={40} stroke="#a78bfa" strokeDasharray="3 3" strokeOpacity={0.4} />
             <Bar dataKey="deep" stackId="a" fill="#3b82f6" name="Deep" />
             <Bar dataKey="rem" stackId="a" fill="#a78bfa" name="REM" />
             <Bar dataKey="light" stackId="a" fill="#67e8f9" name="Light" />

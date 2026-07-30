@@ -75,7 +75,7 @@ export function DetectionConfig() {
         </div>
         <p className="text-xs text-muted-foreground">
           {preset === "low" && "Fewer alerts \u2014 only strong, sustained patterns trigger warnings."}
-          {preset === "medium" && "Balanced \u2014 aligns with DSM-5 episode duration criteria."}
+          {preset === "medium" && "Balanced \u2014 moderate heuristic thresholds for sustained personal-baseline changes."}
           {preset === "high" && "More sensitive \u2014 catches earlier signals but may flag more confounders."}
         </p>
         <p className="text-xs text-muted-foreground mt-1">

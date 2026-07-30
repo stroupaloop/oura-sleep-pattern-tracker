@@ -8,7 +8,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceArea,
   ReferenceLine,
 } from "recharts";
 import {
@@ -21,67 +20,25 @@ import {
 interface CycleTemperaturePoint {
   day: string;
   temperatureDelta: number | null;
-  phase?: string;
 }
 
 interface CycleTemperatureChartProps {
   data: CycleTemperaturePoint[];
-  ovulationDays?: string[];
+  thermalShiftDays?: string[];
   days?: number;
-}
-
-const phaseColors: Record<string, string> = {
-  follicular: "oklch(0.85 0.1 240)",
-  luteal: "oklch(0.85 0.1 350)",
-  menstrual: "oklch(0.85 0.1 25)",
-};
-
-interface PhaseRange {
-  start: string;
-  end: string;
-  phase: string;
-}
-
-function buildPhaseRanges(data: CycleTemperaturePoint[]): PhaseRange[] {
-  const ranges: PhaseRange[] = [];
-  let rangeStart: string | null = null;
-  let currentPhase = "";
-
-  for (const d of data) {
-    if (d.phase && d.phase !== currentPhase) {
-      if (rangeStart) {
-        ranges.push({ start: rangeStart, end: d.day, phase: currentPhase });
-      }
-      rangeStart = d.day;
-      currentPhase = d.phase;
-    } else if (!d.phase && rangeStart) {
-      ranges.push({ start: rangeStart, end: d.day, phase: currentPhase });
-      rangeStart = null;
-      currentPhase = "";
-    }
-  }
-  if (rangeStart && data.length > 0) {
-    ranges.push({
-      start: rangeStart,
-      end: data[data.length - 1].day,
-      phase: currentPhase,
-    });
-  }
-  return ranges;
 }
 
 export function CycleTemperatureChart({
   data,
-  ovulationDays,
+  thermalShiftDays,
   days = 90,
 }: CycleTemperatureChartProps) {
   const sliced = data.slice(-days);
-  const phaseRanges = buildPhaseRanges(sliced);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Cycle Temperature Deviation</CardTitle>
+        <CardTitle>Nighttime Skin-Temperature Deviation</CardTitle>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -109,27 +66,21 @@ export function CycleTemperatureChart({
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => {
                 const v = Number(value);
-                return [`${v > 0 ? "+" : ""}${v.toFixed(2)}`, "Temp Delta"];
+                return [
+                  `${v > 0 ? "+" : ""}${v.toFixed(2)} °C`,
+                  "Oura Deviation",
+                ];
               }}
               labelFormatter={(label) => `Date: ${label}`}
             />
-            {phaseRanges.map((r, i) => (
-              <ReferenceArea
-                key={`phase-${i}`}
-                x1={r.start}
-                x2={r.end}
-                fill={phaseColors[r.phase] ?? "oklch(0.85 0.1 240)"}
-                fillOpacity={0.15}
-              />
-            ))}
-            {ovulationDays?.map((day) => (
+            {thermalShiftDays?.map((day) => (
               <ReferenceLine
-                key={`ovulation-${day}`}
+                key={`thermal-shift-${day}`}
                 x={day}
                 stroke="oklch(0.708 0 0)"
                 strokeDasharray="4 4"
                 label={{
-                  value: "O",
+                  value: "Detected shift",
                   position: "top",
                   fill: "oklch(0.708 0 0)",
                   fontSize: 10,
@@ -142,8 +93,8 @@ export function CycleTemperatureChart({
               stroke="oklch(0.65 0.2 350)"
               strokeWidth={2}
               dot={false}
-              connectNulls
-              name="Temp Delta"
+              connectNulls={false}
+              name="Oura Temperature Deviation"
             />
           </ComposedChart>
         </ResponsiveContainer>

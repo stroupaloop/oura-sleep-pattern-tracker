@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { auth, isSensitiveUser } from "@/lib/auth";
 import { loadActiveConfig, createConfig, SENSITIVITY_PRESETS } from "@/lib/analysis/config";
 
 export async function GET() {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isSensitiveUser(session.user.email)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {
@@ -24,6 +27,9 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!isSensitiveUser(session.user.email)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   try {

@@ -21,8 +21,8 @@ interface BedtimeTrendChartProps {
 }
 
 function formatMinutesAsTime(minutes: number): string {
-  const adjusted = minutes < 0 ? minutes + 1440 : minutes;
-  const h = Math.floor(adjusted / 60) % 24;
+  const adjusted = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  const h = Math.floor(adjusted / 60);
   const m = adjusted % 60;
   const ampm = h >= 12 ? "PM" : "AM";
   const h12 = h % 12 || 12;
@@ -39,12 +39,12 @@ function getDotColor(actual: number, optStart: number, optEnd: number): string {
 }
 
 function getDotLabel(actual: number, optStart: number, optEnd: number): string {
-  if (actual >= optStart && actual <= optEnd) return "On time";
+  if (actual >= optStart && actual <= optEnd) return "Within Oura window";
   const diff = actual < optStart
     ? optStart - actual
     : actual - optEnd;
-  if (diff <= 30) return "Slightly off";
-  return "Way off";
+  if (diff <= 30) return "Within 30m of Oura window";
+  return "More than 30m outside Oura window";
 }
 
 export function BedtimeTrendChart({
@@ -78,7 +78,7 @@ export function BedtimeTrendChart({
         <CardTitle>Sleep Timing</CardTitle>
         <CardDescription>
           {hasAnyOptimal
-            ? `Bedtime vs. optimal window (last ${days} days)`
+            ? `Bedtime vs. Oura optimal window (last ${days} days)`
             : `Bedtime trend (last ${days} days — optimal window not available from Oura)`}
         </CardDescription>
       </CardHeader>
@@ -91,7 +91,7 @@ export function BedtimeTrendChart({
           </div>
 
           <div className="space-y-0.5">
-            {sliced.reverse().map((point) => {
+            {[...sliced].reverse().map((point) => {
               const actual = point.actualBedtime!;
               const hasOptimal = point.optimalStart != null && point.optimalEnd != null;
               const dotLeft = ((actual - rangeMin) / rangeSpan) * 100;
@@ -160,19 +160,19 @@ export function BedtimeTrendChart({
               <>
                 <div className="flex items-center gap-1">
                   <span className="w-3 h-3 rounded-sm bg-violet-500/15" />
-                  Optimal window
+                  Oura optimal window
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
-                  On time
+                  Within Oura window
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                  Slightly off
+                  Within 30m
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                  Way off
+                  More than 30m outside
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />

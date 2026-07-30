@@ -3,9 +3,12 @@ export const dynamic = "force-dynamic";
 import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { dailyAnalysis, dailyMood, episodeAssessments } from "@/lib/db/schema";
-import { gte, ne, and } from "drizzle-orm";
-import { format, subDays } from "date-fns";
+import { gte, lte, ne, and } from "drizzle-orm";
 import { getTodayET } from "@/lib/date-utils";
+import {
+  getLifeChartStartDay,
+  resolveLifeChartRange,
+} from "@/lib/life-chart";
 import { LifeChart } from "./life-chart";
 import { TimeRangeSelector } from "./time-range-selector";
 
@@ -15,8 +18,9 @@ interface Props {
 
 export default async function LifeChartPage({ searchParams }: Props) {
   const params = await searchParams;
-  const rangeDays = Number(params.range) || 90;
-  const startDate = format(subDays(new Date(getTodayET() + "T12:00:00"), rangeDays), "yyyy-MM-dd");
+  const rangeDays = resolveLifeChartRange(params.range);
+  const endDate = getTodayET();
+  const startDate = getLifeChartStartDay(endDate, rangeDays);
 
   const [analysis, moods, episodes] = await Promise.all([
     db
@@ -32,7 +36,12 @@ export default async function LifeChartPage({ searchParams }: Props) {
         steps: dailyAnalysis.steps,
       })
       .from(dailyAnalysis)
-      .where(gte(dailyAnalysis.day, startDate))
+      .where(
+        and(
+          gte(dailyAnalysis.day, startDate),
+          lte(dailyAnalysis.day, endDate)
+        )
+      )
       .orderBy(dailyAnalysis.day),
     db
       .select({
@@ -46,7 +55,9 @@ export default async function LifeChartPage({ searchParams }: Props) {
         episodeState: dailyMood.episodeState,
       })
       .from(dailyMood)
-      .where(gte(dailyMood.day, startDate))
+      .where(
+        and(gte(dailyMood.day, startDate), lte(dailyMood.day, endDate))
+      )
       .orderBy(dailyMood.day),
     db
       .select({
@@ -58,7 +69,8 @@ export default async function LifeChartPage({ searchParams }: Props) {
       .where(
         and(
           ne(episodeAssessments.tier, "none"),
-          gte(episodeAssessments.day, startDate)
+          gte(episodeAssessments.day, startDate),
+          lte(episodeAssessments.day, endDate)
         )
       )
       .orderBy(episodeAssessments.day),
@@ -78,9 +90,9 @@ export default async function LifeChartPage({ searchParams }: Props) {
         </Suspense>
       </div>
 
-      {analysis.length === 0 ? (
+      {analysis.length === 0 && moods.length === 0 && episodes.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
-          <p>No data for the selected range. Sync your Oura data and run analysis first.</p>
+          <p>No sleep, mood, or episode data for the selected range.</p>
         </div>
       ) : (
         <LifeChart analysis={analysis} moods={moods} episodes={episodes} />

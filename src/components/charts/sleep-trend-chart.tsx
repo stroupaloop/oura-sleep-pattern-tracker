@@ -8,11 +8,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  LineChart,
   Line,
   Legend,
   ComposedChart,
-  ReferenceArea,
 } from "recharts";
 import {
   Card,
@@ -21,16 +19,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { computeCalendarRollingAverage } from "@/lib/dashboard-metrics";
 
 interface SleepData {
   day: string;
   hours: number;
-  deep: number;
-  rem: number;
-  light: number;
-  efficiency: number;
-  hrv: number;
-  hr: number;
+  deep: number | null;
+  rem: number | null;
+  light: number | null;
+  efficiency: number | null;
+  hrv: number | null;
+  hr: number | null;
 }
 
 interface AnalysisPoint {
@@ -48,41 +47,31 @@ interface SleepTrendChartProps {
   analysisData?: AnalysisPoint[];
 }
 
-function computeRollingAvg(values: (number | null)[], window: number): (number | null)[] {
-  return values.map((_, i) => {
-    const start = Math.max(0, i - window + 1);
-    const slice = values.slice(start, i + 1).filter((v): v is number => v != null && v > 0);
-    if (slice.length === 0) return null;
-    return slice.reduce((a, b) => a + b, 0) / slice.length;
-  });
-}
-
 interface MergedHrvPoint {
   day: string;
-  hrv: number;
+  hrv: number | null;
   hrvAvg: number | null;
   baselineHrv: number | null;
-  baselineHrvUpper: number | null;
-  baselineHrvLower: number | null;
-  isAnomaly: boolean;
-  anomalyDirection: string | null;
+  isDeviation: boolean;
 }
 
 interface MergedHrPoint {
   day: string;
-  hr: number;
+  hr: number | null;
   hrAvg: number | null;
   baselineHr: number | null;
-  baselineHrUpper: number | null;
-  baselineHrLower: number | null;
-  isAnomaly: boolean;
-  anomalyDirection: string | null;
+  isDeviation: boolean;
 }
 
 function mergeHrvData(data: SleepData[], analysis?: AnalysisPoint[]): MergedHrvPoint[] {
   const analysisMap = new Map(analysis?.map((a) => [a.day, a]));
-  const hrvValues = data.map((d) => d.hrv || null);
-  const rollingAvg = computeRollingAvg(hrvValues, 7);
+  const rollingAvg = computeCalendarRollingAverage(
+    data.map((point) => ({
+      day: point.day,
+      value: point.hrv != null && point.hrv > 0 ? point.hrv : null,
+    })),
+    7
+  );
 
   return data.map((d, i) => {
     const a = analysisMap.get(d.day);
@@ -92,18 +81,20 @@ function mergeHrvData(data: SleepData[], analysis?: AnalysisPoint[]): MergedHrvP
       hrv: d.hrv,
       hrvAvg: rollingAvg[i],
       baselineHrv: baseline,
-      baselineHrvUpper: baseline != null ? baseline * 1.15 : null,
-      baselineHrvLower: baseline != null ? baseline * 0.85 : null,
-      isAnomaly: a?.isAnomaly === 1,
-      anomalyDirection: a?.anomalyDirection ?? null,
+      isDeviation: Math.abs(a?.hrvZScore ?? 0) >= 2,
     };
   });
 }
 
 function mergeHrData(data: SleepData[], analysis?: AnalysisPoint[]): MergedHrPoint[] {
   const analysisMap = new Map(analysis?.map((a) => [a.day, a]));
-  const hrValues = data.map((d) => d.hr || null);
-  const rollingAvg = computeRollingAvg(hrValues, 7);
+  const rollingAvg = computeCalendarRollingAverage(
+    data.map((point) => ({
+      day: point.day,
+      value: point.hr != null && point.hr > 0 ? point.hr : null,
+    })),
+    7
+  );
 
   return data.map((d, i) => {
     const a = analysisMap.get(d.day);
@@ -113,10 +104,7 @@ function mergeHrData(data: SleepData[], analysis?: AnalysisPoint[]): MergedHrPoi
       hr: d.hr,
       hrAvg: rollingAvg[i],
       baselineHr: baseline,
-      baselineHrUpper: baseline != null ? baseline * 1.08 : null,
-      baselineHrLower: baseline != null ? baseline * 0.92 : null,
-      isAnomaly: a?.isAnomaly === 1,
-      anomalyDirection: a?.anomalyDirection ?? null,
+      isDeviation: Math.abs(a?.heartRateZScore ?? 0) >= 2,
     };
   });
 }
@@ -148,8 +136,10 @@ function HrvTooltipContent({
       {p.baselineHrv != null && (
         <p className="text-muted-foreground">Baseline: {p.baselineHrv.toFixed(0)} ms</p>
       )}
-      {p.isAnomaly && (
-        <p className="text-red-400 text-xs mt-1">Anomaly detected</p>
+      {p.isDeviation && (
+        <p className="text-red-400 text-xs mt-1">
+          At least 2 standard deviations from baseline
+        </p>
       )}
     </div>
   );
@@ -182,8 +172,10 @@ function HrTooltipContent({
       {p.baselineHr != null && (
         <p className="text-muted-foreground">Baseline: {p.baselineHr.toFixed(0)} bpm</p>
       )}
-      {p.isAnomaly && (
-        <p className="text-red-400 text-xs mt-1">Anomaly detected</p>
+      {p.isDeviation && (
+        <p className="text-red-400 text-xs mt-1">
+          At least 2 standard deviations from baseline
+        </p>
       )}
     </div>
   );
@@ -192,13 +184,13 @@ function HrTooltipContent({
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function AnomalyDot(props: any) {
   const { cx, cy, payload } = props;
-  if (!payload?.isAnomaly) return null;
+  if (!payload?.isDeviation) return null;
   return (
     <circle
       cx={cx}
       cy={cy}
       r={4}
-      fill={payload.anomalyDirection === "hyper" ? "#f59e0b" : payload.anomalyDirection === "hypo" ? "#3b82f6" : "#ef4444"}
+      fill="#ef4444"
       stroke="none"
     />
   );
@@ -207,7 +199,10 @@ function AnomalyDot(props: any) {
 export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
   const hrvData = mergeHrvData(data, analysisData);
   const hrData = mergeHrData(data, analysisData);
-  const hasBaseline = analysisData && analysisData.some((a) => a.baselineHrv != null);
+  const hasHrvBaseline =
+    analysisData?.some((point) => point.baselineHrv != null) ?? false;
+  const hasHrBaseline =
+    analysisData?.some((point) => point.baselineHeartRate != null) ?? false;
 
   return (
     <div className="space-y-4 md:space-y-6">
@@ -302,25 +297,6 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                   tick={{ fill: "oklch(0.708 0 0)" }}
                 />
                 <Tooltip content={<HrvTooltipContent />} />
-                {hasBaseline && (
-                  <Area
-                    type="monotone"
-                    dataKey="baselineHrvUpper"
-                    stroke="none"
-                    fill="transparent"
-                    activeDot={false}
-                  />
-                )}
-                {hasBaseline && (
-                  <Area
-                    type="monotone"
-                    dataKey="baselineHrvLower"
-                    stroke="none"
-                    fill="#34d399"
-                    fillOpacity={0.08}
-                    activeDot={false}
-                  />
-                )}
                 <Line
                   type="monotone"
                   dataKey="hrv"
@@ -341,7 +317,7 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                   activeDot={false}
                   name="7-day avg"
                 />
-                {hasBaseline && (
+                {hasHrvBaseline && (
                   <Line
                     type="monotone"
                     dataKey="baselineHrv"
@@ -380,25 +356,6 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                   tick={{ fill: "oklch(0.708 0 0)" }}
                 />
                 <Tooltip content={<HrTooltipContent />} />
-                {hasBaseline && (
-                  <Area
-                    type="monotone"
-                    dataKey="baselineHrUpper"
-                    stroke="none"
-                    fill="transparent"
-                    activeDot={false}
-                  />
-                )}
-                {hasBaseline && (
-                  <Area
-                    type="monotone"
-                    dataKey="baselineHrLower"
-                    stroke="none"
-                    fill="#f87171"
-                    fillOpacity={0.08}
-                    activeDot={false}
-                  />
-                )}
                 <Line
                   type="monotone"
                   dataKey="hr"
@@ -419,7 +376,7 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                   activeDot={false}
                   name="7-day avg"
                 />
-                {hasBaseline && (
+                {hasHrBaseline && (
                   <Line
                     type="monotone"
                     dataKey="baselineHr"

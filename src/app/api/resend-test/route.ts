@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const apiKey = process.env.AUTH_RESEND_KEY ?? process.env.RESEND_API_KEY;
   const from = process.env.EMAIL_FROM ?? "noreply@resend.dev";
   const to = process.env.ALLOWED_EMAILS?.split(",")[0]?.trim();

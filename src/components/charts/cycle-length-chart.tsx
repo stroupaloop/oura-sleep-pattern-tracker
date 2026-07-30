@@ -12,6 +12,7 @@ import {
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -32,7 +33,10 @@ export function CycleLengthChart({ data }: CycleLengthChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Cycle Length</CardTitle>
+        <CardTitle>Thermal-Shift Intervals</CardTitle>
+        <CardDescription>
+          Calendar days between consecutive detected temperature shifts
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -42,7 +46,7 @@ export function CycleLengthChart({ data }: CycleLengthChartProps) {
               dataKey="cycleNumber"
               fontSize={11}
               tick={{ fill: "oklch(0.708 0 0)" }}
-              tickFormatter={(v) => `#${v}`}
+              tickFormatter={(v) => `Shift #${v}`}
             />
             <YAxis
               fontSize={11}
@@ -57,14 +61,14 @@ export function CycleLengthChart({ data }: CycleLengthChartProps) {
                 color: "oklch(0.985 0 0)",
               }}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={(value: any) => [`${Number(value)} days`, "Cycle Length"]}
-              labelFormatter={(label) => `Cycle #${label}`}
+              formatter={(value: any) => [`${Number(value)} days`, "Shift Interval"]}
+              labelFormatter={(label) => `Shift #${label}`}
             />
             <Bar
               dataKey="cycleLength"
               fill="oklch(0.65 0.2 350)"
               fillOpacity={0.8}
-              name="Cycle Length"
+              name="Shift Interval"
             />
           </BarChart>
         </ResponsiveContainer>

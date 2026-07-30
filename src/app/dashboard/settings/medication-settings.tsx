@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { getTodayET } from "@/lib/date-utils";
+import { getSupersededMedicationIds } from "@/lib/medication-write";
 
 const SLOTS = [
   { value: "morning", label: "Morning" },
@@ -20,6 +21,7 @@ interface Medication {
   isActive: number | null;
   startDate: string | null;
   endDate: string | null;
+  previousVersionId: number | null;
 }
 
 function parseSchedule(raw: string | null | undefined): Slot[] {
@@ -36,7 +38,7 @@ function parseSchedule(raw: string | null | undefined): Slot[] {
 }
 
 function defaultScheduleForFrequency(frequency: string | null): Slot[] {
-  if (frequency === "as_needed") return [];
+  if (frequency === "as_needed" || frequency === "weekly") return [];
   if (frequency === "twice_daily") return ["morning", "evening"];
   return ["morning"];
 }
@@ -44,6 +46,15 @@ function defaultScheduleForFrequency(frequency: string | null): Slot[] {
 function formatScheduleLabel(slots: Slot[]): string {
   if (slots.length === 0) return "";
   return slots.map((s) => SLOTS.find((x) => x.value === s)?.label ?? s).join(" + ");
+}
+
+async function getApiError(response: Response, fallback: string): Promise<string> {
+  try {
+    const body = (await response.json()) as { error?: unknown };
+    return typeof body.error === "string" ? body.error : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function MedicationSettings() {
@@ -57,57 +68,111 @@ export function MedicationSettings() {
   const [editFields, setEditFields] = useState<Partial<Medication>>({});
   const [editSchedule, setEditSchedule] = useState<Slot[]>([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function fetchMeds() {
     const res = await fetch("/api/medications?all=1");
+    if (!res.ok) {
+      throw new Error(await getApiError(res, "Failed to refresh medications"));
+    }
     const data = await res.json();
+    if (!Array.isArray(data)) throw new Error("Failed to refresh medications");
     setMeds(data);
     setLoading(false);
   }
 
   useEffect(() => {
-    fetchMeds();
+    let active = true;
+    void fetch("/api/medications?all=1")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Failed to load medications");
+        return response.json() as Promise<Medication[]>;
+      })
+      .then((data) => {
+        if (!active) return;
+        setMeds(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setMeds([]);
+        setError("Failed to load medications.");
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function addMed() {
     if (!newName.trim()) return;
     setSaving(true);
-    const today = format(new Date(), "yyyy-MM-dd");
-    await fetch("/api/medications", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: newName.trim(),
-        dosage: newDosage.trim() || null,
-        frequency: newFrequency,
-        doseSchedule: newFrequency === "as_needed" ? null : newSchedule,
-        startDate: today,
-      }),
-    });
-    setNewName("");
-    setNewDosage("");
-    setNewFrequency("daily");
-    setNewSchedule(["morning"]);
-    await fetchMeds();
-    setSaving(false);
+    setError(null);
+    const today = getTodayET();
+    try {
+      const response = await fetch("/api/medications", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: newName.trim(),
+          dosage: newDosage.trim() || null,
+          frequency: newFrequency,
+          doseSchedule: newFrequency === "as_needed" ? null : newSchedule,
+          startDate: today,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(await getApiError(response, "Medication was not added"));
+      }
+      setNewName("");
+      setNewDosage("");
+      setNewFrequency("daily");
+      setNewSchedule(["morning"]);
+      try {
+        await fetchMeds();
+      } catch {
+        setError("Medication was added, but the list could not be refreshed.");
+      }
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Medication was not added");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function updateMed(id: number, updates: Record<string, unknown>) {
-    await fetch("/api/medications", {
+    const response = await fetch("/api/medications", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, ...updates }),
     });
-    await fetchMeds();
+    if (!response.ok) {
+      throw new Error(await getApiError(response, "Medication was not updated"));
+    }
+    try {
+      await fetchMeds();
+    } catch {
+      setError("Medication was updated, but the list could not be refreshed.");
+    }
   }
 
   async function deactivate(id: number) {
-    const today = format(new Date(), "yyyy-MM-dd");
-    await updateMed(id, { isActive: 0, endDate: today });
+    const today = getTodayET();
+    setError(null);
+    try {
+      await updateMed(id, { isActive: false, endDate: today });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Medication was not updated");
+    }
   }
 
   async function reactivate(id: number) {
-    await updateMed(id, { isActive: 1, endDate: null });
+    setError(null);
+    try {
+      await updateMed(id, { isActive: true, endDate: null });
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Medication was not updated");
+    }
   }
 
   function startEdit(med: Medication) {
@@ -142,17 +207,23 @@ export function MedicationSettings() {
 
   async function saveEdit(id: number) {
     setSaving(true);
+    setError(null);
     const updates: Record<string, unknown> = { ...editFields };
     if (editFields.frequency === "as_needed") {
       updates.doseSchedule = null;
     } else {
       updates.doseSchedule = editSchedule;
     }
-    await updateMed(id, updates);
-    setEditingId(null);
-    setEditFields({});
-    setEditSchedule([]);
-    setSaving(false);
+    try {
+      await updateMed(id, updates);
+      setEditingId(null);
+      setEditFields({});
+      setEditSchedule([]);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Medication was not updated");
+    } finally {
+      setSaving(false);
+    }
   }
 
   if (loading) {
@@ -161,9 +232,15 @@ export function MedicationSettings() {
 
   const active = meds.filter((m) => m.isActive === 1);
   const inactive = meds.filter((m) => m.isActive !== 1);
+  const supersededIds = getSupersededMedicationIds(meds);
 
   return (
     <div className="space-y-4">
+      {error && (
+        <p role="alert" className="text-sm text-red-400">
+          {error}
+        </p>
+      )}
       {active.length > 0 && (
         <div className="space-y-2">
           <p className="text-sm font-medium">Active</p>
@@ -190,7 +267,11 @@ export function MedicationSettings() {
                         <option value="daily">Daily</option>
                         <option value="twice_daily">Twice daily</option>
                         <option value="as_needed">As needed</option>
-                        <option value="weekly">Weekly</option>
+                        {editFields.frequency === "weekly" && (
+                          <option value="weekly" disabled>
+                            Weekly (unsupported)
+                          </option>
+                        )}
                       </select>
                     </div>
                     {editFields.frequency !== "as_needed" && (
@@ -229,7 +310,12 @@ export function MedicationSettings() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => saveEdit(med.id)}
-                        disabled={saving || (editFields.frequency !== "as_needed" && editSchedule.length === 0)}
+                        disabled={
+                          saving ||
+                          editFields.frequency === "weekly" ||
+                          (editFields.frequency !== "as_needed" &&
+                            editSchedule.length === 0)
+                        }
                         className="text-xs px-3 py-1 rounded bg-primary text-primary-foreground disabled:opacity-50"
                       >
                         Save
@@ -249,7 +335,11 @@ export function MedicationSettings() {
                       {med.dosage && (
                         <span className="text-xs text-muted-foreground ml-2">{med.dosage}</span>
                       )}
-                      {med.frequency === "as_needed" ? (
+                      {med.frequency === "weekly" ? (
+                        <span className="text-xs text-amber-400 ml-2">
+                          (weekly tracking unavailable; not shown in daily check-ins)
+                        </span>
+                      ) : med.frequency === "as_needed" ? (
                         <span className="text-xs text-muted-foreground ml-2">(as needed)</span>
                       ) : schedule.length > 0 ? (
                         <span className="text-xs text-muted-foreground ml-2">
@@ -298,12 +388,14 @@ export function MedicationSettings() {
                   <span className="text-xs text-muted-foreground ml-2">ended {med.endDate}</span>
                 )}
               </div>
-              <button
-                onClick={() => reactivate(med.id)}
-                className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-400 hover:bg-green-500/20"
-              >
-                Reactivate
-              </button>
+              {!supersededIds.has(med.id) && (
+                <button
+                  onClick={() => reactivate(med.id)}
+                  className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-400 hover:bg-green-500/20"
+                >
+                  Reactivate
+                </button>
+              )}
             </div>
           ))}
         </div>
@@ -336,7 +428,6 @@ export function MedicationSettings() {
             <option value="daily">Daily</option>
             <option value="twice_daily">Twice daily</option>
             <option value="as_needed">As needed</option>
-            <option value="weekly">Weekly</option>
           </select>
           <button
             onClick={addMed}

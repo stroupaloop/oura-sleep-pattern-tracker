@@ -36,7 +36,31 @@ export function NotificationSettings() {
   }
 
   useEffect(() => {
-    fetchRecipients();
+    let active = true;
+    void fetch("/api/settings/notifications")
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("Failed to load notification settings");
+        }
+        return response.json() as Promise<NotificationRecipient[]>;
+      })
+      .then((data) => {
+        if (!active) return;
+        const nextRecipients = Array.isArray(data) ? data : [];
+        setRecipients(nextRecipients);
+        if (nextRecipients.length > 0) {
+          setReminderHour(nextRecipients[0].reminderHour ?? 22);
+        }
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setRecipients([]);
+        setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function addRecipient() {

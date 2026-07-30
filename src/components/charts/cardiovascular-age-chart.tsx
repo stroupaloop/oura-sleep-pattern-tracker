@@ -13,6 +13,7 @@ import {
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -28,21 +29,35 @@ interface CardiovascularAgeChartProps {
   days?: number;
 }
 
+function getOuraCategory(
+  cardiovascularAge: number,
+  actualAge: number | null | undefined
+): string | null {
+  if (actualAge == null) return null;
+  const difference = cardiovascularAge - actualAge;
+  if (difference <= -6) return "Below";
+  if (difference >= 6) return "Above";
+  return "Aligned";
+}
+
 export function CardiovascularAgeChart({
   data,
   actualAge,
   days = 90,
 }: CardiovascularAgeChartProps) {
-  const filtered = data.slice(-days).filter((d) => d.vascularAge != null);
+  const chartData = data.slice(-days);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Cardiovascular Age</CardTitle>
+        <CardTitle>Oura Cardiovascular Age</CardTitle>
+        <CardDescription>
+          Oura estimate compared with your actual age; focus on the longer-term trend
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
-          <LineChart data={filtered}>
+          <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
             <XAxis
               dataKey="day"
@@ -64,7 +79,17 @@ export function CardiovascularAgeChart({
                 color: "oklch(0.985 0 0)",
               }}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={(value: any) => [`${Number(value)} years`, "Vascular Age"]}
+              formatter={(value: any) => {
+                const cardiovascularAge = Number(value);
+                const category = getOuraCategory(
+                  cardiovascularAge,
+                  actualAge
+                );
+                return [
+                  `${cardiovascularAge} years${category ? ` · ${category}` : ""}`,
+                  "Oura Cardiovascular Age",
+                ];
+              }}
               labelFormatter={(label) => `Date: ${label}`}
             />
             {actualAge != null && (
@@ -86,8 +111,8 @@ export function CardiovascularAgeChart({
               stroke="oklch(0.65 0.2 260)"
               strokeWidth={2}
               dot={false}
-              connectNulls
-              name="Vascular Age"
+              connectNulls={false}
+              name="Oura Cardiovascular Age"
             />
           </LineChart>
         </ResponsiveContainer>

@@ -66,7 +66,8 @@ export function CorrelationView({ pairs }: CorrelationViewProps) {
       <CardHeader>
         <CardTitle>Metric Correlations</CardTitle>
         <CardDescription>
-          Scatter plots of key metric pairs. Orange = hyper-pattern, Blue = hypo-pattern, Gray = normal.
+          Scatter plots of key metric pairs. Orange = higher-activation flag,
+          Blue = lower-activation flag, Gray = unflagged.
         </CardDescription>
       </CardHeader>
       <CardContent>

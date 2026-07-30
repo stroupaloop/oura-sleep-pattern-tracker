@@ -54,14 +54,14 @@ export function parseMedicationSchedule(raw: string | null | undefined): DoseSlo
 export function defaultScheduleForFrequency(
   frequency: string | null | undefined
 ): DoseSlot[] {
-  if (frequency === "as_needed") return [];
+  if (frequency === "as_needed" || frequency === "weekly") return [];
   return frequency === "twice_daily" ? ["morning", "evening"] : ["morning"];
 }
 
 export function slotsForMedication(
   med: Pick<MedicationDoseSource, "frequency" | "doseSchedule">
 ): DoseSlot[] {
-  if (med.frequency === "as_needed") return [];
+  if (med.frequency === "as_needed" || med.frequency === "weekly") return [];
   const parsed = parseMedicationSchedule(med.doseSchedule);
   return parsed.length > 0 ? parsed : defaultScheduleForFrequency(med.frequency);
 }
@@ -85,6 +85,7 @@ function buildDoseEntries(meds: MedicationDoseSource[]): DoseEntry[] {
   const doses = meds.flatMap((med) => {
     const slots = slotsForMedication(med);
     if (slots.length === 0) {
+      if (med.frequency !== "as_needed") return [];
       return [
         {
           medId: med.id,

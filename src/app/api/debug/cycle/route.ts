@@ -1,19 +1,27 @@
 import { NextResponse } from "next/server";
 import { auth, isSensitiveUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { sleepPeriods, cyclePredictions, dailyReadiness, enhancedTags, restModePeriods, sleepTime } from "@/lib/db/schema";
-import { eq, gte, and, isNotNull, count, max, desc } from "drizzle-orm";
+import { sleepPeriods, cyclePredictions, dailyReadiness, enhancedTags, restModePeriods } from "@/lib/db/schema";
+import { eq, gte, and, isNotNull, count, max } from "drizzle-orm";
 import { format, subDays } from "date-fns";
+import { getTodayET } from "@/lib/date-utils";
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const session = await auth();
   if (!session?.user || !isSensitiveUser(session.user.email)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const cutoff = format(subDays(new Date(), 365), "yyyy-MM-dd");
+  const cutoff = format(
+    subDays(new Date(`${getTodayET()}T12:00:00`), 364),
+    "yyyy-MM-dd"
+  );
 
-  const [totalSleep, withTemp, readinessTotal, readinessWithTemp, cycleRows, lastSync, tagCount, restCount, cycleDetails, sleepTimeSample] =
+  const [totalSleep, withTemp, readinessTotal, readinessWithTemp, cycleRows, lastSync, tagCount, restCount] =
     await Promise.all([
       db
         .select({ count: count() })
@@ -48,8 +56,6 @@ export async function GET() {
         .from(cyclePredictions),
       db.select({ count: count() }).from(enhancedTags),
       db.select({ count: count() }).from(restModePeriods),
-      db.select().from(cyclePredictions).orderBy(cyclePredictions.cycleNumber),
-      db.select().from(sleepTime).orderBy(desc(sleepTime.day)).limit(5),
     ]);
 
   return NextResponse.json({
@@ -57,13 +63,11 @@ export async function GET() {
     withTemperatureDelta: withTemp[0]?.count ?? 0,
     readinessLast365: readinessTotal[0]?.count ?? 0,
     readinessWithTemperatureDeviation: readinessWithTemp[0]?.count ?? 0,
-    cyclePredictionRows: cycleRows[0]?.count ?? 0,
+    thermalShiftRecordCount: cycleRows[0]?.count ?? 0,
     lastCyclePredictionAt: lastSync[0]?.latest
       ? new Date(lastSync[0].latest * 1000).toISOString()
       : null,
     enhancedTagsCount: tagCount[0]?.count ?? 0,
     restModePeriodsCount: restCount[0]?.count ?? 0,
-    cycleDetails,
-    sleepTimeSample,
   });
 }

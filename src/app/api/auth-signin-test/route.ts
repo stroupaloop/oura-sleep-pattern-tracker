@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
 
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const baseUrl = process.env.NEXTAUTH_URL
     ?? process.env.AUTH_URL
-    ?? process.env.VERCEL_URL
+    ?? (process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : "http://localhost:3000";
+      : "http://localhost:3000");
 
   const results: Record<string, string> = {};
   results.NEXTAUTH_URL = process.env.NEXTAUTH_URL ?? "not set";

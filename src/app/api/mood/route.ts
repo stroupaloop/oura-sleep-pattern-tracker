@@ -2,49 +2,48 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { dailyMood } from "@/lib/db/schema";
 import { eq, gte, lte, and } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { requireApiUser, unauthorizedResponse } from "@/lib/api-auth";
+import { parseMoodWrite } from "@/lib/mood-write";
 
 export async function POST(req: NextRequest) {
+  const user = await requireApiUser();
+  if (!user) return unauthorizedResponse();
+
   try {
-    const body = await req.json();
-    const { day, moodScore, energyScore, irritabilityScore, anxietyScore, sleepSubjective, notes, tags, episodeState } = body;
-
-    if (!day || moodScore === undefined || moodScore === null) {
-      return NextResponse.json({ error: "day and moodScore are required" }, { status: 400 });
+    const parsed = parseMoodWrite(await req.json());
+    if (!parsed.ok) {
+      return NextResponse.json({ error: parsed.error }, { status: 400 });
     }
-    if (moodScore < -3 || moodScore > 3) {
-      return NextResponse.json({ error: "moodScore must be between -3 and +3" }, { status: 400 });
-    }
-
+    const { day, fields } = parsed;
     const now = Math.floor(Date.now() / 1000);
+    const [existing] = await db
+      .select({ id: dailyMood.id })
+      .from(dailyMood)
+      .where(eq(dailyMood.day, day))
+      .limit(1);
 
-    await db
-      .insert(dailyMood)
-      .values({
+    if (existing) {
+      await db.update(dailyMood).set(fields).where(eq(dailyMood.id, existing.id));
+    } else {
+      if (fields.moodScore === undefined) {
+        return NextResponse.json(
+          { error: "Choose a mood before adding other details" },
+          { status: 400 }
+        );
+      }
+      await db.insert(dailyMood).values({
         day,
-        moodScore,
-        energyScore: energyScore ?? null,
-        irritabilityScore: irritabilityScore ?? null,
-        anxietyScore: anxietyScore ?? null,
-        sleepSubjective: sleepSubjective ?? null,
-        notes: notes ?? null,
-        tags: tags ? JSON.stringify(tags) : null,
-        episodeState: episodeState ?? null,
+        moodScore: fields.moodScore,
+        energyScore: fields.energyScore ?? null,
+        irritabilityScore: fields.irritabilityScore ?? null,
+        anxietyScore: fields.anxietyScore ?? null,
+        sleepSubjective: fields.sleepSubjective ?? null,
+        notes: fields.notes ?? null,
+        tags: fields.tags ?? null,
+        episodeState: fields.episodeState ?? null,
         createdAt: now,
-      })
-      .onConflictDoUpdate({
-        target: dailyMood.day,
-        set: {
-          moodScore: sql`excluded.mood_score`,
-          energyScore: sql`excluded.energy_score`,
-          irritabilityScore: sql`excluded.irritability_score`,
-          anxietyScore: sql`excluded.anxiety_score`,
-          sleepSubjective: sql`excluded.sleep_subjective`,
-          notes: sql`excluded.notes`,
-          tags: sql`excluded.tags`,
-          episodeState: sql`excluded.episode_state`,
-        },
       });
+    }
 
     return NextResponse.json({ success: true, savedAt: new Date(now * 1000).toISOString() });
   } catch (error) {
@@ -56,6 +55,9 @@ export async function POST(req: NextRequest) {
 }
 
 export async function GET(req: NextRequest) {
+  const user = await requireApiUser();
+  if (!user) return unauthorizedResponse();
+
   try {
     const { searchParams } = new URL(req.url);
     const startDate = searchParams.get("start");

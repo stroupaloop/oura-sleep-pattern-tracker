@@ -65,22 +65,22 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
         <p className="font-medium">How this affects detection:</p>
         {selected === "bp1" && (
           <p>
-            Bipolar I involves manic episodes with dramatic sleep reduction.
-            Standard detection thresholds work well. Bounce-back penalty is
-            reduced to catch sustained patterns.
+            Uses the app&apos;s Bipolar I heuristic profile, which changes how
+            sustained activation-leaning patterns are weighted. This profile
+            has not been clinically validated.
           </p>
         )}
         {selected === "bp2" && (
           <p>
-            Bipolar II involves hypomanic episodes with subtler changes. The
-            system gives extra weight to within-night sleep variability &mdash;
-            the strongest early signal for hypomania (94% sensitivity).
+            Uses the app&apos;s Bipolar II heuristic profile, with more weight
+            on within-night variability. That metric is exploratory and is not
+            a validated hypomania detector.
           </p>
         )}
         {selected === "unspecified" && (
           <p>
-            Default profile uses balanced thresholds suitable for general
-            monitoring. Select your type for more tailored detection.
+            Uses the default heuristic weights. Profile selection changes app
+            scoring only and does not make a diagnosis.
           </p>
         )}
       </div>

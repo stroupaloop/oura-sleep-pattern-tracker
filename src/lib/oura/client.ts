@@ -1,7 +1,11 @@
 import { db } from "@/lib/db";
 import { oauthTokens } from "@/lib/db/schema";
-import { refreshAccessToken } from "./oauth";
-import type { OuraApiResponse } from "./types";
+import { eq } from "drizzle-orm";
+import { refreshAccessToken, resolveOuraScope } from "./oauth";
+import {
+  OuraRequestError,
+  parseOuraCollectionResponse,
+} from "./contracts";
 
 const BASE_URL = "https://api.ouraring.com";
 
@@ -17,14 +21,16 @@ async function getAccessToken(): Promise<string> {
   }
 
   const refreshed = await refreshAccessToken(token.refreshToken);
-  await db.delete(oauthTokens);
-  await db.insert(oauthTokens).values({
-    accessToken: refreshed.access_token,
-    refreshToken: refreshed.refresh_token,
-    expiresAt: now + refreshed.expires_in,
-    scope: token.scope,
-    updatedAt: now,
-  });
+  await db
+    .update(oauthTokens)
+    .set({
+      accessToken: refreshed.access_token,
+      refreshToken: refreshed.refresh_token,
+      expiresAt: now + refreshed.expires_in,
+      scope: resolveOuraScope(refreshed.scope, token.scope),
+      updatedAt: now,
+    })
+    .where(eq(oauthTokens.id, token.id));
 
   return refreshed.access_token;
 }
@@ -34,7 +40,9 @@ export async function ouraFetchSingle<T>(endpoint: string): Promise<T> {
   const res = await fetch(`${BASE_URL}/${endpoint}`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) throw new Error(`Oura API ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    throw new OuraRequestError(res.status, endpoint);
+  }
   return (await res.json()) as T;
 }
 
@@ -58,11 +66,10 @@ export async function ouraFetch<T>(
     });
 
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Oura API ${res.status}: ${text}`);
+      throw new OuraRequestError(res.status, endpoint);
     }
 
-    const body = (await res.json()) as OuraApiResponse<T>;
+    const body = parseOuraCollectionResponse<T>(await res.json(), endpoint);
     allData.push(...body.data);
     nextToken = body.next_token;
   } while (nextToken);

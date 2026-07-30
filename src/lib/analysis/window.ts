@@ -1,4 +1,11 @@
-import { coefficientOfVariation, zScore, standardDeviation, trimmedMean } from "./baseline";
+import {
+  circularVariation,
+  coefficientOfVariation,
+  isNextCalendarDay,
+  zScore,
+  standardDeviation,
+  trimmedMean,
+} from "./baseline";
 import { DetectionConfigValues, BipolarType, getBipolarProfile } from "./config";
 import { DailyAnalysisResult } from "./anomaly";
 
@@ -64,12 +71,13 @@ export function bounceBackScore(scores: number[]): number {
 }
 
 export function temperatureTrend(tempDeltas: number[]): { mean: number; elevated: boolean } {
-  if (tempDeltas.length === 0) return { mean: 0, elevated: false };
-  const mean = tempDeltas.reduce((s, v) => s + v, 0) / tempDeltas.length;
+  const finite = tempDeltas.filter(Number.isFinite);
+  if (finite.length === 0) return { mean: Number.NaN, elevated: false };
+  const mean = finite.reduce((s, v) => s + v, 0) / finite.length;
   let consecutiveElevated = 0;
   let maxConsecutive = 0;
   for (const t of tempDeltas) {
-    if (t > 0.5) {
+    if (Number.isFinite(t) && t > 0.5) {
       consecutiveElevated++;
       maxConsecutive = Math.max(maxConsecutive, consecutiveElevated);
     } else {
@@ -79,7 +87,37 @@ export function temperatureTrend(tempDeltas: number[]): { mean: number; elevated
   return { mean, elevated: maxConsecutive >= 3 };
 }
 
+export function normalizeEvidenceScore(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.min(10, Math.max(0, value));
+}
+
 const WINDOW_MULTIPLIERS: Record<number, number> = { 3: 0.6, 5: 0.85, 7: 1.0 };
+
+function shiftCalendarDay(day: string, offset: number): string {
+  const date = new Date(`${day}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+}
+
+function consecutiveWindows(
+  results: DailyAnalysisResult[],
+  windowDays: number,
+  select: (result: DailyAnalysisResult) => number
+): number[][] {
+  const ordered = [...results].sort((a, b) => a.day.localeCompare(b.day));
+  const windows: number[][] = [];
+  for (let end = windowDays - 1; end < ordered.length; end++) {
+    const slice = ordered.slice(end - windowDays + 1, end + 1);
+    const isConsecutive = slice.every(
+      (result, index) =>
+        index === 0 || isNextCalendarDay(slice[index - 1].day, result.day)
+    );
+    const values = slice.map(select);
+    if (isConsecutive && values.every(Number.isFinite)) windows.push(values);
+  }
+  return windows;
+}
 
 export function analyzeWindow(
   dailyResults: DailyAnalysisResult[],
@@ -89,9 +127,18 @@ export function analyzeWindow(
   expectedDays?: number,
   bipolarType: BipolarType = "unspecified"
 ): WindowResult | null {
-  if (dailyResults.length < Math.min(windowDays, 2)) return null;
+  if (dailyResults.length < 2) return null;
 
-  const windowData = dailyResults.slice(-windowDays);
+  const orderedResults = [...dailyResults].sort((a, b) =>
+    a.day.localeCompare(b.day)
+  );
+  const latestDay = orderedResults[orderedResults.length - 1].day;
+  const earliestDay = shiftCalendarDay(latestDay, -(windowDays - 1));
+  const windowData = orderedResults.filter(
+    (result) => result.day >= earliestDay && result.day <= latestDay
+  );
+  if (windowData.length < 2) return null;
+
   const scores = windowData.map((d) => d.compositeScore);
   const directions = windowData.map((d) => d.direction);
 
@@ -102,64 +149,91 @@ export function analyzeWindow(
 
   const actualDays = windowData.length;
   const expected = expectedDays ?? windowDays;
-  const missingDaysInWindow = expected - actualDays;
+  const missingDaysInWindow = Math.max(0, expected - actualDays);
   const missingRatio = expected > 0 ? missingDaysInWindow / expected : 0;
 
   const hrvCrashDays = windowData.filter((d) => d.hrvCrash).length;
 
-  const latencyValues = windowData.map((d) => d.metrics.onsetLatencyMinutes);
-  const bedtimeValues = windowData.map((d) => d.metrics.bedtimeMinutes);
-  const sleepValues = windowData.map((d) => d.metrics.totalSleepMinutes);
-  const hrvValues = windowData.map((d) => d.metrics.avgHrv).filter((v) => v > 0);
+  const latencyValues = windowData
+    .map((d) => d.metrics.onsetLatencyMinutes)
+    .filter(Number.isFinite);
+  const bedtimeValues = windowData
+    .map((d) => d.metrics.bedtimeMinutes)
+    .filter(Number.isFinite);
+  const sleepValues = windowData
+    .map((d) => d.metrics.totalSleepMinutes)
+    .filter(Number.isFinite);
+  const hrvValues = windowData
+    .map((d) => d.metrics.avgHrv)
+    .filter(Number.isFinite);
 
-  const latencyCV = coefficientOfVariation(latencyValues);
-  const bedtimeCV = coefficientOfVariation(bedtimeValues);
-  const sleepDurationCV = coefficientOfVariation(sleepValues);
-  const hrvCV = hrvValues.length > 1 ? coefficientOfVariation(hrvValues) : 0;
+  const latencyCV =
+    latencyValues.length > 1 ? coefficientOfVariation(latencyValues) : 0;
+  const bedtimeCV =
+    bedtimeValues.length > 1 ? circularVariation(bedtimeValues) : 0;
+  const sleepDurationCV =
+    sleepValues.length > 1 ? coefficientOfVariation(sleepValues) : 0;
+  const hrvCV =
+    hrvValues.length > 1 ? coefficientOfVariation(hrvValues) : 0;
 
-  const priorLatencyValues = allPriorMetrics.map((d) => d.metrics.onsetLatencyMinutes);
-  const priorLatencyCVs: number[] = [];
-  for (let i = windowDays; i <= priorLatencyValues.length; i++) {
-    const slice = priorLatencyValues.slice(i - windowDays, i);
-    priorLatencyCVs.push(coefficientOfVariation(slice));
-  }
-  const baselineLatencyCV = priorLatencyCVs.length > 0 ? trimmedMean(priorLatencyCVs) : 0;
-  const latencyCVStd = priorLatencyCVs.length > 1 ? standardDeviation(priorLatencyCVs, baselineLatencyCV) : 0;
+  const priorLatencyCVs = consecutiveWindows(
+    allPriorMetrics,
+    windowDays,
+    (result) => result.metrics.onsetLatencyMinutes
+  ).map((values) => coefficientOfVariation(values));
+  const baselineLatencyCV =
+    priorLatencyCVs.length > 0 ? trimmedMean(priorLatencyCVs) : Number.NaN;
+  const latencyCVStd =
+    priorLatencyCVs.length > 1
+      ? standardDeviation(priorLatencyCVs, baselineLatencyCV)
+      : Number.NaN;
   const latCVZ = zScore(latencyCV, baselineLatencyCV, latencyCVStd);
 
-  const priorBedtimeValues = allPriorMetrics.map((d) => d.metrics.bedtimeMinutes);
-  const priorBedtimeCVs: number[] = [];
-  for (let i = windowDays; i <= priorBedtimeValues.length; i++) {
-    const slice = priorBedtimeValues.slice(i - windowDays, i);
-    priorBedtimeCVs.push(coefficientOfVariation(slice));
-  }
-  const baselineBedtimeCV = priorBedtimeCVs.length > 0 ? trimmedMean(priorBedtimeCVs) : 0;
-  const bedtimeCVStd = priorBedtimeCVs.length > 1 ? standardDeviation(priorBedtimeCVs, baselineBedtimeCV) : 0;
+  const priorBedtimeCVs = consecutiveWindows(
+    allPriorMetrics,
+    windowDays,
+    (result) => result.metrics.bedtimeMinutes
+  ).map((values) => circularVariation(values));
+  const baselineBedtimeCV =
+    priorBedtimeCVs.length > 0 ? trimmedMean(priorBedtimeCVs) : Number.NaN;
+  const bedtimeCVStd =
+    priorBedtimeCVs.length > 1
+      ? standardDeviation(priorBedtimeCVs, baselineBedtimeCV)
+      : Number.NaN;
   const bedtimeCVZ = zScore(bedtimeCV, baselineBedtimeCV, bedtimeCVStd);
 
-  const tempDeltas = windowData.map((d) => d.metrics.temperatureDelta);
+  const temperatureByDay = new Map(
+    windowData.map((result) => [
+      result.day,
+      result.metrics.temperatureDeviation,
+    ])
+  );
+  const tempDeltas: number[] = [];
+  for (
+    let day = earliestDay;
+    day <= latestDay;
+    day = shiftCalendarDay(day, 1)
+  ) {
+    tempDeltas.push(temperatureByDay.get(day) ?? Number.NaN);
+  }
   const tempResult = temperatureTrend(tempDeltas);
 
   const windowMultiplier = WINDOW_MULTIPLIERS[windowDays] ?? 1.0;
-  let confidence = consistency * 3.0;
-  confidence += Math.max(0, slope) * 2.0;
-  confidence += dirResult.ratio * 1.5;
+  let evidenceScore = consistency * 3.0;
+  evidenceScore += Math.max(0, slope) * 2.0;
+  evidenceScore += dirResult.ratio * 1.5;
 
   if (dirResult.dominant === "hypo" && latCVZ > 0) {
-    confidence += latCVZ * 1.0;
+    evidenceScore += latCVZ * 1.0;
   }
   if (dirResult.dominant === "hyper" && tempResult.elevated) {
-    confidence += 2.0;
+    evidenceScore += 2.0;
   }
 
-  if (missingRatio > 0.2) {
-    confidence += missingRatio * 1.5;
-  }
-
-  confidence += hrvCrashDays * 1.5;
+  evidenceScore += hrvCrashDays * 1.5;
 
   if (bedtimeCVZ > 0) {
-    confidence += bedtimeCVZ * 0.8;
+    evidenceScore += bedtimeCVZ * 0.8;
   }
 
   const withinNightVarValues = windowData
@@ -168,7 +242,7 @@ export function analyzeWindow(
   if (withinNightVarValues.length > 0) {
     const withinNightVarTrend = trendSlope(withinNightVarValues);
     if (withinNightVarTrend > 0) {
-      confidence += withinNightVarTrend * 1.5;
+      evidenceScore += withinNightVarTrend * 1.5;
     }
   }
 
@@ -177,7 +251,7 @@ export function analyzeWindow(
     .filter((v) => v !== 0);
   if (activityZScores.length > 0) {
     const avgActivityZ = activityZScores.reduce((s, v) => s + v, 0) / activityZScores.length;
-    confidence += Math.abs(avgActivityZ) * 1.0;
+    evidenceScore += Math.abs(avgActivityZ) * 1.0;
   }
 
   const circadianIVZScores = windowData
@@ -186,13 +260,13 @@ export function analyzeWindow(
   if (circadianIVZScores.length > 0) {
     const avgCircadianIVZ = circadianIVZScores.reduce((s, v) => s + v, 0) / circadianIVZScores.length;
     if (avgCircadianIVZ > 0) {
-      confidence += avgCircadianIVZ * 1.0;
+      evidenceScore += avgCircadianIVZ * 1.0;
     }
   }
 
   const stressfulDays = windowData.filter((d) => d.metrics.stressHigh > 3600);
   if (stressfulDays.length >= 2) {
-    confidence += stressfulDays.length * 0.4;
+    evidenceScore += stressfulDays.length * 0.4;
   }
 
   const resilienceLevels = windowData
@@ -200,7 +274,7 @@ export function analyzeWindow(
     .filter((l): l is string => l !== null);
   const lowResilience = resilienceLevels.filter((l) => l === "limited" || l === "adequate");
   if (lowResilience.length >= 2) {
-    confidence += lowResilience.length * 0.4;
+    evidenceScore += lowResilience.length * 0.4;
   }
 
   if (dirResult.dominant) {
@@ -212,17 +286,18 @@ export function analyzeWindow(
       return false;
     }).length;
     if (alignedDays >= 2) {
-      confidence += alignedDays * 0.8;
+      evidenceScore += alignedDays * 0.8;
     }
   }
 
   const profile = getBipolarProfile(bipolarType);
   if (dirResult.dominant === "hypo") {
-    confidence *= (1.0 - bounce * profile.hypoBounceBackMultiplier);
+    evidenceScore *= (1.0 - bounce * profile.hypoBounceBackMultiplier);
   } else {
-    confidence *= (1.0 - bounce * profile.hyperBounceBackMultiplier);
+    evidenceScore *= (1.0 - bounce * profile.hyperBounceBackMultiplier);
   }
-  confidence *= windowMultiplier;
+  evidenceScore *= windowMultiplier;
+  evidenceScore *= Math.max(0, 1 - missingRatio);
 
   return {
     windowDays,
@@ -240,7 +315,7 @@ export function analyzeWindow(
     temperatureElevated: tempResult.elevated,
     missingDaysInWindow,
     hrvCrashDays,
-    confidence,
+    confidence: normalizeEvidenceScore(evidenceScore),
     direction: dirResult.dominant,
   };
 }

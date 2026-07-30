@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { getIsoLocalClockMinutes } from "@/lib/date-utils";
 
 interface HypnogramChartProps {
   hypnogram: string;
@@ -24,13 +25,12 @@ const stageMap: Record<string, { label: string; value: number; color: string }> 
 
 const stageRow: Record<number, number> = { 4: 0, 3: 1, 2: 2, 1: 3 };
 
-function formatClockTime(date: Date): string {
-  return date.toLocaleTimeString("en-US", {
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-    timeZone: "America/New_York",
-  });
+function formatClockMinutes(minutes: number): string {
+  const normalized = ((minutes % 1440) + 1440) % 1440;
+  const hours = Math.floor(normalized / 60);
+  const displayHour = hours % 12 || 12;
+  const displayMinutes = String(normalized % 60).padStart(2, "0");
+  return `${displayHour}:${displayMinutes} ${hours >= 12 ? "PM" : "AM"}`;
 }
 
 interface DataPoint {
@@ -42,30 +42,83 @@ interface DataPoint {
   color: string;
 }
 
+interface StoredHeartRateSeries {
+  timestamp: string;
+  interval: number;
+  items: Array<number | null>;
+}
+
+function parseStoredHeartRateSeries(
+  value: string | null
+): StoredHeartRateSeries | null {
+  if (!value) return null;
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      typeof (parsed as { timestamp?: unknown }).timestamp !== "string" ||
+      typeof (parsed as { interval?: unknown }).interval !== "number" ||
+      !Array.isArray((parsed as { items?: unknown }).items)
+    ) {
+      return null;
+    }
+    const series = parsed as StoredHeartRateSeries;
+    if (
+      !Number.isFinite(series.interval) ||
+      series.interval <= 0 ||
+      series.items.some(
+        (item) =>
+          item !== null &&
+          (typeof item !== "number" || !Number.isFinite(item))
+      )
+    ) {
+      return null;
+    }
+    return series;
+  } catch {
+    return null;
+  }
+}
+
 function parseHypnogram(
   hypnogram: string,
   hr5min: string | null,
   bedtimeStart: string
 ): DataPoint[] {
-  const start = new Date(bedtimeStart);
-  let hrData: number[] = [];
-  if (hr5min) {
-    try {
-      hrData = JSON.parse(hr5min);
-    } catch {
-      hrData = [];
-    }
-  }
+  const startMinutes = getIsoLocalClockMinutes(bedtimeStart);
+  const heartRateSeries = parseStoredHeartRateSeries(hr5min);
+  const bedtimeTimestamp = Date.parse(bedtimeStart);
+  const heartRateTimestamp = heartRateSeries
+    ? Date.parse(heartRateSeries.timestamp)
+    : Number.NaN;
 
   return Array.from(hypnogram).map((char, i) => {
     const info = stageMap[char] ?? { label: "Unknown", value: 2, color: "#525252" };
-    const time = new Date(start.getTime() + i * 5 * 60 * 1000);
+    const phaseTimestamp = bedtimeTimestamp + i * 5 * 60 * 1000;
+    const rawHeartRateIndex =
+      heartRateSeries && Number.isFinite(phaseTimestamp) && Number.isFinite(heartRateTimestamp)
+        ? (phaseTimestamp - heartRateTimestamp) /
+          (heartRateSeries.interval * 1000)
+        : Number.NaN;
+    const heartRateIndex = Math.round(rawHeartRateIndex);
+    const isAligned =
+      heartRateSeries != null &&
+      Number.isFinite(rawHeartRateIndex) &&
+      Math.abs(rawHeartRateIndex - heartRateIndex) < 0.001 &&
+      heartRateIndex >= 0 &&
+      heartRateIndex < heartRateSeries.items.length;
     return {
       minuteOffset: i * 5,
-      time: formatClockTime(time),
+      time:
+        startMinutes != null
+          ? formatClockMinutes(startMinutes + i * 5)
+          : "--",
       stage: info.value,
       stageLabel: info.label,
-      hr: hrData[i] ?? null,
+      hr: isAligned
+        ? heartRateSeries.items[heartRateIndex] ?? null
+        : null,
       color: info.color,
     };
   });
@@ -74,11 +127,15 @@ function parseHypnogram(
 export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramChartProps) {
   const data = parseHypnogram(hypnogram, hr5min, bedtimeStart);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [tooltip, setTooltip] = useState<{ x: number; point: DataPoint } | null>(null);
+  const [tooltip, setTooltip] = useState<{
+    left: number;
+    point: DataPoint;
+  } | null>(null);
 
   if (data.length === 0) return null;
 
   const hrData = data.filter((d) => d.hr != null);
+  const hasAlignedHeartRate = hrData.length > 1;
   const hrMin = hrData.length > 0 ? Math.min(...hrData.map((d) => d.hr!)) - 5 : 0;
   const hrMax = hrData.length > 0 ? Math.max(...hrData.map((d) => d.hr!)) + 5 : 100;
   const hrRange = hrMax - hrMin || 1;
@@ -98,7 +155,10 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
     const chartWidth = rect.width - labelWidth;
     const idx = Math.round(((x - labelWidth) / chartWidth) * (data.length - 1));
     if (idx >= 0 && idx < data.length) {
-      setTooltip({ x: e.clientX - rect.left, point: data[idx] });
+      setTooltip({
+        left: Math.max(0, Math.min(x, rect.width - 140)),
+        point: data[idx],
+      });
     }
   }
 
@@ -112,7 +172,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
       >
         <div className="flex" style={{ height: chartHeight }}>
           <div className="flex flex-col justify-between shrink-0 w-12 pr-2">
-            {STAGES.map((s, i) => (
+            {STAGES.map((s) => (
               <div
                 key={s.key}
                 className="flex items-center justify-end text-[10px] text-muted-foreground"
@@ -141,7 +201,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
               const widthPct = (1 / data.length) * 100 + 0.1;
               return (
                 <div
-                  key={i}
+                  key={d.minuteOffset}
                   className="absolute rounded-[1px]"
                   style={{
                     left: `${leftPct}%`,
@@ -155,16 +215,20 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
               );
             })}
 
-            {hr5min && hrData.length > 1 && (() => {
-              const pts = data
-                .map((d, i) => {
-                  if (d.hr == null) return null;
-                  const x = (i / (data.length - 1)) * 100;
-                  const y = ((d.hr - hrMin) / hrRange) * 100;
-                  return { x, y: 100 - y };
-                })
-                .filter((p): p is { x: number; y: number } => p != null);
-              const pathD = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+            {hasAlignedHeartRate && (() => {
+              const segments: Array<Array<{ x: number; y: number }>> = [];
+              let segment: Array<{ x: number; y: number }> = [];
+              data.forEach((point, index) => {
+                if (point.hr == null) {
+                  if (segment.length > 1) segments.push(segment);
+                  segment = [];
+                  return;
+                }
+                const x = (index / (data.length - 1)) * 100;
+                const y = ((point.hr - hrMin) / hrRange) * 100;
+                segment.push({ x, y: 100 - y });
+              });
+              if (segment.length > 1) segments.push(segment);
               return (
                 <svg
                   className="absolute left-0 top-0 pointer-events-none"
@@ -172,14 +236,22 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
                   viewBox="0 0 100 100"
                   preserveAspectRatio="none"
                 >
-                  <path
-                    d={pathD}
-                    fill="none"
-                    stroke="#ef4444"
-                    strokeWidth="2"
-                    strokeOpacity="0.7"
-                    vectorEffect="non-scaling-stroke"
-                  />
+                  {segments.map((points, segmentIndex) => (
+                    <path
+                      key={segmentIndex}
+                      d={points
+                        .map(
+                          (point, pointIndex) =>
+                            `${pointIndex === 0 ? "M" : "L"} ${point.x} ${point.y}`
+                        )
+                        .join(" ")}
+                      fill="none"
+                      stroke="#ef4444"
+                      strokeWidth="2"
+                      strokeOpacity="0.7"
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
                 </svg>
               );
             })()}
@@ -192,7 +264,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
             )}
           </div>
 
-          {hr5min && hrData.length > 1 && (
+          {hasAlignedHeartRate && (
             <div className="flex flex-col justify-between shrink-0 w-8 pl-1 text-[9px] text-muted-foreground">
               <span>{Math.round(hrMax)}</span>
               <span className="text-[8px]">bpm</span>
@@ -213,7 +285,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
           <div
             className="absolute z-10 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md pointer-events-none"
             style={{
-              left: Math.min(tooltip.x, (containerRef.current?.clientWidth ?? 300) - 140),
+              left: tooltip.left,
               top: -50,
             }}
           >
@@ -236,7 +308,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
             {s.label}
           </div>
         ))}
-        {hr5min && (
+        {hasAlignedHeartRate && (
           <div className="flex items-center gap-1">
             <span className="w-3 h-0.5 rounded bg-red-500/50" />
             Heart rate

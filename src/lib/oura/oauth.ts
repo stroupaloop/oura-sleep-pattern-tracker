@@ -1,14 +1,24 @@
+import { OURA_SCOPE, OuraRequestError } from "./contracts";
+
+export { OURA_SCOPE, OURA_SCOPES, resolveOuraScope } from "./contracts";
+
 const AUTHORIZE_URL = "https://cloud.ouraring.com/oauth/authorize";
 const TOKEN_URL = "https://api.ouraring.com/oauth/token";
 
-const SCOPES = ["email", "personal", "daily", "heartrate", "spo2", "workout", "session"];
+interface OuraTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+  token_type: string;
+  scope?: string;
+}
 
 export function getOuraAuthUrl(state: string): string {
   const params = new URLSearchParams({
     response_type: "code",
     client_id: process.env.OURA_CLIENT_ID!,
     redirect_uri: `${process.env.NEXTAUTH_URL}/api/oura/callback`,
-    scope: SCOPES.join(" "),
+    scope: OURA_SCOPE,
     state,
   });
   return `${AUTHORIZE_URL}?${params.toString()}`;
@@ -28,16 +38,10 @@ export async function exchangeCodeForTokens(code: string) {
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Token exchange failed: ${error}`);
+    throw new OuraRequestError(response.status, "token_exchange");
   }
 
-  return response.json() as Promise<{
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-    token_type: string;
-  }>;
+  return response.json() as Promise<OuraTokenResponse>;
 }
 
 export async function refreshAccessToken(refreshToken: string) {
@@ -53,14 +57,8 @@ export async function refreshAccessToken(refreshToken: string) {
   });
 
   if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Token refresh failed: ${error}`);
+    throw new OuraRequestError(response.status, "token_refresh");
   }
 
-  return response.json() as Promise<{
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-    token_type: string;
-  }>;
+  return response.json() as Promise<OuraTokenResponse>;
 }

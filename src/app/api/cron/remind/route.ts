@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { notificationSettings, dailyMood } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
-import { format } from "date-fns";
 import { sendEmail } from "@/lib/notifications/email";
 import { sendSms } from "@/lib/notifications/sms";
+import { getTodayET } from "@/lib/date-utils";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const today = format(new Date(), "yyyy-MM-dd");
+  const today = getTodayET();
 
   const currentEtHour = parseInt(
     new Date().toLocaleString("en-US", {
