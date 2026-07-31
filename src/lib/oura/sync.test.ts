@@ -32,7 +32,18 @@ beforeEach(() => {
   mocks.insert.mockClear();
   mocks.ouraFetch.mockReset().mockImplementation(async (endpoint: string) => {
     if (endpoint === "v2/usercollection/daily_activity") {
-      return [{ id: "activity", day: "2026-07-30" }];
+      return [
+        {
+          id: "activity",
+          day: "2026-07-30",
+          timestamp: "2026-07-30T04:00:00-04:00",
+          met: {
+            timestamp: "2026-07-30T04:00:00-04:00",
+            interval: 60,
+            items: [],
+          },
+        },
+      ];
     }
     if (endpoint === "v2/usercollection/daily_stress") {
       return [{ id: "stress", day: "2026-07-30" }];
@@ -66,6 +77,16 @@ describe("Oura daily sync", () => {
       { refreshUnauthorized: false }
     );
     expect(mocks.inserts.some(({ table }) => table === dailyActivity)).toBe(true);
+    expect(
+      mocks.inserts.find(({ table }) => table === dailyActivity)?.values
+    ).toMatchObject({
+      met: JSON.stringify({
+        timestamp: "2026-07-30T04:00:00-04:00",
+        interval: 60,
+        items: [],
+        activity_timestamp: "2026-07-30T04:00:00-04:00",
+      }),
+    });
     expect(mocks.inserts.some(({ table }) => table === dailyStress)).toBe(true);
     expect(mocks.inserts.some(({ table }) => table === dailyResilience)).toBe(
       false

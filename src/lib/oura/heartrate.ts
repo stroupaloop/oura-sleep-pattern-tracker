@@ -1,6 +1,7 @@
 import type { OuraHeartrateSample } from "./types";
+import { APP_TIME_ZONE } from "@/lib/date-utils";
 
-export const DEFAULT_OURA_TIME_ZONE = "America/New_York";
+export const DEFAULT_OURA_TIME_ZONE = APP_TIME_ZONE;
 
 export interface DailyHeartRateBucket {
   day: string;
@@ -125,7 +126,7 @@ function dominantSource(samples: OuraHeartrateSample[]): string {
 }
 
 export function getOuraTimeZone(): string {
-  return process.env.OURA_TIME_ZONE?.trim() || DEFAULT_OURA_TIME_ZONE;
+  return DEFAULT_OURA_TIME_ZONE;
 }
 
 export function getHeartRateQueryRange(

@@ -1,7 +1,7 @@
 "use client";
 
-import { useRef, useState } from "react";
-import { getIsoLocalClockMinutes } from "@/lib/date-utils";
+import { useMemo, useRef, useState } from "react";
+import { APP_TIME_ZONE } from "@/lib/date-utils";
 
 interface HypnogramChartProps {
   hypnogram: string;
@@ -25,13 +25,11 @@ const stageMap: Record<string, { label: string; value: number; color: string }> 
 
 const stageRow: Record<number, number> = { 4: 0, 3: 1, 2: 2, 1: 3 };
 
-function formatClockMinutes(minutes: number): string {
-  const normalized = ((minutes % 1440) + 1440) % 1440;
-  const hours = Math.floor(normalized / 60);
-  const displayHour = hours % 12 || 12;
-  const displayMinutes = String(normalized % 60).padStart(2, "0");
-  return `${displayHour}:${displayMinutes} ${hours >= 12 ? "PM" : "AM"}`;
-}
+const ET_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: APP_TIME_ZONE,
+  hour: "numeric",
+  minute: "2-digit",
+});
 
 interface DataPoint {
   minuteOffset: number;
@@ -86,11 +84,14 @@ function parseHypnogram(
   hr5min: string | null,
   bedtimeStart: string
 ): DataPoint[] {
-  const startMinutes = getIsoLocalClockMinutes(bedtimeStart);
   const heartRateSeries = parseStoredHeartRateSeries(hr5min);
-  const bedtimeTimestamp = Date.parse(bedtimeStart);
+  const bedtimeTimestamp = /(?:Z|[+-]\d{2}:?\d{2})$/.test(bedtimeStart)
+    ? Date.parse(bedtimeStart)
+    : Number.NaN;
   const heartRateTimestamp = heartRateSeries
-    ? Date.parse(heartRateSeries.timestamp)
+    ? /(?:Z|[+-]\d{2}:?\d{2})$/.test(heartRateSeries.timestamp)
+      ? Date.parse(heartRateSeries.timestamp)
+      : Number.NaN
     : Number.NaN;
 
   return Array.from(hypnogram).map((char, i) => {
@@ -111,8 +112,8 @@ function parseHypnogram(
     return {
       minuteOffset: i * 5,
       time:
-        startMinutes != null
-          ? formatClockMinutes(startMinutes + i * 5)
+        Number.isFinite(phaseTimestamp)
+          ? ET_TIME_FORMATTER.format(new Date(phaseTimestamp))
           : "--",
       stage: info.value,
       stageLabel: info.label,
@@ -125,7 +126,10 @@ function parseHypnogram(
 }
 
 export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramChartProps) {
-  const data = parseHypnogram(hypnogram, hr5min, bedtimeStart);
+  const data = useMemo(
+    () => parseHypnogram(hypnogram, hr5min, bedtimeStart),
+    [hypnogram, hr5min, bedtimeStart]
+  );
   const containerRef = useRef<HTMLDivElement>(null);
   const [tooltip, setTooltip] = useState<{
     left: number;
@@ -175,7 +179,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
             {STAGES.map((s) => (
               <div
                 key={s.key}
-                className="flex items-center justify-end text-[10px] text-muted-foreground"
+                className="flex items-center justify-end text-xs text-muted-foreground"
                 style={{ height: rowHeight }}
               >
                 {s.label}

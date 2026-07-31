@@ -9,7 +9,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { HypnogramChart } from "@/components/charts/hypnogram-chart";
-import { formatIsoLocalTime } from "@/lib/date-utils";
+import { formatIsoTimeInAppTimeZone } from "@/lib/date-utils";
 
 export interface NightData {
   id: string;
@@ -47,7 +47,7 @@ function formatDuration(seconds: number | null): string {
 }
 
 function formatTime(iso: string): string {
-  return formatIsoLocalTime(iso) ?? "--";
+  return formatIsoTimeInAppTimeZone(iso) ?? "--";
 }
 
 function pct(part: number | null, total: number | null): string {
@@ -270,7 +270,7 @@ export function NightCard({ night, score, analysis }: { night: NightData; score:
           </span>
         </div>
         <CardDescription>
-          {formatTime(night.bedtimeStart)} — {formatTime(night.bedtimeEnd)}
+          {formatTime(night.bedtimeStart)} — {formatTime(night.bedtimeEnd)} ET
         </CardDescription>
       </CardHeader>
       <CardContent>

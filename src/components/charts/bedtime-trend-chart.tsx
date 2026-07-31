@@ -78,13 +78,13 @@ export function BedtimeTrendChart({
         <CardTitle>Sleep Timing</CardTitle>
         <CardDescription>
           {hasAnyOptimal
-            ? `Bedtime vs. Oura optimal window (last ${days} days)`
-            : `Bedtime trend (last ${days} days — optimal window not available from Oura)`}
+            ? `Oura-detected bedtime vs. optimal window in ET (last ${days} days)`
+            : `Oura-detected bedtime in ET (last ${days} days — optimal window not available from Oura)`}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="relative">
-          <div className="flex justify-between text-[10px] text-muted-foreground mb-2 pl-14">
+          <div className="flex justify-between text-xs text-muted-foreground mb-2 pl-14">
             {ticks.map((t) => (
               <span key={t}>{formatMinutesAsTime(t)}</span>
             ))}
@@ -105,7 +105,7 @@ export function BedtimeTrendChart({
                   : formatMinutesAsTime(actual);
                 return (
                   <div key={point.day} className="flex items-center gap-2 group">
-                    <span className="text-[10px] text-muted-foreground w-12 shrink-0 text-right">
+                    <span className="text-xs text-muted-foreground w-12 shrink-0 text-right">
                       {point.day.slice(5)}
                     </span>
                     <div className="relative flex-1 h-5">
@@ -132,7 +132,7 @@ export function BedtimeTrendChart({
                   key={point.day}
                   className="flex items-center gap-2 group"
                 >
-                  <span className="text-[10px] text-muted-foreground w-12 shrink-0 text-right">
+                  <span className="text-xs text-muted-foreground w-12 shrink-0 text-right">
                     {point.day.slice(5)}
                   </span>
                   <div className="relative flex-1 h-5">
@@ -155,7 +155,7 @@ export function BedtimeTrendChart({
             })}
           </div>
 
-          <div className="flex items-center gap-4 justify-center mt-4 text-[10px] text-muted-foreground">
+          <div className="flex items-center gap-4 justify-center mt-4 text-xs text-muted-foreground">
             {hasAnyOptimal ? (
               <>
                 <div className="flex items-center gap-1">
@@ -182,7 +182,7 @@ export function BedtimeTrendChart({
             ) : (
               <div className="flex items-center gap-1">
                 <span className="w-2.5 h-2.5 rounded-full bg-primary/60" />
-                Actual bedtime
+                Oura-detected bedtime
               </div>
             )}
           </div>
