@@ -22,11 +22,14 @@ import {
 import { desc, gte, eq, and } from "drizzle-orm";
 import { format, parseISO, subDays } from "date-fns";
 import {
-  getIsoLocalClockMinutes,
+  APP_TIME_ZONE,
+  getDayOffsetClockMinutes,
+  getIsoTimeZoneClockMinutes,
   getTodayET,
   shiftIsoDay,
 } from "@/lib/date-utils";
 import { longestConsecutiveTemperatureRun } from "@/lib/analysis/cycle";
+import { projectActivityToCalendarDays } from "@/lib/oura/activity";
 import { PrivateTabs } from "./private-tabs";
 
 function parseIndicators(value: string | null): string[] {
@@ -54,6 +57,8 @@ export default async function PrivatePage() {
   const today = parseISO(currentDay);
   const cutoff = format(subDays(today, 89), "yyyy-MM-dd");
   const fourteenDayCutoff = format(subDays(today, 13), "yyyy-MM-dd");
+  const activitySourceCutoff =
+    shiftIsoDay(fourteenDayCutoff, -1) ?? fourteenDayCutoff;
   const thirtyDayCutoff = format(subDays(today, 29), "yyyy-MM-dd");
 
   const [
@@ -134,16 +139,18 @@ export default async function PrivatePage() {
     .select({
       day: dailyActivity.day,
       class5min: dailyActivity.class5min,
-      nonWearTime: dailyActivity.nonWearTime,
-      highActivityTime: dailyActivity.highActivityTime,
-      mediumActivityTime: dailyActivity.mediumActivityTime,
-      lowActivityTime: dailyActivity.lowActivityTime,
-      sedentaryTime: dailyActivity.sedentaryTime,
-      restingTime: dailyActivity.restingTime,
+      met: dailyActivity.met,
     })
     .from(dailyActivity)
-    .where(gte(dailyActivity.day, fourteenDayCutoff))
+    .where(gte(dailyActivity.day, activitySourceCutoff))
     .orderBy(dailyActivity.day);
+  const projectedWearActivityData = projectActivityToCalendarDays(
+    wearActivityData,
+    APP_TIME_ZONE
+  ).filter(
+    (activityDay) =>
+      activityDay.day >= fourteenDayCutoff && activityDay.day <= currentDay
+  );
 
   const [cyclePhaseAnalysis, cyclePhaseMoods] = await Promise.all([
     db
@@ -219,12 +226,16 @@ export default async function PrivatePage() {
 
   const person = personalInfoData[0] ?? null;
 
-  function normalizeOffsetMinutes(offsetSeconds: string | null | undefined): number | null {
+  function normalizeOffsetMinutes(
+    offsetSeconds: string | null | undefined,
+    day: string,
+    sourceTimestamp: string | null
+  ): number | null {
     if (!offsetSeconds) return null;
     const seconds = Number(offsetSeconds);
-    if (!Number.isFinite(seconds)) return null;
-    let mins = Math.round(seconds / 60);
-    mins = ((mins % 1440) + 1440) % 1440;
+    if (!Number.isFinite(seconds) || !sourceTimestamp) return null;
+    let mins = getDayOffsetClockMinutes(day, seconds, sourceTimestamp);
+    if (mins == null) return null;
     if (mins < 720) mins += 1440;
     return mins;
   }
@@ -233,19 +244,27 @@ export default async function PrivatePage() {
     const st = sleepTimeData.find((s) => s.day === t.day);
     let actualMinutes: number | null = null;
     if (t.bedtimeStart) {
-      const localClockMinutes = getIsoLocalClockMinutes(t.bedtimeStart);
-      if (localClockMinutes != null) {
+      const etClockMinutes = getIsoTimeZoneClockMinutes(t.bedtimeStart);
+      if (etClockMinutes != null) {
         actualMinutes =
-          localClockMinutes < 720
-            ? localClockMinutes + 1440
-            : localClockMinutes;
+          etClockMinutes < 720
+            ? etClockMinutes + 1440
+            : etClockMinutes;
       }
     }
     return {
       day: t.day,
       actualBedtime: actualMinutes,
-      optimalStart: normalizeOffsetMinutes(st?.optimalBedtimeStart),
-      optimalEnd: normalizeOffsetMinutes(st?.optimalBedtimeEnd),
+      optimalStart: normalizeOffsetMinutes(
+        st?.optimalBedtimeStart,
+        t.day,
+        t.bedtimeStart
+      ),
+      optimalEnd: normalizeOffsetMinutes(
+        st?.optimalBedtimeEnd,
+        t.day,
+        t.bedtimeStart
+      ),
     };
   });
 
@@ -271,30 +290,7 @@ export default async function PrivatePage() {
           indicators: parseIndicators(s.indicators),
         }))}
         cyclePhaseDaily={cyclePhaseDaily}
-        wearActivityData={wearActivityData.map((d) => ({
-          day: d.day,
-          class5min: d.class5min,
-          nonWearMinutes:
-            d.nonWearTime != null ? Math.round(d.nonWearTime / 60) : null,
-          highActivityMinutes:
-            d.highActivityTime != null
-              ? Math.round(d.highActivityTime / 60)
-              : null,
-          mediumActivityMinutes:
-            d.mediumActivityTime != null
-              ? Math.round(d.mediumActivityTime / 60)
-              : null,
-          lowActivityMinutes:
-            d.lowActivityTime != null
-              ? Math.round(d.lowActivityTime / 60)
-              : null,
-          sedentaryMinutes:
-            d.sedentaryTime != null
-              ? Math.round(d.sedentaryTime / 60)
-              : null,
-          restingMinutes:
-            d.restingTime != null ? Math.round(d.restingTime / 60) : null,
-        }))}
+        wearActivityData={projectedWearActivityData}
         wearActivityHrData={hourlyHrData}
       />
     </div>

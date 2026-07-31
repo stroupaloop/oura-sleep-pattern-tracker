@@ -14,7 +14,11 @@ import {
 } from "@/lib/db/schema";
 import { desc, sql, and, gte, ne, eq } from "drizzle-orm";
 import { format, subDays } from "date-fns";
-import { formatIsoLocalTime, getTodayET } from "@/lib/date-utils";
+import {
+  formatIsoDay,
+  formatIsoTimeInAppTimeZone,
+  getTodayET,
+} from "@/lib/date-utils";
 import {
   averagePresent,
   formatDuration,
@@ -42,7 +46,7 @@ import { computeDataCoverage } from "@/lib/analysis/confidence";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "--";
-  return formatIsoLocalTime(iso) ?? "--";
+  return formatIsoTimeInAppTimeZone(iso) ?? "--";
 }
 
 export default async function DashboardPage() {
@@ -272,9 +276,10 @@ export default async function DashboardPage() {
     .filter((entry): entry is NonNullable<typeof entry> => entry != null)
     .reverse();
 
-  const lastNightHypnogram = recentSleep[0]?.hypnogram5min ?? null;
-  const lastNightHr5min = recentSleep[0]?.hr5min ?? null;
-  const lastNightBedtimeStart = recentSleep[0]?.bedtimeStart ?? null;
+  const latestSleepHypnogram = recentSleep[0]?.hypnogram5min ?? null;
+  const latestSleepHr5min = recentSleep[0]?.hr5min ?? null;
+  const latestSleepBedtimeStart = recentSleep[0]?.bedtimeStart ?? null;
+  const latestSleepStageDay = recentSleep[0]?.day ?? null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
@@ -334,7 +339,8 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>
-              Last Night&apos;s Sleep
+              Latest Recorded Sleep
+              {sleep?.day && ` · ${formatIsoDay(sleep.day) ?? sleep.day}`}
               <ResearchTooltip metric="sleepDuration" />
             </CardDescription>
             <CardTitle className="text-2xl">
@@ -357,7 +363,7 @@ export default async function DashboardPage() {
             )}
             {sleep && (
               <p className="text-xs text-muted-foreground mt-1">
-                {formatTime(sleep.bedtimeStart)} — {formatTime(sleep.bedtimeEnd)}
+                {formatTime(sleep.bedtimeStart)} — {formatTime(sleep.bedtimeEnd)} ET
               </p>
             )}
           </CardContent>
@@ -424,19 +430,23 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {lastNightHypnogram && lastNightBedtimeStart && (
+      {latestSleepHypnogram && latestSleepBedtimeStart && (
         <Card>
           <CardHeader>
-            <CardTitle>Last Night&apos;s Sleep Stages</CardTitle>
+            <CardTitle>
+              Sleep Stages
+              {latestSleepStageDay &&
+                ` · ${formatIsoDay(latestSleepStageDay) ?? latestSleepStageDay}`}
+            </CardTitle>
             <CardDescription>
-              Hypnogram with heart rate overlay
+              Hypnogram with heart rate overlay · Times shown in ET
             </CardDescription>
           </CardHeader>
           <CardContent>
             <HypnogramChart
-              hypnogram={lastNightHypnogram}
-              hr5min={lastNightHr5min}
-              bedtimeStart={lastNightBedtimeStart}
+              hypnogram={latestSleepHypnogram}
+              hr5min={latestSleepHr5min}
+              bedtimeStart={latestSleepBedtimeStart}
             />
           </CardContent>
         </Card>

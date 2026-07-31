@@ -248,7 +248,14 @@ export async function syncDateRange(
           nonWearTime: a.non_wear_time,
           averageMetMinutes: a.average_met_minutes,
           class5min: a.class_5_min,
-          met: a.met ? JSON.stringify(a.met) : null,
+          met: a.timestamp
+            ? JSON.stringify({
+                ...(a.met ?? {}),
+                activity_timestamp: a.timestamp,
+              })
+            : a.met
+              ? JSON.stringify(a.met)
+              : null,
           createdAt: now,
         })
         .onConflictDoUpdate({
