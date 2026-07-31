@@ -18,6 +18,7 @@ import {
   formatIsoDay,
   formatIsoTimeInAppTimeZone,
   getTodayET,
+  shiftIsoDay,
 } from "@/lib/date-utils";
 import {
   averagePresent,
@@ -43,6 +44,7 @@ import { ResearchTooltip } from "@/components/research-tooltip";
 import { DailyLogCard } from "@/components/daily-log-card";
 import { DataCoverageIndicator } from "@/components/confidence-indicator";
 import { computeDataCoverage } from "@/lib/analysis/confidence";
+import { selectSleepForSleepDay } from "@/lib/oura/sleep-day";
 
 function formatTime(iso: string | null): string {
   if (!iso) return "--";
@@ -67,29 +69,10 @@ export default async function DashboardPage() {
     );
   }
 
-  const lastSleep = await db
-    .select()
-    .from(sleepPeriods)
-    .where(sql`${sleepPeriods.type} = 'long_sleep'`)
-    .orderBy(desc(sleepPeriods.day))
-    .limit(1);
-
-  const latestSleepDay = lastSleep[0]?.day;
-  const [lastDailySleep, lastReadiness] = latestSleepDay
-    ? await Promise.all([
-        db
-          .select()
-          .from(dailySleep)
-          .where(eq(dailySleep.day, latestSleepDay))
-          .limit(1),
-        db
-          .select()
-          .from(dailyReadiness)
-          .where(eq(dailyReadiness.day, latestSleepDay))
-          .limit(1),
-      ])
-    : [[], []];
-
+  const today = getTodayET();
+  const previousNightDay = shiftIsoDay(today, -1) ?? today;
+  const previousNightLabel =
+    formatIsoDay(previousNightDay) ?? previousNightDay;
   const recentSleep = await db
     .select({
       day: sleepPeriods.day,
@@ -111,7 +94,24 @@ export default async function DashboardPage() {
     .orderBy(desc(sleepPeriods.day))
     .limit(30);
 
-  const todayDate = new Date(getTodayET() + "T12:00:00");
+  const sleep = selectSleepForSleepDay(recentSleep, today);
+  const currentSleepSourceDay = sleep?.day;
+  const [lastDailySleep, lastReadiness] = currentSleepSourceDay
+    ? await Promise.all([
+        db
+          .select()
+          .from(dailySleep)
+          .where(eq(dailySleep.day, currentSleepSourceDay))
+          .limit(1),
+        db
+          .select()
+          .from(dailyReadiness)
+          .where(eq(dailyReadiness.day, currentSleepSourceDay))
+          .limit(1),
+      ])
+    : [[], []];
+
+  const todayDate = new Date(today + "T12:00:00");
   const fourteenDaysAgo = format(subDays(todayDate, 13), "yyyy-MM-dd");
   const recentEpisodes = await db
     .select({
@@ -130,7 +130,6 @@ export default async function DashboardPage() {
     )
     .orderBy(desc(episodeAssessments.day));
 
-  const today = getTodayET();
   const todayMood = await db
     .select({
       moodScore: dailyMood.moodScore,
@@ -189,7 +188,6 @@ export default async function DashboardPage() {
       })
     : null;
 
-  const sleep = lastSleep[0] ?? null;
   const score = lastDailySleep[0] ?? null;
   const readiness = lastReadiness[0] ?? null;
 
@@ -276,10 +274,9 @@ export default async function DashboardPage() {
     .filter((entry): entry is NonNullable<typeof entry> => entry != null)
     .reverse();
 
-  const latestSleepHypnogram = recentSleep[0]?.hypnogram5min ?? null;
-  const latestSleepHr5min = recentSleep[0]?.hr5min ?? null;
-  const latestSleepBedtimeStart = recentSleep[0]?.bedtimeStart ?? null;
-  const latestSleepStageDay = recentSleep[0]?.day ?? null;
+  const currentSleepHypnogram = sleep?.hypnogram5min ?? null;
+  const currentSleepHr5min = sleep?.hr5min ?? null;
+  const currentSleepBedtimeStart = sleep?.bedtimeStart ?? null;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
@@ -339,8 +336,7 @@ export default async function DashboardPage() {
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>
-              Latest Recorded Sleep
-              {sleep?.day && ` · ${formatIsoDay(sleep.day) ?? sleep.day}`}
+              Previous Night&apos;s Sleep · {previousNightLabel}
               <ResearchTooltip metric="sleepDuration" />
             </CardDescription>
             <CardTitle className="text-2xl">
@@ -366,6 +362,11 @@ export default async function DashboardPage() {
                 {formatTime(sleep.bedtimeStart)} — {formatTime(sleep.bedtimeEnd)} ET
               </p>
             )}
+            {!sleep && (
+              <p className="text-sm text-muted-foreground">
+                No sleep record is available for this ET sleep window yet.
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -373,7 +374,7 @@ export default async function DashboardPage() {
           <ScoreRing
             score={score?.score ?? null}
             label="Sleep Score"
-            sublabel={score?.day ?? undefined}
+            sublabel={score ? previousNightLabel : undefined}
           />
         </Card>
 
@@ -381,7 +382,7 @@ export default async function DashboardPage() {
           <ScoreRing
             score={readiness?.score ?? null}
             label="Readiness"
-            sublabel={readiness?.day ?? undefined}
+            sublabel={readiness ? previousNightLabel : undefined}
           />
         </Card>
 
@@ -430,27 +431,34 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {latestSleepHypnogram && latestSleepBedtimeStart && (
-        <Card>
-          <CardHeader>
-            <CardTitle>
-              Sleep Stages
-              {latestSleepStageDay &&
-                ` · ${formatIsoDay(latestSleepStageDay) ?? latestSleepStageDay}`}
-            </CardTitle>
-            <CardDescription>
-              Hypnogram with heart rate overlay · Times shown in ET
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+      <Card>
+        <CardHeader>
+          <CardTitle>Sleep Stages · Night of {previousNightLabel}</CardTitle>
+          <CardDescription>
+            Hypnogram with heart-rate overlay · ET
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {currentSleepHypnogram && currentSleepBedtimeStart ? (
             <HypnogramChart
-              hypnogram={latestSleepHypnogram}
-              hr5min={latestSleepHr5min}
-              bedtimeStart={latestSleepBedtimeStart}
+              hypnogram={currentSleepHypnogram}
+              hr5min={currentSleepHr5min}
+              bedtimeStart={currentSleepBedtimeStart}
             />
-          </CardContent>
-        </Card>
-      )}
+          ) : (
+            <div className="flex min-h-40 items-center justify-center rounded-md border border-dashed border-border px-4 text-center">
+              <div className="max-w-md space-y-1">
+                <p className="text-sm font-medium">
+                  No sleep-stage record for the night of {previousNightLabel}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Older sleep remains available in the historical trends below.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {chartData.length > 0 && (
         <SleepTrendChart

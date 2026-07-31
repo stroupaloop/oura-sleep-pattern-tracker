@@ -12,20 +12,27 @@ import {
   ResponsiveContainer,
   Cell,
   ReferenceArea,
-  ReferenceDot,
 } from "recharts";
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { formatIsoDay } from "@/lib/date-utils";
-import type {
-  OuraActivityCode,
-  ProjectedActivityDay,
-} from "@/lib/oura/activity";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { formatIsoDay, shiftIsoDay } from "@/lib/date-utils";
+import type { ProjectedActivityDay } from "@/lib/oura/activity";
+import {
+  ACTIVITY_COLORS,
+  ACTIVITY_LABELS,
+  HEART_RATE_LINE_COLOR,
+  NONWEAR_COLOR,
+  UNAVAILABLE_ACTIVITY_COLOR,
+  getActivityBarPresentation,
+  type ActivityClass,
+} from "@/lib/oura/activity-presentation";
 
 export type WearActivityDay = ProjectedActivityDay;
 
@@ -39,35 +46,8 @@ interface HrOverlay {
 interface WearActivityChartProps {
   activityData: WearActivityDay[];
   hrData: HrOverlay[];
+  currentDay: string;
 }
-
-type ActivityClass = "rest" | "inactive" | "low" | "medium" | "high";
-
-const ACTIVITY_LABELS: Record<ActivityClass, string> = {
-  rest: "Resting",
-  inactive: "Inactive",
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-};
-
-const ACTIVITY_COLORS: Record<ActivityClass, string> = {
-  rest: "#3b82f6",
-  inactive: "#60a5fa",
-  low: "#34d399",
-  medium: "#f59e0b",
-  high: "#ef4444",
-};
-
-const NONWEAR_COLOR = "#6b7280";
-const HEART_RATE_BAR_COLOR = "#f87171";
-const OURA_ACTIVITY_CLASSES: Partial<Record<OuraActivityCode, ActivityClass>> = {
-  1: "rest",
-  2: "inactive",
-  3: "low",
-  4: "medium",
-  5: "high",
-};
 
 function formatHour(h: number): string {
   if (h === 0) return "12a";
@@ -94,9 +74,15 @@ interface ChartPoint {
   isNonWear: boolean;
   classifiedMinutes: number;
   nonWearMinutes: number;
+  barFill: string;
+  barFillOpacity: number;
 }
 
-export function WearActivityChart({ activityData, hrData }: WearActivityChartProps) {
+export function WearActivityChart({
+  activityData,
+  hrData,
+  currentDay,
+}: WearActivityChartProps) {
   const availableDays = useMemo(() => {
     const days = new Set<string>();
     for (const h of hrData) days.add(h.day);
@@ -104,9 +90,14 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
     return [...days].sort();
   }, [hrData, activityData]);
 
-  const [selectedDay, setSelectedDay] = useState(() =>
-    availableDays.length > 0 ? availableDays[availableDays.length - 1] : ""
-  );
+  const selectableDays = useMemo(() => {
+    const calendarWindow = Array.from({ length: 14 }, (_, index) =>
+      shiftIsoDay(currentDay, index - 13)
+    ).filter((day): day is string => day != null);
+    return [...new Set([...availableDays, ...calendarWindow])].sort();
+  }, [availableDays, currentDay]);
+
+  const [selectedDay, setSelectedDay] = useState(currentDay);
 
   const hrByHour = useMemo(() => {
     const map = new Map<string, HrOverlay>();
@@ -126,19 +117,23 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
       const hr = hrByHour.get(`${h}`);
       const activityHour = dayActivity?.hours[h] ?? null;
       const activityCode = activityHour?.dominantCode ?? null;
+      const classifiedMinutes = activityHour?.classifiedMinutes ?? 0;
+      const presentation = getActivityBarPresentation(
+        activityCode,
+        classifiedMinutes
+      );
 
       return {
         hour: h,
         label: formatHour(h),
         avgBpm: hr?.avgBpm ?? null,
         source: hr?.source ?? null,
-        activityClass:
-          activityCode != null
-            ? OURA_ACTIVITY_CLASSES[activityCode] ?? null
-            : null,
-        isNonWear: activityCode === 0,
-        classifiedMinutes: activityHour?.classifiedMinutes ?? 0,
+        activityClass: presentation.activityClass,
+        isNonWear: presentation.isNonWear,
+        classifiedMinutes,
         nonWearMinutes: activityHour?.nonWearMinutes ?? 0,
+        barFill: presentation.fill,
+        barFillOpacity: presentation.fillOpacity,
       };
     });
   }, [hrByHour, dayActivity]);
@@ -162,6 +157,7 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
 
   const totalNonWearMinutes = dayActivity?.nonWearMinutes ?? 0;
   const classifiedMinutes = dayActivity?.classifiedMinutes ?? 0;
+  const wornMinutes = Math.max(0, classifiedMinutes - totalNonWearMinutes);
 
   const activitySummary = useMemo(() => {
     if (!dayActivity) return null;
@@ -169,20 +165,29 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
     if (dayActivity.highActivityMinutes > 0)
       parts.push(`High: ${formatMinutes(dayActivity.highActivityMinutes)}`);
     if (dayActivity.mediumActivityMinutes > 0)
-      parts.push(`Med: ${formatMinutes(dayActivity.mediumActivityMinutes)}`);
+      parts.push(`Medium: ${formatMinutes(dayActivity.mediumActivityMinutes)}`);
     if (dayActivity.lowActivityMinutes > 0)
       parts.push(`Low: ${formatMinutes(dayActivity.lowActivityMinutes)}`);
     return parts.length > 0 ? parts : null;
   }, [dayActivity]);
 
-  const canPrev = availableDays.indexOf(selectedDay) > 0;
-  const canNext = availableDays.indexOf(selectedDay) < availableDays.length - 1;
+  const selectedDayIndex = selectableDays.indexOf(selectedDay);
+  const canPrev = selectedDayIndex > 0;
+  const canNext =
+    selectedDayIndex >= 0 && selectedDayIndex < selectableDays.length - 1;
 
   if (availableDays.length === 0) return null;
 
   const bpmValues = chartData.filter((d) => d.avgBpm != null).map((d) => d.avgBpm!);
-  const minBpm = bpmValues.length > 0 ? Math.min(...bpmValues) - 5 : 40;
-  const maxBpm = bpmValues.length > 0 ? Math.max(...bpmValues) + 10 : 120;
+  const minBpm =
+    bpmValues.length > 0
+      ? Math.max(0, Math.floor((Math.min(...bpmValues) - 5) / 5) * 5)
+      : 40;
+  const maxBpm =
+    bpmValues.length > 0
+      ? Math.ceil((Math.max(...bpmValues) + 10) / 5) * 5
+      : 120;
+  const hasSelectedDayData = dayActivity != null || hrByHour.size > 0;
 
   return (
     <Card>
@@ -197,13 +202,13 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
               disabled={!canPrev}
               aria-label="Previous ET calendar day"
               onClick={() => {
-                const idx = availableDays.indexOf(selectedDay);
-                if (idx > 0) setSelectedDay(availableDays[idx - 1]);
+                const idx = selectableDays.indexOf(selectedDay);
+                if (idx > 0) setSelectedDay(selectableDays[idx - 1]);
               }}
             >
-              &lt;
+              <ChevronLeft className="size-4" aria-hidden="true" />
             </Button>
-            <span className="font-mono text-muted-foreground min-w-[150px] text-center">
+            <span className="min-w-[150px] text-center text-muted-foreground tabular-nums">
               {formatIsoDay(selectedDay) ?? selectedDay} · ET
             </span>
             <Button
@@ -213,20 +218,23 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
               disabled={!canNext}
               aria-label="Next ET calendar day"
               onClick={() => {
-                const idx = availableDays.indexOf(selectedDay);
-                if (idx < availableDays.length - 1) setSelectedDay(availableDays[idx + 1]);
+                const idx = selectableDays.indexOf(selectedDay);
+                if (idx < selectableDays.length - 1) {
+                  setSelectedDay(selectableDays[idx + 1]);
+                }
               }}
             >
-              &gt;
+              <ChevronRight className="size-4" aria-hidden="true" />
             </Button>
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-3 mt-1 text-xs">
-          <div className="flex gap-2 flex-wrap">
-            <span className="flex items-center gap-1">
-              <span className="inline-block w-3 border-t-2 border-red-400" />
-              Heart rate
-            </span>
+        <CardDescription>
+          Bars show hourly average heart rate; the line connects available
+          hours. Color shows dominant Oura activity; faded color means partial
+          coverage.
+        </CardDescription>
+        <div className="mt-1 space-y-2 text-sm">
+          <div className="flex flex-wrap gap-x-3 gap-y-1">
             {(
               ["rest", "inactive", "low", "medium", "high"] as ActivityClass[]
             ).map((activityClass) => (
@@ -239,15 +247,23 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
               </span>
             ))}
             <span className="flex items-center gap-1">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm border border-dashed border-gray-500 bg-gray-500/15" />
-              Non-wear (Oura code 0)
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-sm"
+                style={{ backgroundColor: UNAVAILABLE_ACTIVITY_COLOR }}
+              />
+              Mixed or unavailable
+            </span>
+            <span className="flex items-center gap-1">
+              <span className="inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-gray-500 bg-gray-500/15" />
+              Mostly non-wear (Oura code 0)
             </span>
           </div>
           {classifiedMinutes > 0 ? (
             <p className="text-muted-foreground">
-              Oura activity detail: {formatMinutes(classifiedMinutes)}
+              Oura classification coverage: {formatMinutes(classifiedMinutes)}
+              {" · "}Worn: {formatMinutes(wornMinutes)}
               {totalNonWearMinutes > 0 &&
-                ` · Non-wear: ${formatMinutes(totalNonWearMinutes)}`}
+                ` · Explicit non-wear: ${formatMinutes(totalNonWearMinutes)}`}
             </p>
           ) : (
             <p className="text-muted-foreground">
@@ -256,27 +272,48 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
           )}
           {activitySummary && (
             <p className="text-muted-foreground">
-              {activitySummary.join(" · ")}
+              Movement: {activitySummary.join(" · ")}
             </p>
           )}
         </div>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={chartData}>
+        {!hasSelectedDayData ? (
+          <div className="flex min-h-[300px] items-center justify-center rounded-md border border-dashed border-border px-4 text-center">
+            <div className="max-w-md space-y-1">
+              <p className="text-sm font-medium">
+                No hourly heart-rate or Oura activity data for{" "}
+                {formatIsoDay(selectedDay) ?? selectedDay} ET
+              </p>
+              {canPrev && (
+                <p className="text-sm text-muted-foreground">
+                  Use the previous-day control to review historical data.
+                </p>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div
+            role="img"
+            aria-label={`Hourly heart rate and dominant Oura activity for ${
+              formatIsoDay(selectedDay) ?? selectedDay
+            } in Eastern Time`}
+          >
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
             <XAxis
               dataKey="label"
-              fontSize={11}
+              fontSize={12}
               tick={{ fill: "oklch(0.708 0 0)" }}
               interval={2}
             />
             <YAxis
-              fontSize={11}
+              fontSize={12}
               tick={{ fill: "oklch(0.708 0 0)" }}
               domain={[minBpm, maxBpm]}
               tickFormatter={(v) => `${v}`}
-              width={35}
+              width={40}
             />
             <Tooltip
               contentStyle={{
@@ -299,7 +336,8 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
                     )}
                     {d.isNonWear && (
                       <p className="text-gray-400">
-                        Oura non-wear: {formatMinutes(d.nonWearMinutes)}
+                        Oura code 0 dominated this hour ·{" "}
+                        {formatMinutes(d.nonWearMinutes)} explicit non-wear
                       </p>
                     )}
                     {d.activityClass && (
@@ -308,7 +346,8 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
                           color: ACTIVITY_COLORS[d.activityClass],
                         }}
                       >
-                        Dominant Oura activity:{" "}
+                        Dominant among{" "}
+                        {formatMinutes(d.classifiedMinutes)} classified:{" "}
                         {ACTIVITY_LABELS[d.activityClass]}
                       </p>
                     )}
@@ -325,7 +364,8 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
                       ))}
                     {d.classifiedMinutes > 0 && (
                       <p className="text-gray-400">
-                        {formatMinutes(d.classifiedMinutes)} classified in this hour
+                        {formatMinutes(d.classifiedMinutes)} of this hour
+                        classified
                       </p>
                     )}
                   </div>
@@ -344,37 +384,27 @@ export function WearActivityChart({ activityData, hrData }: WearActivityChartPro
                 strokeDasharray="4 4"
               />
             ))}
-            {chartData
-              .filter((point) => point.activityClass != null)
-              .map((point) => (
-                <ReferenceDot
-                  key={`activity-${point.hour}`}
-                  x={point.label}
-                  y={minBpm + 1}
-                  r={4}
-                  fill={ACTIVITY_COLORS[point.activityClass!]}
-                  stroke="none"
-                />
-            ))}
             <Bar dataKey="avgBpm" radius={[2, 2, 0, 0]} maxBarSize={16}>
-              {chartData.map((_, i) => (
+              {chartData.map((point, i) => (
                 <Cell
                   key={i}
-                  fill={HEART_RATE_BAR_COLOR}
-                  fillOpacity={0.25}
+                  fill={point.barFill}
+                  fillOpacity={point.barFillOpacity}
                 />
               ))}
             </Bar>
             <Line
-              type="monotone"
+              type="linear"
               dataKey="avgBpm"
-              stroke="#f87171"
+              stroke={HEART_RATE_LINE_COLOR}
               strokeWidth={2}
               dot={false}
               connectNulls={false}
             />
-          </ComposedChart>
-        </ResponsiveContainer>
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

@@ -162,6 +162,7 @@ function OverviewTab({
 }
 
 function HeartRateTab({
+  currentDay,
   hrData,
   hourlyHrData,
   wearActivityData,
@@ -171,7 +172,11 @@ function HeartRateTab({
     <div className="space-y-6">
       {hourlyHrData.length > 0 && <HourlyHrChart data={hourlyHrData} />}
 
-      <WearActivityChart activityData={wearActivityData} hrData={wearActivityHrData} />
+      <WearActivityChart
+        activityData={wearActivityData}
+        hrData={wearActivityHrData}
+        currentDay={currentDay}
+      />
 
       {hrData.length > 0 && <RestingHrChart data={hrData} />}
 

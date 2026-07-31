@@ -57,9 +57,10 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Rest-Labelled Heart Rate</CardTitle>
+        <CardTitle>Heart Rate During Oura-Labelled Rest</CardTitle>
         <CardDescription>
-          App-derived hourly averages from Oura samples labelled rest
+          App-derived hourly averages from Oura samples labelled rest. This is
+          not Oura&apos;s nightly resting-heart-rate metric.
         </CardDescription>
       </CardHeader>
       <CardContent>
