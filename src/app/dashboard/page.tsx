@@ -42,8 +42,8 @@ import { SleepCompositionBar } from "@/components/charts/sleep-composition-bar";
 import { ScoreBreakdown } from "@/components/charts/score-breakdown";
 import { ResearchTooltip } from "@/components/research-tooltip";
 import { DailyLogCard } from "@/components/daily-log-card";
-import { DataCoverageIndicator } from "@/components/confidence-indicator";
-import { computeDataCoverage } from "@/lib/analysis/confidence";
+import { DataAvailabilityCard } from "@/components/confidence-indicator";
+import { computeDataAvailability } from "@/lib/analysis/confidence";
 import { selectSleepForSleepDay } from "@/lib/oura/sleep-day";
 
 function formatTime(iso: string | null): string {
@@ -162,7 +162,7 @@ export default async function DashboardPage() {
     .from(medicationLogs)
     .where(eq(medicationLogs.day, today));
 
-  const coverageData = await computeDataCoverage(30);
+  const availabilityData = await computeDataAvailability(30);
 
   const thirtyDaysAgo = format(subDays(todayDate, 29), "yyyy-MM-dd");
   const recentAnalysis = await db
@@ -404,7 +404,7 @@ export default async function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
         <ScoreBreakdown
           title="Sleep Score Breakdown"
-          day={score?.day ?? undefined}
+          day={score ? previousNightLabel : undefined}
           contributors={[
             { name: "Deep Sleep", score: score?.contributorDeepSleep ?? null },
             { name: "Efficiency", score: score?.contributorEfficiency ?? null },
@@ -417,7 +417,7 @@ export default async function DashboardPage() {
         />
         <ScoreBreakdown
           title="Readiness Breakdown"
-          day={readiness?.day ?? undefined}
+          day={readiness ? previousNightLabel : undefined}
           contributors={[
             { name: "Activity Balance", score: readiness?.contributorActivityBalance ?? null },
             { name: "Body Temp", score: readiness?.contributorBodyTemperature ?? null },
@@ -471,7 +471,7 @@ export default async function DashboardPage() {
         <SleepCompositionBar data={compositionData} />
       )}
 
-      <DataCoverageIndicator data={coverageData} />
+      <DataAvailabilityCard data={availabilityData} />
     </div>
   );
 }

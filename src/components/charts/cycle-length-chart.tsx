@@ -19,7 +19,7 @@ import {
 
 interface CycleLengthPoint {
   cycleNumber: number;
-  cycleLength: number | null;
+  interShiftDays: number | null;
 }
 
 interface CycleLengthChartProps {
@@ -28,7 +28,7 @@ interface CycleLengthChartProps {
 }
 
 export function CycleLengthChart({ data }: CycleLengthChartProps) {
-  const filtered = data.filter((d) => d.cycleLength != null);
+  const filtered = data.filter((d) => d.interShiftDays != null);
 
   return (
     <Card>
@@ -44,12 +44,12 @@ export function CycleLengthChart({ data }: CycleLengthChartProps) {
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
             <XAxis
               dataKey="cycleNumber"
-              fontSize={11}
+              fontSize={12}
               tick={{ fill: "oklch(0.708 0 0)" }}
               tickFormatter={(v) => `Shift #${v}`}
             />
             <YAxis
-              fontSize={11}
+              fontSize={12}
               tick={{ fill: "oklch(0.708 0 0)" }}
               tickFormatter={(v) => `${v}d`}
             />
@@ -65,7 +65,7 @@ export function CycleLengthChart({ data }: CycleLengthChartProps) {
               labelFormatter={(label) => `Shift #${label}`}
             />
             <Bar
-              dataKey="cycleLength"
+              dataKey="interShiftDays"
               fill="oklch(0.65 0.2 350)"
               fillOpacity={0.8}
               name="Shift Interval"

@@ -18,7 +18,7 @@ import { Card, CardContent } from "@/components/ui/card";
 
 interface CycleEntry {
   cycleNumber: number;
-  ovulationDay: string | null;
+  thermalShiftDay: string | null;
   evidenceScore: number | null;
 }
 
@@ -52,13 +52,14 @@ export function CycleCalendar({
     () =>
       cycleData
         .filter(
-          (entry): entry is CycleEntry & { ovulationDay: string } =>
-            entry.ovulationDay != null && entry.ovulationDay <= currentDay
+          (entry): entry is CycleEntry & { thermalShiftDay: string } =>
+            entry.thermalShiftDay != null &&
+            entry.thermalShiftDay <= currentDay
         )
         .map(
           (entry): ThermalShift => ({
             cycleNumber: entry.cycleNumber,
-            day: entry.ovulationDay,
+            day: entry.thermalShiftDay,
             evidenceScore: entry.evidenceScore,
           })
         )

@@ -17,14 +17,19 @@ export async function GET(request: NextRequest) {
 
   const todayStr = getTodayET();
   const todayDate = new Date(todayStr + "T12:00:00");
-  const startDate = format(subDays(todayDate, 2), "yyyy-MM-dd");
+  const syncStartDate = format(subDays(todayDate, 6), "yyyy-MM-dd");
+  const analysisStartDate = syncStartDate;
   const endDate = todayStr;
 
   try {
-    const syncResult = await syncDateRange(startDate, endDate, "cron");
+    const syncResult = await syncDateRange(
+      syncStartDate,
+      endDate,
+      "cron"
+    );
 
     const sensitiveResult = await syncSensitiveDateRange(
-      startDate,
+      syncStartDate,
       endDate,
       "cron"
     );
@@ -33,7 +38,12 @@ export async function GET(request: NextRequest) {
 
     const config = await loadActiveConfig();
     const bipolarType = await loadBipolarType();
-    const analysisResult = await reprocessAll(config, startDate, endDate, bipolarType);
+    const analysisResult = await reprocessAll(
+      config,
+      analysisStartDate,
+      endDate,
+      bipolarType
+    );
 
     const healthResult = await runHealthSignalDetection();
     const warnings = [...syncResult.warnings, ...sensitiveResult.warnings];
@@ -45,11 +55,13 @@ export async function GET(request: NextRequest) {
       records: syncResult.records,
       sensitiveRecords: sensitiveResult.records,
       analysis: {
+        startDate: analysisStartDate,
+        endDate,
         daysProcessed: analysisResult.daysProcessed,
         episodes: analysisResult.episodes,
       },
       healthSignals: healthResult.signals,
-      startDate,
+      startDate: syncStartDate,
       endDate,
     });
   } catch (error) {

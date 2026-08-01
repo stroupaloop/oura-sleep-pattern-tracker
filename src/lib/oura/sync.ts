@@ -54,6 +54,7 @@ import {
   aggregateHeartRateSamples,
   getHeartRateQueryRange,
 } from "./heartrate";
+import { encodeSleepTimeOffset } from "./sleep-time";
 
 export async function syncDateRange(
   startDate: string,
@@ -712,6 +713,7 @@ export async function syncSensitiveDateRange(
     if (!sleepTimeResult.warning) {
       const writeResult = await runOptionalOuraTask("sleep_time", async () => {
         for (const s of sleepTimeData) {
+          const dayTimezoneOffset = s.optimal_bedtime?.day_tz;
           const startOffset = s.optimal_bedtime?.start_offset;
           const endOffset = s.optimal_bedtime?.end_offset;
           await db
@@ -719,10 +721,14 @@ export async function syncSensitiveDateRange(
             .values({
               id: s.id,
               day: s.day,
-              optimalBedtimeStart:
-                startOffset != null ? String(startOffset) : null,
-              optimalBedtimeEnd:
-                endOffset != null ? String(endOffset) : null,
+              optimalBedtimeStart: encodeSleepTimeOffset(
+                startOffset,
+                dayTimezoneOffset
+              ),
+              optimalBedtimeEnd: encodeSleepTimeOffset(
+                endOffset,
+                dayTimezoneOffset
+              ),
               recommendation: s.recommendation,
               status: s.status,
               createdAt: now,

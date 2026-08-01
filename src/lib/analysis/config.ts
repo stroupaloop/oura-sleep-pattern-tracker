@@ -67,8 +67,6 @@ export function getBipolarProfile(type: BipolarType): BipolarProfile {
 
 export interface AbsoluteThresholds {
   minSleepMinutes: number;
-  maxHeartRate: number;
-  minHrv: number;
   minEfficiency: number;
   maxBedtimeShiftMinutes: number;
 }
@@ -113,8 +111,6 @@ export const DEFAULT_WEIGHTS: MetricWeights = {
 
 export const DEFAULT_ABSOLUTE_THRESHOLDS: AbsoluteThresholds = {
   minSleepMinutes: 300,
-  maxHeartRate: 80,
-  minHrv: 20,
   minEfficiency: 70,
   maxBedtimeShiftMinutes: 120,
 };

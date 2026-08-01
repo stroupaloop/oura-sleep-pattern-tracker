@@ -18,18 +18,27 @@ import {
   healthSignals,
   dailyAnalysis,
   dailyMood,
+  syncLog,
 } from "@/lib/db/schema";
-import { desc, gte, eq, and } from "drizzle-orm";
+import { desc, gte, eq, and, isNotNull, ne, sql } from "drizzle-orm";
 import { format, parseISO, subDays } from "date-fns";
 import {
   APP_TIME_ZONE,
-  getDayOffsetClockMinutes,
   getIsoTimeZoneClockMinutes,
   getTodayET,
   shiftIsoDay,
 } from "@/lib/date-utils";
-import { longestConsecutiveTemperatureRun } from "@/lib/analysis/cycle";
+import {
+  buildRestModeDaySet,
+  longestConsecutiveTemperatureRun,
+} from "@/lib/analysis/cycle";
 import { projectActivityToCalendarDays } from "@/lib/oura/activity";
+import { getOuraSleepDayForTimestamp } from "@/lib/oura/sleep-day";
+import { getSleepTimeClockMinutes } from "@/lib/oura/sleep-time";
+import {
+  projectLatestSyncAttempts,
+  resolveDatasetFreshness,
+} from "@/lib/oura/freshness";
 import { PrivateTabs } from "./private-tabs";
 
 function parseIndicators(value: string | null): string[] {
@@ -60,6 +69,35 @@ export default async function PrivatePage() {
   const activitySourceCutoff =
     shiftIsoDay(fourteenDayCutoff, -1) ?? fourteenDayCutoff;
   const thirtyDayCutoff = format(subDays(today, 29), "yyyy-MM-dd");
+  const sourceDaysPromise = Promise.all([
+    db
+      .select({ bedtimeEnd: sleepPeriods.bedtimeEnd })
+      .from(sleepPeriods)
+      .where(eq(sleepPeriods.type, "long_sleep"))
+      .orderBy(desc(sleepPeriods.day), desc(sleepPeriods.bedtimeEnd))
+      .limit(1)
+      .then((rows) =>
+        rows[0]?.bedtimeEnd
+          ? getOuraSleepDayForTimestamp(rows[0].bedtimeEnd)
+          : null
+      ),
+    db
+      .select({
+        day: sql<string | null>`max(${dailyCardiovascularAge.day})`,
+      })
+      .from(dailyCardiovascularAge)
+      .where(isNotNull(dailyCardiovascularAge.vascularAge))
+      .then((rows) => rows[0]?.day ?? null),
+    db
+      .select({ day: sql<string | null>`max(${vo2Max.day})` })
+      .from(vo2Max)
+      .where(isNotNull(vo2Max.vo2Max))
+      .then((rows) => rows[0]?.day ?? null),
+    db
+      .select({ day: sql<string | null>`max(${sleepTime.day})` })
+      .from(sleepTime)
+      .then((rows) => rows[0]?.day ?? null),
+  ]);
 
   const [
     cvAgeData,
@@ -72,6 +110,8 @@ export default async function PrivatePage() {
     restModeData,
     hrData,
     hourlyHrData,
+    recentSyncRows,
+    sourceDays,
   ] = await Promise.all([
     db
       .select()
@@ -98,6 +138,7 @@ export default async function PrivatePage() {
       .select({
         day: sleepPeriods.day,
         bedtimeStart: sleepPeriods.bedtimeStart,
+        bedtimeEnd: sleepPeriods.bedtimeEnd,
       })
       .from(sleepPeriods)
       .where(and(gte(sleepPeriods.day, cutoff), eq(sleepPeriods.type, "long_sleep")))
@@ -133,6 +174,18 @@ export default async function PrivatePage() {
       .from(hourlyHeartrate)
       .where(gte(hourlyHeartrate.day, fourteenDayCutoff))
       .orderBy(hourlyHeartrate.day, hourlyHeartrate.hour),
+    db
+      .select({
+        syncType: syncLog.syncType,
+        status: syncLog.status,
+        errorMessage: syncLog.errorMessage,
+        createdAt: syncLog.createdAt,
+      })
+      .from(syncLog)
+      .where(ne(syncLog.syncType, "cron-hr"))
+      .orderBy(desc(syncLog.createdAt))
+      .limit(100),
+    sourceDaysPromise,
   ]);
 
   const wearActivityData = await db
@@ -177,17 +230,11 @@ export default async function PrivatePage() {
   const readinessTemperatureByDay = new Map(
     readinessTempData.map((r) => [r.day, r.temperatureDeviation])
   );
-  const restModeDays = new Set<string>();
-  for (const period of restModeData) {
-    if (!period.startDay || !period.endDay) continue;
-    let day: string | null = period.startDay;
-    let guard = 0;
-    while (day != null && day <= period.endDay && guard < 400) {
-      restModeDays.add(day);
-      day = shiftIsoDay(day, 1);
-      guard++;
-    }
-  }
+  const restModeDays = buildRestModeDaySet(
+    restModeData,
+    cutoff,
+    currentDay
+  );
   const eligibleTemperatureRun = longestConsecutiveTemperatureRun(
     readinessTempData
       .filter(
@@ -227,20 +274,19 @@ export default async function PrivatePage() {
   const person = personalInfoData[0] ?? null;
 
   function normalizeOffsetMinutes(
-    offsetSeconds: string | null | undefined,
-    day: string,
-    sourceTimestamp: string | null
+    storedOffset: string | null | undefined,
+    day: string
   ): number | null {
-    if (!offsetSeconds) return null;
-    const seconds = Number(offsetSeconds);
-    if (!Number.isFinite(seconds) || !sourceTimestamp) return null;
-    let mins = getDayOffsetClockMinutes(day, seconds, sourceTimestamp);
+    let mins = getSleepTimeClockMinutes(day, storedOffset);
     if (mins == null) return null;
     if (mins < 720) mins += 1440;
     return mins;
   }
 
-  const bedtimeData = sleepData.map((t) => {
+  const bedtimeData = sleepData.flatMap((t) => {
+    const sleepDayET = getOuraSleepDayForTimestamp(t.bedtimeEnd);
+    if (sleepDayET == null) return [];
+
     const st = sleepTimeData.find((s) => s.day === t.day);
     let actualMinutes: number | null = null;
     if (t.bedtimeStart) {
@@ -252,21 +298,44 @@ export default async function PrivatePage() {
             : etClockMinutes;
       }
     }
-    return {
-      day: t.day,
-      actualBedtime: actualMinutes,
-      optimalStart: normalizeOffsetMinutes(
-        st?.optimalBedtimeStart,
-        t.day,
-        t.bedtimeStart
-      ),
-      optimalEnd: normalizeOffsetMinutes(
-        st?.optimalBedtimeEnd,
-        t.day,
-        t.bedtimeStart
-      ),
-    };
+    return [
+      {
+        day: sleepDayET,
+        actualBedtime: actualMinutes,
+        optimalStart: normalizeOffsetMinutes(st?.optimalBedtimeStart, t.day),
+        optimalEnd: normalizeOffsetMinutes(st?.optimalBedtimeEnd, t.day),
+      },
+    ];
   });
+  const [
+    latestSleepSourceDay,
+    latestCardiovascularAgeSourceDay,
+    latestVo2MaxSourceDay,
+    latestBedtimeGuidanceSourceDay,
+  ] = sourceDays;
+  const syncAttempts = projectLatestSyncAttempts(recentSyncRows);
+  const sourceFreshness = {
+    sleep: resolveDatasetFreshness(
+      syncAttempts.core,
+      "sleep",
+      latestSleepSourceDay
+    ),
+    cardiovascularAge: resolveDatasetFreshness(
+      syncAttempts.private,
+      "daily_cardiovascular_age",
+      latestCardiovascularAgeSourceDay
+    ),
+    vo2Max: resolveDatasetFreshness(
+      syncAttempts.private,
+      "vO2_max",
+      latestVo2MaxSourceDay
+    ),
+    bedtimeGuidance: resolveDatasetFreshness(
+      syncAttempts.private,
+      "sleep_time",
+      latestBedtimeGuidanceSourceDay
+    ),
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -276,7 +345,7 @@ export default async function PrivatePage() {
         cvAgeData={cvAgeData.map((c) => ({ day: c.day, vascularAge: c.vascularAge }))}
         vo2Data={vo2Data.map((v) => ({ day: v.day, vo2Max: v.vo2Max }))}
         personalInfo={person ? { age: person.age, height: person.height, weight: person.weight, biologicalSex: person.biologicalSex } : null}
-        cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, ovulationDay: c.ovulationDay, nextPeriodDay: c.nextPeriodDay, cycleLength: c.cycleLength, evidenceScore: c.confidence }))}
+        cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, thermalShiftDay: c.thermalShiftDay, nextPeriodDay: c.nextPeriodDay, interShiftDays: c.interShiftDays, evidenceScore: c.confidence }))}
         temperatureData={readinessTempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDeviation }))}
         eligibleTemperatureRun={eligibleTemperatureRun}
         bedtimeData={bedtimeData}
@@ -292,6 +361,7 @@ export default async function PrivatePage() {
         cyclePhaseDaily={cyclePhaseDaily}
         wearActivityData={projectedWearActivityData}
         wearActivityHrData={hourlyHrData}
+        sourceFreshness={sourceFreshness}
       />
     </div>
   );

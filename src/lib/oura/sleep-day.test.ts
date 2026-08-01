@@ -23,6 +23,12 @@ describe("getOuraSleepDayForTimestamp", () => {
     );
   });
 
+  it("uses the ET sleep day when travel changes the timestamp calendar date", () => {
+    expect(
+      getOuraSleepDayForTimestamp("2026-08-01T05:30:00+09:00")
+    ).toBe("2026-07-31");
+  });
+
   it("remains stable across ET daylight-saving transitions", () => {
     expect(
       getOuraSleepDayForTimestamp("2026-03-08T08:00:00-04:00")

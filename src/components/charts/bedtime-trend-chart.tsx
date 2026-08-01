@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   Card,
   CardContent,
@@ -53,7 +54,35 @@ export function BedtimeTrendChart({
 }: BedtimeTrendChartProps) {
   const sliced = data.slice(-days).filter((d) => d.actualBedtime != null);
 
-  if (sliced.length === 0) return null;
+  if (sliced.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Sleep Timing</CardTitle>
+          <CardDescription>
+            Oura-detected bedtime in ET (last {days} days)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center">
+            <p className="text-sm font-medium">
+              No Oura-detected bedtime is available for this range.
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              If recent sleep is missing, open Oura to finish the ring sync,
+              then sync this app again.
+            </p>
+            <Link
+              href="/dashboard/settings"
+              className="mt-3 inline-block text-sm font-medium underline underline-offset-4"
+            >
+              Review sync settings
+            </Link>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   const hasAnyOptimal = sliced.some((d) => d.optimalStart != null && d.optimalEnd != null);
 
@@ -79,7 +108,7 @@ export function BedtimeTrendChart({
         <CardDescription>
           {hasAnyOptimal
             ? `Oura-detected bedtime vs. optimal window in ET (last ${days} days)`
-            : `Oura-detected bedtime in ET (last ${days} days — optimal window not available from Oura)`}
+            : `Oura-detected bedtime in ET (last ${days} days — optimal window not available for display)`}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -101,7 +130,7 @@ export function BedtimeTrendChart({
                   ? "bg-muted-foreground/40"
                   : "bg-primary/60";
                 const dotTitle = hasAnyOptimal
-                  ? `${formatMinutesAsTime(actual)} — No data`
+                  ? `${formatMinutesAsTime(actual)} — Optimal window unavailable`
                   : formatMinutesAsTime(actual);
                 return (
                   <div key={point.day} className="flex items-center gap-2 group">
@@ -111,7 +140,9 @@ export function BedtimeTrendChart({
                     <div className="relative flex-1 h-5">
                       <div className="absolute inset-y-0 left-0 right-0 bg-muted/30 rounded-sm" />
                       <div
-                        className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${dotClass} transition-transform group-hover:scale-150`}
+                        role="img"
+                        aria-label={`${point.day}: Oura-detected bedtime ${formatMinutesAsTime(actual)}; optimal window unavailable`}
+                        className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${dotClass} transition-transform motion-reduce:transition-none group-hover:scale-150`}
                         style={{ left: `${Math.max(0, Math.min(98, dotLeft))}%` }}
                         title={dotTitle}
                       />
@@ -145,7 +176,9 @@ export function BedtimeTrendChart({
                       }}
                     />
                     <div
-                      className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${dotColor} transition-transform group-hover:scale-150`}
+                      role="img"
+                      aria-label={`${point.day}: Oura-detected bedtime ${formatMinutesAsTime(actual)}; ${label}`}
+                      className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${dotColor} transition-transform motion-reduce:transition-none group-hover:scale-150`}
                       style={{ left: `${Math.max(0, Math.min(98, dotLeft))}%` }}
                       title={`${formatMinutesAsTime(actual)} — ${label}`}
                     />
@@ -155,7 +188,7 @@ export function BedtimeTrendChart({
             })}
           </div>
 
-          <div className="flex items-center gap-4 justify-center mt-4 text-xs text-muted-foreground">
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
             {hasAnyOptimal ? (
               <>
                 <div className="flex items-center gap-1">
@@ -176,7 +209,7 @@ export function BedtimeTrendChart({
                 </div>
                 <div className="flex items-center gap-1">
                   <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />
-                  No data
+                  Optimal window unavailable
                 </div>
               </>
             ) : (

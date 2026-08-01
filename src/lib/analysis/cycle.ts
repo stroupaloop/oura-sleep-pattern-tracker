@@ -1,7 +1,14 @@
 import { db } from "@/lib/db";
 import { dailyReadiness, restModePeriods, cyclePredictions } from "@/lib/db/schema";
 import { gte, and, isNotNull } from "drizzle-orm";
-import { format, subDays, differenceInDays, addDays, parseISO } from "date-fns";
+import {
+  format,
+  subDays,
+  differenceInDays,
+  differenceInCalendarDays,
+  addDays,
+  parseISO,
+} from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
 import { isNextCalendarDay } from "./baseline";
 
@@ -13,10 +20,50 @@ interface TempPoint {
 export interface DetectedThermalShift {
   cycleNumber: number;
   periodStartDay: string | null;
-  ovulationDay: string | null;
+  thermalShiftDay: string;
   nextPeriodDay: string | null;
-  cycleLength: number | null;
+  interShiftDays: number | null;
   evidenceStrength: number;
+}
+
+export interface CycleComputationOutcome {
+  state: "complete" | "insufficient_data";
+  cycles: DetectedThermalShift[];
+  eligibleTemperatureRun: number;
+}
+
+interface RestModeDateRange {
+  startDay: string | null;
+  endDay: string | null;
+}
+
+export function buildRestModeDaySet(
+  periods: RestModeDateRange[],
+  rangeStartDay: string,
+  rangeEndDay: string
+): Set<string> {
+  const days = new Set<string>();
+  if (rangeStartDay > rangeEndDay) return days;
+
+  for (const period of periods) {
+    if (!period.startDay) continue;
+    const startDay =
+      period.startDay < rangeStartDay ? rangeStartDay : period.startDay;
+    const periodEndDay = period.endDay ?? rangeEndDay;
+    const endDay = periodEndDay > rangeEndDay ? rangeEndDay : periodEndDay;
+    if (startDay > endDay) continue;
+
+    const start = parseISO(startDay);
+    const end = parseISO(endDay);
+    const span = differenceInCalendarDays(end, start);
+    if (!Number.isFinite(span) || span < 0) continue;
+
+    for (let offset = 0; offset <= span; offset++) {
+      days.add(format(addDays(start, offset), "yyyy-MM-dd"));
+    }
+  }
+
+  return days;
 }
 
 function isConsecutiveRange(
@@ -132,16 +179,41 @@ export function buildThermalShiftRecords(
     return {
       cycleNumber: index + 1,
       periodStartDay: null,
-      ovulationDay: temps[shiftIndex].day,
+      thermalShiftDay: temps[shiftIndex].day,
       nextPeriodDay: null,
-      cycleLength: shiftInterval,
+      interShiftDays: shiftInterval,
       evidenceStrength,
     };
   });
 }
 
-export async function computeCyclePredictions(): Promise<DetectedThermalShift[]> {
-  const todayDate = new Date(getTodayET() + "T12:00:00");
+export function evaluateCycleTemperatures(
+  temps: TempPoint[],
+  excludedDays: Set<string>
+): CycleComputationOutcome {
+  const eligibleTemperatureRun = longestConsecutiveTemperatureRun(
+    temps,
+    excludedDays
+  );
+  if (eligibleTemperatureRun < 30) {
+    return {
+      state: "insufficient_data",
+      cycles: [],
+      eligibleTemperatureRun,
+    };
+  }
+
+  const shiftIndices = detectThermalShifts(temps, excludedDays);
+  return {
+    state: "complete",
+    cycles: buildThermalShiftRecords(temps, shiftIndices),
+    eligibleTemperatureRun,
+  };
+}
+
+export async function computeCyclePredictions(): Promise<CycleComputationOutcome> {
+  const todayStr = getTodayET();
+  const todayDate = new Date(todayStr + "T12:00:00");
   const cutoff = format(subDays(todayDate, 365), "yyyy-MM-dd");
 
   const [tempRows, restRows] = await Promise.all([
@@ -165,74 +237,64 @@ export async function computeCyclePredictions(): Promise<DetectedThermalShift[]>
     `[cycle] Readiness rows with temperatureDeviation: ${tempRows.length}, rest periods: ${restRows.length}`
   );
 
-  const excludedDays = new Set<string>();
-  for (const rest of restRows) {
-    if (rest.startDay && rest.endDay) {
-      const start = parseISO(rest.startDay);
-      const end = parseISO(rest.endDay);
-      const span = differenceInDays(end, start);
-      for (let d = 0; d <= span; d++) {
-        excludedDays.add(format(addDays(start, d), "yyyy-MM-dd"));
-      }
-    }
-  }
+  const excludedDays = buildRestModeDaySet(restRows, cutoff, todayStr);
 
   const temps: TempPoint[] = tempRows.map((r) => ({
     day: r.day,
     temperatureDelta: r.temperatureDelta!,
   }));
 
-  const longestRun = longestConsecutiveTemperatureRun(temps, excludedDays);
-  if (longestRun < 30) {
+  const outcome = evaluateCycleTemperatures(temps, excludedDays);
+  if (outcome.state === "insufficient_data") {
     console.log(
-      `[cycle] Insufficient consecutive temperature data: ${longestRun}/30 required. Returning empty.`
+      `[cycle] Insufficient consecutive temperature data: ${outcome.eligibleTemperatureRun}/30 required. Retaining prior results.`
     );
-    return [];
+    return outcome;
   }
 
-  const shiftIndices = detectThermalShifts(temps, excludedDays);
-  console.log(`[cycle] Thermal shifts detected: ${shiftIndices.length}`);
-
-  if (shiftIndices.length === 0) {
-    console.log("[cycle] No thermal shifts found. Returning empty.");
-    return [];
-  }
-
-  const records = buildThermalShiftRecords(temps, shiftIndices);
-  console.log(`[cycle] Thermal-shift records computed: ${records.length}`);
-  return records;
+  console.log(`[cycle] Thermal shifts detected: ${outcome.cycles.length}`);
+  return outcome;
 }
 
-export async function runCyclePredictions(): Promise<{ cyclesDetected: number }> {
-  const cycles = await computeCyclePredictions();
-  await db.delete(cyclePredictions);
-
-  if (cycles.length > 0) {
-    const now = Math.floor(Date.now() / 1000);
-    for (const cycle of cycles) {
-      await db
-        .insert(cyclePredictions)
-        .values({
-          cycleNumber: cycle.cycleNumber,
-          periodStartDay: cycle.periodStartDay,
-          ovulationDay: cycle.ovulationDay,
-          nextPeriodDay: cycle.nextPeriodDay,
-          cycleLength: cycle.cycleLength,
-          confidence: cycle.evidenceStrength,
-          createdAt: now,
-        })
-        .onConflictDoUpdate({
-          target: cyclePredictions.cycleNumber,
-          set: {
-            periodStartDay: cycle.periodStartDay,
-            ovulationDay: cycle.ovulationDay,
-            nextPeriodDay: cycle.nextPeriodDay,
-            cycleLength: cycle.cycleLength,
-            confidence: cycle.evidenceStrength,
-          },
-        });
-    }
+export async function runCyclePredictions(
+  compute: () => Promise<CycleComputationOutcome> = computeCyclePredictions
+): Promise<{
+  cyclesDetected: number;
+  state: "replaced" | "retained_insufficient_data";
+  eligibleTemperatureRun: number;
+}> {
+  const outcome = await compute();
+  if (outcome.state === "insufficient_data") {
+    return {
+      cyclesDetected: 0,
+      state: "retained_insufficient_data",
+      eligibleTemperatureRun: outcome.eligibleTemperatureRun,
+    };
   }
 
-  return { cyclesDetected: cycles.length };
+  await db.transaction(async (tx) => {
+    await tx.delete(cyclePredictions);
+    if (outcome.cycles.length > 0) {
+      const now = Math.floor(Date.now() / 1000);
+      await tx
+        .insert(cyclePredictions)
+        .values(
+          outcome.cycles.map((cycle) => ({
+            cycleNumber: cycle.cycleNumber,
+            periodStartDay: cycle.periodStartDay,
+            thermalShiftDay: cycle.thermalShiftDay,
+            nextPeriodDay: cycle.nextPeriodDay,
+            interShiftDays: cycle.interShiftDays,
+            confidence: cycle.evidenceStrength,
+            createdAt: now,
+          }))
+        );
+    }
+  });
+
+  return {
+    cyclesDetected: outcome.cycles.length,
+    state: "replaced",
+    eligibleTemperatureRun: outcome.eligibleTemperatureRun,
+  };
 }

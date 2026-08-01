@@ -125,4 +125,25 @@ describe("daily analysis source and missingness", () => {
     expect(result?.isAnomaly).toBe(true);
     expect(result?.direction).toBeNull();
   });
+
+  it("uses personal baselines instead of universal heart-rate or HRV cutoffs", () => {
+    const personallyTypicalPrior = prior.map((metric, index) => ({
+      ...metric,
+      avgHeartRate: 88 + (index % 5),
+      avgHrv: 15 + (index % 5),
+    }));
+    const current = {
+      ...dayMetrics("2026-07-15", 0),
+      avgHeartRate: 90,
+      avgHrv: 17,
+    };
+
+    const result = computeDailyAnalysis(
+      current,
+      personallyTypicalPrior,
+      DEFAULT_CONFIG
+    );
+    expect(result?.compositeScore).toBeLessThan(0.5);
+    expect(result?.isAnomaly).toBe(false);
+  });
 });

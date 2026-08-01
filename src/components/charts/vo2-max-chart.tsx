@@ -33,9 +33,10 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Oura-Estimated VO₂ Max</CardTitle>
+        <CardTitle>VO₂ Max from Oura</CardTitle>
         <CardDescription>
-          Estimated aerobic capacity in mL/kg/min, not a laboratory measurement
+          Value in mL/kg/min; Oura may derive it from profile data or a walking
+          test, or store a value added manually
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -78,7 +79,7 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [
                 `${Number(value).toFixed(1)} mL/kg/min`,
-                "Oura-Estimated VO₂ Max",
+                "VO₂ Max from Oura",
               ]}
               labelFormatter={(label) => `Date: ${label}`}
             />
@@ -89,7 +90,7 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
               strokeWidth={2}
               fill="url(#vo2MaxGradient)"
               connectNulls={false}
-              name="Oura-Estimated VO₂ Max"
+              name="VO₂ Max from Oura"
             />
           </AreaChart>
         </ResponsiveContainer>

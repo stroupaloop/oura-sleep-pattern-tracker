@@ -66,7 +66,7 @@ export function ScoreBreakdown({ title, contributors, day }: ScoreBreakdownProps
               type="category"
               dataKey="name"
               width={100}
-              fontSize={11}
+              fontSize={12}
               tick={{ fill: "oklch(0.708 0 0)" }}
               tickLine={false}
               axisLine={false}

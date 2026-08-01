@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
 import {
   Card,
   CardContent,
@@ -23,6 +23,7 @@ import { CyclePhaseChart } from "@/components/charts/cycle-phase-chart";
 import { WearActivityChart } from "@/components/charts/wear-activity-chart";
 import type { WearActivityDay } from "@/components/charts/wear-activity-chart";
 import type { HourlyHrPoint } from "@/lib/hr-anomalies";
+import type { DatasetFreshness } from "@/lib/oura/freshness";
 
 const TABS = [
   { id: "overview", label: "Overview" },
@@ -33,6 +34,22 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+
+export function getPrivateTabIndexForKey(
+  key: string,
+  currentIndex: number,
+  tabCount: number
+): number | null {
+  if (tabCount <= 0 || currentIndex < 0 || currentIndex >= tabCount) {
+    return null;
+  }
+
+  if (key === "ArrowRight") return (currentIndex + 1) % tabCount;
+  if (key === "ArrowLeft") return (currentIndex - 1 + tabCount) % tabCount;
+  if (key === "Home") return 0;
+  if (key === "End") return tabCount - 1;
+  return null;
+}
 
 interface PrivateTabsProps {
   currentDay: string;
@@ -47,9 +64,9 @@ interface PrivateTabsProps {
   cycleData: {
     cycleNumber: number;
     periodStartDay: string | null;
-    ovulationDay: string | null;
+    thermalShiftDay: string | null;
     nextPeriodDay: string | null;
-    cycleLength: number | null;
+    interShiftDays: number | null;
     evidenceScore: number | null;
   }[];
   temperatureData: { day: string; temperatureDelta: number | null }[];
@@ -79,6 +96,12 @@ interface PrivateTabsProps {
   }[];
   wearActivityData: WearActivityDay[];
   wearActivityHrData: { day: string; hour: number; avgBpm: number | null; source: string | null }[];
+  sourceFreshness: {
+    sleep: DatasetFreshness;
+    cardiovascularAge: DatasetFreshness;
+    vo2Max: DatasetFreshness;
+    bedtimeGuidance: DatasetFreshness;
+  };
 }
 
 function describeEvidence(score: number): string {
@@ -89,27 +112,79 @@ function describeEvidence(score: number): string {
 
 export function PrivateTabs(props: PrivateTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const activeTabIndex = TABS.findIndex((tab) => tab.id === activeTab);
+  const activeTabDefinition = TABS[activeTabIndex];
+
+  function handleTabKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentIndex: number
+  ) {
+    const nextIndex = getPrivateTabIndexForKey(
+      event.key,
+      currentIndex,
+      TABS.length
+    );
+    if (nextIndex == null) return;
+
+    event.preventDefault();
+    setActiveTab(TABS[nextIndex].id);
+    tabRefs.current[nextIndex]?.focus();
+  }
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 overflow-x-auto pb-2">
-        {TABS.map((tab) => (
+      <div
+        role="tablist"
+        aria-label="Private data sections"
+        aria-orientation="horizontal"
+        className="flex gap-2 overflow-x-auto pb-2"
+      >
+        {TABS.map((tab, index) => (
           <Button
             key={tab.id}
+            ref={(element) => {
+              tabRefs.current[index] = element;
+            }}
+            id={`private-tab-${tab.id}`}
+            role="tab"
+            aria-controls={`private-panel-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            tabIndex={activeTab === tab.id ? 0 : -1}
             variant={activeTab === tab.id ? "default" : "outline"}
             size="sm"
+            className="min-h-11"
             onClick={() => setActiveTab(tab.id)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
           >
             {tab.label}
           </Button>
         ))}
       </div>
 
-      {activeTab === "overview" && <OverviewTab {...props} />}
-      {activeTab === "heart-rate" && <HeartRateTab {...props} />}
-      {activeTab === "cycle" && <CycleTab {...props} />}
-      {activeTab === "fitness" && <FitnessTab {...props} />}
-      {activeTab === "sleep-timing" && <SleepTimingTab bedtimeData={props.bedtimeData} />}
+      {TABS.map((tab) => {
+        const isActive = activeTabDefinition.id === tab.id;
+        return (
+          <div
+            key={tab.id}
+            id={`private-panel-${tab.id}`}
+            role="tabpanel"
+            aria-labelledby={`private-tab-${tab.id}`}
+            tabIndex={isActive ? 0 : -1}
+            hidden={!isActive}
+          >
+            {isActive && tab.id === "overview" && <OverviewTab {...props} />}
+            {isActive && tab.id === "heart-rate" && (
+              <HeartRateTab {...props} />
+            )}
+            {isActive && tab.id === "cycle" && <CycleTab {...props} />}
+            {isActive && tab.id === "fitness" && <FitnessTab {...props} />}
+            {isActive && tab.id === "sleep-timing" && (
+              <SleepTimingTab bedtimeData={props.bedtimeData} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -117,10 +192,13 @@ export function PrivateTabs(props: PrivateTabsProps) {
 function OverviewTab({
   personalInfo,
   healthSignals: healthSignalsProp,
+  sourceFreshness,
 }: PrivateTabsProps) {
   return (
     <div className="space-y-6">
       <HealthSignalsCard signals={healthSignalsProp} />
+
+      <SourceFreshnessCard data={sourceFreshness} />
 
       {personalInfo && (
         <Card>
@@ -159,6 +237,94 @@ function OverviewTab({
       )}
     </div>
   );
+}
+
+function formatSourceDay(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString("en-US", {
+    timeZone: "UTC",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function freshnessValue(data: DatasetFreshness): string {
+  if (data.state === "retained" && data.lastSourceDay) {
+    return `Retained through ${formatSourceDay(data.lastSourceDay)}`;
+  }
+  if (data.state === "unavailable") {
+    return "Latest update unavailable · no saved value";
+  }
+  if (data.state === "checked" && data.lastSourceDay) {
+    return `Through ${formatSourceDay(data.lastSourceDay)}`;
+  }
+  if (data.state === "checked") return "Checked · no value received";
+  if (data.lastSourceDay) {
+    return `Saved through ${formatSourceDay(data.lastSourceDay)} · sync status unknown`;
+  }
+  return "Not yet available";
+}
+
+function SourceFreshnessCard({
+  data,
+}: {
+  data: PrivateTabsProps["sourceFreshness"];
+}) {
+  const rows = [
+    ["Sleep", data.sleep],
+    ["Cardiovascular Age", data.cardiovascularAge],
+    ["VO₂ Max", data.vo2Max],
+    ["Bedtime Guidance", data.bedtimeGuidance],
+  ] as const;
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Oura Source Freshness</CardTitle>
+        <CardDescription>
+          Source dates are shown separately so retained values do not look newly
+          updated.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <dl className="divide-y">
+          {rows.map(([label, freshness]) => (
+            <div
+              key={label}
+              className="flex flex-col gap-0.5 py-2 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between sm:gap-4"
+            >
+              <dt className="text-sm font-medium">{label}</dt>
+              <dd className="text-sm text-muted-foreground">
+                {freshnessValue(freshness)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  );
+}
+
+function missingFitnessCopy(
+  metric: "Cardiovascular Age" | "VO₂ Max",
+  freshness: DatasetFreshness
+): string {
+  if (freshness.state === "unavailable") {
+    return `The latest Oura update for ${metric} was unavailable, and no saved value is available.`;
+  }
+  if (freshness.lastSourceDay) {
+    const status =
+      freshness.state === "retained"
+        ? "The latest update was unavailable."
+        : freshness.state === "unknown"
+          ? "The latest sync status is unknown."
+          : "The latest source check completed.";
+    return `${status} No value appears in this 90-day view; the latest saved value is from ${formatSourceDay(freshness.lastSourceDay)}.`;
+  }
+  if (metric === "Cardiovascular Age") {
+    return "No Cardiovascular Age value is currently available from Oura. The first baseline generally requires at least 14 eligible nights within the previous 30 days.";
+  }
+  return "No VO₂ Max value is currently available from Oura. Oura may establish it from profile data or a walking test, or store a value added manually.";
 }
 
 function HeartRateTab({
@@ -204,14 +370,16 @@ function CycleTab({
   const detectedShifts = cycleData
     .filter(
       (cycle) =>
-        cycle.ovulationDay != null &&
-        cycle.ovulationDay <= today &&
+        cycle.thermalShiftDay != null &&
+        cycle.thermalShiftDay <= today &&
         (cycle.evidenceScore ?? 0) >= 0.3
     )
-    .sort((a, b) => b.ovulationDay!.localeCompare(a.ovulationDay!));
+    .sort((a, b) =>
+      b.thermalShiftDay!.localeCompare(a.thermalShiftDay!)
+    );
   const latestShift = detectedShifts[0] ?? null;
   const thermalShiftDays = detectedShifts
-    .map((c) => c.ovulationDay)
+    .map((c) => c.thermalShiftDay)
     .filter((d): d is string => d != null);
   const hasCurrentIntervalSemantics =
     latestShift?.periodStartDay == null &&
@@ -233,16 +401,16 @@ function CycleTab({
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-              {latestShift.ovulationDay && (
+              {latestShift.thermalShiftDay && (
                 <div>
                   <span className="text-muted-foreground">Latest Detected Shift</span>
-                  <p className="font-medium">{latestShift.ovulationDay}</p>
+                  <p className="font-medium">{latestShift.thermalShiftDay}</p>
                 </div>
               )}
-              {hasCurrentIntervalSemantics && latestShift.cycleLength != null && (
+              {hasCurrentIntervalSemantics && latestShift.interShiftDays != null && (
                 <div>
                   <span className="text-muted-foreground">Previous Shift Interval</span>
-                  <p className="font-medium">{latestShift.cycleLength} days</p>
+                  <p className="font-medium">{latestShift.interShiftDays} days</p>
                 </div>
               )}
               {latestShift.evidenceScore != null && (
@@ -314,7 +482,7 @@ function CycleTab({
         (cycle) =>
           cycle.periodStartDay == null &&
           cycle.nextPeriodDay == null &&
-          cycle.cycleLength != null
+          cycle.interShiftDays != null
       ).length > 0 && (
         <CycleLengthChart
           data={detectedShifts
@@ -322,9 +490,12 @@ function CycleTab({
               (cycle) =>
                 cycle.periodStartDay == null &&
                 cycle.nextPeriodDay == null &&
-                cycle.cycleLength != null
+                cycle.interShiftDays != null
             )
-            .map((c) => ({ cycleNumber: c.cycleNumber, cycleLength: c.cycleLength! }))
+            .map((c) => ({
+              cycleNumber: c.cycleNumber,
+              interShiftDays: c.interShiftDays!,
+            }))
             .reverse()}
         />
       )}
@@ -336,6 +507,7 @@ function FitnessTab({
   cvAgeData,
   vo2Data,
   personalInfo,
+  sourceFreshness,
 }: PrivateTabsProps) {
   const hasCvAge = cvAgeData.some((d) => d.vascularAge != null);
   const hasVo2 = vo2Data.some((d) => d.vo2Max != null);
@@ -351,11 +523,30 @@ function FitnessTab({
 
       {hasVo2 && <Vo2MaxChart data={vo2Data} />}
 
-      {!hasCvAge && !hasVo2 && (
+      {!hasCvAge && (
         <Card>
+          <CardHeader>
+            <CardTitle>Cardiovascular Age</CardTitle>
+          </CardHeader>
           <CardContent className="py-8">
             <p className="text-sm text-muted-foreground text-center">
-              No fitness estimates are available. Oura Cardiovascular Age and VO₂ max require sufficient eligible data.
+              {missingFitnessCopy(
+                "Cardiovascular Age",
+                sourceFreshness.cardiovascularAge
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {!hasVo2 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>VO₂ Max</CardTitle>
+          </CardHeader>
+          <CardContent className="py-8">
+            <p className="text-sm text-muted-foreground text-center">
+              {missingFitnessCopy("VO₂ Max", sourceFreshness.vo2Max)}
             </p>
           </CardContent>
         </Card>
@@ -369,19 +560,5 @@ function SleepTimingTab({
 }: {
   bedtimeData: PrivateTabsProps["bedtimeData"];
 }) {
-  return (
-    <div className="space-y-6">
-      {bedtimeData.length > 0 ? (
-        <BedtimeTrendChart data={bedtimeData} />
-      ) : (
-        <Card>
-          <CardContent className="py-8">
-            <p className="text-sm text-muted-foreground text-center">
-              No sleep timing data available. Sync your Oura data to see bedtime trends.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
-  );
+  return <BedtimeTrendChart data={bedtimeData} />;
 }
