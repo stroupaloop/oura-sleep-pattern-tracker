@@ -1,7 +1,6 @@
 import { db } from "@/lib/db";
 import {
   dailyReadiness,
-  dailyHeartrate,
   dailySpo2,
   sleepPeriods,
   cyclePredictions,
@@ -112,6 +111,26 @@ export function isWithinRecentCalendarDays(
   return age >= 0 && age <= maximumAgeDays;
 }
 
+export function personalBaselineZScore(
+  currentValue: number,
+  baselineValues: number[]
+): number | null {
+  if (baselineValues.length < 2) return null;
+  const mean =
+    baselineValues.reduce((sum, value) => sum + value, 0) /
+    baselineValues.length;
+  const standardDeviation = Math.sqrt(
+    baselineValues.reduce(
+      (sum, value) => sum + (value - mean) ** 2,
+      0
+    ) /
+      (baselineValues.length - 1)
+  );
+  return standardDeviation > 0
+    ? (currentValue - mean) / standardDeviation
+    : null;
+}
+
 function resolvedSummary(signalType: string): string {
   if (
     signalType === "early_pregnancy" ||
@@ -211,19 +230,19 @@ async function detectSustainedTemperaturePattern(
     .limit(3);
   const latestWithShift = cycles.find(
     (cycle) =>
-      cycle.ovulationDay != null &&
+      cycle.thermalShiftDay != null &&
       cycle.periodStartDay == null &&
       cycle.nextPeriodDay == null &&
       cycle.confidence != null &&
       cycle.confidence > 0.3
   );
-  if (!latestWithShift?.ovulationDay) return [];
+  if (!latestWithShift?.thermalShiftDay) return [];
 
-  const shiftDate = parseISO(latestWithShift.ovulationDay);
+  const shiftDate = parseISO(latestWithShift.thermalShiftDay);
   const daysSinceShift = differenceInDays(todayDate, shiftDate);
   if (daysSinceShift < 10 || daysSinceShift > 30) return [];
 
-  const postShiftCutoff = latestWithShift.ovulationDay;
+  const postShiftCutoff = latestWithShift.thermalShiftDay;
   const preShiftCutoff = format(
     subDays(shiftDate, 14),
     "yyyy-MM-dd"
@@ -245,17 +264,18 @@ async function detectSustainedTemperaturePattern(
         .orderBy(dailyReadiness.day),
       db
         .select({
-          day: dailyHeartrate.day,
-          value: dailyHeartrate.restingBpm,
+          day: sleepPeriods.day,
+          value: sleepPeriods.averageHeartRate,
         })
-        .from(dailyHeartrate)
+        .from(sleepPeriods)
         .where(
           and(
-            gte(dailyHeartrate.day, postShiftCutoff),
-            isNotNull(dailyHeartrate.restingBpm)
+            gte(sleepPeriods.day, postShiftCutoff),
+            isNotNull(sleepPeriods.averageHeartRate),
+            eq(sleepPeriods.type, "long_sleep")
           )
         )
-        .orderBy(dailyHeartrate.day),
+        .orderBy(sleepPeriods.day),
       db
         .select({
           day: dailyReadiness.day,
@@ -272,18 +292,19 @@ async function detectSustainedTemperaturePattern(
         .orderBy(dailyReadiness.day),
       db
         .select({
-          day: dailyHeartrate.day,
-          value: dailyHeartrate.restingBpm,
+          day: sleepPeriods.day,
+          value: sleepPeriods.averageHeartRate,
         })
-        .from(dailyHeartrate)
+        .from(sleepPeriods)
         .where(
           and(
-            gte(dailyHeartrate.day, preShiftCutoff),
-            lt(dailyHeartrate.day, postShiftCutoff),
-            isNotNull(dailyHeartrate.restingBpm)
+            gte(sleepPeriods.day, preShiftCutoff),
+            lt(sleepPeriods.day, postShiftCutoff),
+            isNotNull(sleepPeriods.averageHeartRate),
+            eq(sleepPeriods.type, "long_sleep")
           )
         )
-        .orderBy(dailyHeartrate.day),
+        .orderBy(sleepPeriods.day),
     ]);
 
   const baselineTemperatureRun = latestConsecutiveValues(
@@ -349,7 +370,7 @@ async function detectSustainedTemperaturePattern(
     if (consecutiveHeartRateDays >= 7) {
       evidenceStrength += consecutiveHeartRateDays >= 14 ? 0.15 : 0.08;
       indicators.push(
-        `Rest-labelled heart-rate estimate was elevated for ${consecutiveHeartRateDays} calendar-consecutive days`
+        `Average heart rate during the Oura long-sleep period was elevated for ${consecutiveHeartRateDays} calendar-consecutive days`
       );
     }
   }
@@ -378,17 +399,18 @@ async function detectAcuteIllness(
   const [hrData, temperatureData, hrvData, spo2Data] = await Promise.all([
     db
       .select({
-        day: dailyHeartrate.day,
-        value: dailyHeartrate.restingBpm,
+        day: sleepPeriods.day,
+        value: sleepPeriods.averageHeartRate,
       })
-      .from(dailyHeartrate)
+      .from(sleepPeriods)
       .where(
         and(
-          gte(dailyHeartrate.day, baselineCutoff),
-          isNotNull(dailyHeartrate.restingBpm)
+          gte(sleepPeriods.day, baselineCutoff),
+          isNotNull(sleepPeriods.averageHeartRate),
+          eq(sleepPeriods.type, "long_sleep")
         )
       )
-      .orderBy(dailyHeartrate.day),
+      .orderBy(sleepPeriods.day),
     db
       .select({
         day: dailyReadiness.day,
@@ -442,24 +464,14 @@ async function detectAcuteIllness(
   if (baselineHeartRate.length < 7 || recentHeartRate.length === 0) return [];
 
   const latestHeartRate = recentHeartRate[recentHeartRate.length - 1];
-  const heartRateMean =
-    baselineHeartRate.reduce((sum, row) => sum + row.value, 0) /
-    baselineHeartRate.length;
-  const heartRateSd = Math.sqrt(
-    baselineHeartRate.reduce(
-      (sum, row) => sum + (row.value - heartRateMean) ** 2,
-      0
-    ) /
-      (baselineHeartRate.length - 1)
+  const heartRateZ = personalBaselineZScore(
+    latestHeartRate.value,
+    baselineHeartRate.map((row) => row.value)
   );
-  const heartRateZ =
-    heartRateSd > 0
-      ? (latestHeartRate.value - heartRateMean) / heartRateSd
-      : 0;
-  if (heartRateZ <= 2) return [];
+  if (heartRateZ == null || heartRateZ <= 2) return [];
 
   const indicators = [
-    `Rest-labelled heart-rate estimate was ${heartRateZ.toFixed(1)} standard deviations above its recent baseline`,
+    `Average heart rate during the Oura long-sleep period was ${heartRateZ.toFixed(1)} standard deviations above its recent baseline`,
   ];
   let evidenceStrength = 0.4;
 
@@ -535,7 +547,7 @@ async function detectAcuteIllness(
       indicators,
       summary:
         "Multiple measurements show a physiological strain pattern. This pattern is not specific to illness.",
-      details: `Heart-rate z-score ${heartRateZ.toFixed(1)} with ${indicators.length - 1} supporting measurement${indicators.length === 2 ? "" : "s"}.`,
+      details: `Oura long-sleep average heart-rate z-score ${heartRateZ.toFixed(1)} with ${indicators.length - 1} supporting measurement${indicators.length === 2 ? "" : "s"}.`,
     },
   ];
 }
@@ -550,8 +562,8 @@ async function detectThermalShiftTimingChange(
     .limit(12);
   const observedShifts = cycles.filter(
     (cycle) =>
-      cycle.ovulationDay != null &&
-      cycle.ovulationDay <= todayStr &&
+      cycle.thermalShiftDay != null &&
+      cycle.thermalShiftDay <= todayStr &&
       cycle.periodStartDay == null &&
       cycle.nextPeriodDay == null &&
       cycle.confidence != null &&
@@ -561,8 +573,8 @@ async function detectThermalShiftTimingChange(
 
   const latest = observedShifts[0];
   if (
-    !latest.ovulationDay ||
-    !isWithinRecentCalendarDays(latest.ovulationDay, todayStr, 7)
+    !latest.thermalShiftDay ||
+    !isWithinRecentCalendarDays(latest.thermalShiftDay, todayStr, 7)
   ) {
     return [];
   }
@@ -571,13 +583,13 @@ async function detectThermalShiftTimingChange(
 
   const priorLengths = observedShifts
     .slice(1)
-    .map((cycle) => cycle.cycleLength)
+    .map((cycle) => cycle.interShiftDays)
     .filter(
-      (cycleLength): cycleLength is number =>
-        cycleLength != null && cycleLength >= 20 && cycleLength <= 50
+      (interShiftDays): interShiftDays is number =>
+        interShiftDays != null && interShiftDays >= 20 && interShiftDays <= 50
     );
   if (
-    latest.cycleLength != null &&
+    latest.interShiftDays != null &&
     priorLengths.length >= 3
   ) {
     const mean =
@@ -592,12 +604,12 @@ async function detectThermalShiftTimingChange(
     );
     const deviation =
       standardDeviation > 0
-        ? Math.abs(latest.cycleLength - mean) / standardDeviation
+        ? Math.abs(latest.interShiftDays - mean) / standardDeviation
         : 0;
     if (deviation > 2) {
       evidenceStrength = Math.min(0.7, 0.35 + deviation / 10);
       indicators.push(
-        `Latest detected thermal-shift interval was ${latest.cycleLength} days versus a prior mean of ${Math.round(mean)} days`
+        `Latest detected thermal-shift interval was ${latest.interShiftDays} days versus a prior mean of ${Math.round(mean)} days`
       );
     }
   }
@@ -606,7 +618,7 @@ async function detectThermalShiftTimingChange(
 
   return [
     {
-      day: latest.ovulationDay,
+      day: latest.thermalShiftDay,
       signalType: "thermal_shift_timing",
       status: "detected",
       evidenceStrength,

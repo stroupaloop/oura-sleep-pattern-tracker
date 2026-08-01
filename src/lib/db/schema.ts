@@ -500,9 +500,9 @@ export const cyclePredictions = sqliteTable("cycle_predictions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   cycleNumber: integer("cycle_number").notNull().unique(),
   periodStartDay: text("period_start_day"),
-  ovulationDay: text("ovulation_day"),
+  thermalShiftDay: text("ovulation_day"),
   nextPeriodDay: text("next_period_day"),
-  cycleLength: integer("cycle_length"),
+  interShiftDays: integer("cycle_length"),
   confidence: real("confidence"),
   createdAt: integer("created_at").notNull(),
 });

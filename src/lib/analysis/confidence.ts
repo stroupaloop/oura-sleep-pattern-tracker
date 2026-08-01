@@ -1,76 +1,186 @@
 import { db } from "@/lib/db";
-import { dailyMood, medications, sleepPeriods } from "@/lib/db/schema";
-import { and, eq, gte, isNotNull } from "drizzle-orm";
+import {
+  dailyActivity,
+  dailyMood,
+  medicationLogs,
+  medications,
+  sleepPeriods,
+} from "@/lib/db/schema";
+import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { format, subDays } from "date-fns";
-import { getTodayET } from "@/lib/date-utils";
+import {
+  APP_TIME_ZONE,
+  getTodayET,
+  shiftIsoDay,
+} from "@/lib/date-utils";
+import { projectActivityToCalendarDays } from "@/lib/oura/activity";
+import { getOuraSleepDayForTimestamp } from "@/lib/oura/sleep-day";
 
-export interface DataCoverage {
-  overall: number;
-  oura: { days: number; total: number; rate: number };
-  mood: { days: number; total: number; rate: number };
-  medications: { tracked: boolean };
-  suggestions: string[];
+export interface DayAvailability {
+  measuredDays: number;
+  latestDay: string | null;
 }
 
-export async function computeDataCoverage(
+export interface DataAvailability {
+  windowDays: number;
+  sleep: DayAvailability;
+  activity: DayAvailability;
+  mood: DayAvailability;
+  medicationLogging: {
+    activeMedications: number;
+    entries: number;
+    loggedDays: number;
+    latestDay: string | null;
+  };
+}
+
+function readCount(value: number | null | undefined): number {
+  return value != null && Number.isFinite(value) ? Number(value) : 0;
+}
+
+function summarizeDays(
+  days: Array<string | null>,
+  startDate: string,
+  endDate: string
+): DayAvailability {
+  const measuredDays = new Set(
+    days.filter(
+      (day): day is string =>
+        day != null && day >= startDate && day <= endDate
+    )
+  );
+  const orderedDays = [...measuredDays].sort();
+  return {
+    measuredDays: orderedDays.length,
+    latestDay: orderedDays[orderedDays.length - 1] ?? null,
+  };
+}
+
+export function summarizeEtSleepAvailability(
+  records: Array<{ bedtimeEnd: string | null }>,
+  startDate: string,
+  endDate: string
+): DayAvailability {
+  return summarizeDays(
+    records.map((record) =>
+      record.bedtimeEnd
+        ? getOuraSleepDayForTimestamp(record.bedtimeEnd)
+        : null
+    ),
+    startDate,
+    endDate
+  );
+}
+
+export async function computeDataAvailability(
   windowDays = 30
-): Promise<DataCoverage> {
+): Promise<DataAvailability> {
+  if (!Number.isInteger(windowDays) || windowDays <= 0) {
+    throw new RangeError("Data availability window must be a positive integer");
+  }
+
   const today = getTodayET();
   const startDate = format(
     subDays(new Date(`${today}T12:00:00`), windowDays - 1),
     "yyyy-MM-dd"
   );
+  const sourceStartDate = shiftIsoDay(startDate, -1) ?? startDate;
+  const sourceEndDate = shiftIsoDay(today, 1) ?? today;
 
-  const [ouraSleepCount, moodCount, medCount] = await Promise.all([
+  const [
+    sleepRows,
+    activityRows,
+    moodResult,
+    activeMedicationResult,
+    medicationLogResult,
+  ] = await Promise.all([
     db
       .select({
-        count: sql<number>`count(distinct ${sleepPeriods.day})`,
+        bedtimeEnd: sleepPeriods.bedtimeEnd,
       })
       .from(sleepPeriods)
       .where(
         and(
-          gte(sleepPeriods.day, startDate),
+          gte(sleepPeriods.day, sourceStartDate),
+          lte(sleepPeriods.day, sourceEndDate),
           eq(sleepPeriods.type, "long_sleep"),
-          isNotNull(sleepPeriods.totalSleepDuration)
+          isNotNull(sleepPeriods.totalSleepDuration),
+          isNotNull(sleepPeriods.bedtimeEnd)
         )
-      )
-      .then((r) => r[0]?.count ?? 0),
+      ),
     db
-      .select({ count: sql<number>`count(*)` })
+      .select({
+        day: dailyActivity.day,
+        class5min: dailyActivity.class5min,
+        met: dailyActivity.met,
+      })
+      .from(dailyActivity)
+      .where(
+        and(
+          gte(dailyActivity.day, sourceStartDate),
+          lte(dailyActivity.day, sourceEndDate),
+          isNotNull(dailyActivity.class5min),
+          isNotNull(dailyActivity.met)
+        )
+      ),
+    db
+      .select({
+        count: sql<number>`count(distinct ${dailyMood.day})`,
+        latestDay: sql<string | null>`max(${dailyMood.day})`,
+      })
       .from(dailyMood)
-      .where(gte(dailyMood.day, startDate))
-      .then((r) => r[0]?.count ?? 0),
+      .where(
+        and(gte(dailyMood.day, startDate), lte(dailyMood.day, today))
+      )
+      .then((rows) => rows[0]),
     db
       .select({ count: sql<number>`count(*)` })
       .from(medications)
-      .then((r) => r[0]?.count ?? 0),
+      .where(eq(medications.isActive, 1))
+      .then((rows) => rows[0]),
+    db
+      .select({
+        entries: sql<number>`count(*)`,
+        loggedDays: sql<number>`count(distinct ${medicationLogs.day})`,
+        latestDay: sql<string | null>`max(${medicationLogs.day})`,
+      })
+      .from(medicationLogs)
+      .where(
+        and(
+          gte(medicationLogs.day, startDate),
+          lte(medicationLogs.day, today)
+        )
+      )
+      .then((rows) => rows[0]),
   ]);
-
-  const ouraRate = windowDays > 0 ? ouraSleepCount / windowDays : 0;
-  const moodRate = windowDays > 0 ? moodCount / windowDays : 0;
-  const hasMeds = medCount > 0;
-
-  const overall = Math.round(
-    Math.min(1, ouraRate) * 70 + Math.min(1, moodRate) * 30
+  const sleepAvailability = summarizeEtSleepAvailability(
+    sleepRows,
+    startDate,
+    today
+  );
+  const activityAvailability = summarizeDays(
+    projectActivityToCalendarDays(
+      activityRows,
+      APP_TIME_ZONE
+    ).map((day) => (day.classifiedMinutes > 0 ? day.day : null)),
+    startDate,
+    today
   );
 
-  const suggestions: string[] = [];
-  if (moodRate < 0.7) {
-    suggestions.push("Add mood entries to give pattern flags symptom context");
-  }
-  if (!hasMeds) {
-    suggestions.push("Record medications so reports include schedule context");
-  }
-  if (ouraRate < 0.9) {
-    suggestions.push("Wear your ring more consistently for better baselines");
-  }
-
   return {
-    overall,
-    oura: { days: ouraSleepCount, total: windowDays, rate: ouraRate },
-    mood: { days: moodCount, total: windowDays, rate: moodRate },
-    medications: { tracked: hasMeds },
-    suggestions,
+    windowDays,
+    sleep: sleepAvailability,
+    activity: activityAvailability,
+    mood: {
+      measuredDays: readCount(moodResult?.count),
+      latestDay: moodResult?.latestDay ?? null,
+    },
+    medicationLogging: {
+      activeMedications: readCount(activeMedicationResult?.count),
+      entries: readCount(medicationLogResult?.entries),
+      loggedDays: readCount(medicationLogResult?.loggedDays),
+      latestDay: medicationLogResult?.latestDay ?? null,
+    },
   };
 }

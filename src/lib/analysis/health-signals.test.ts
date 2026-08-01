@@ -5,6 +5,7 @@ import {
   longestConsecutiveMatchingRun,
   isRecentMeasurementDay,
   isWithinRecentCalendarDays,
+  personalBaselineZScore,
 } from "./health-signals";
 
 describe("health signal continuity", () => {
@@ -50,5 +51,19 @@ describe("health signal continuity", () => {
     expect(
       isWithinRecentCalendarDays("2026-07-22", "2026-07-30", 7)
     ).toBe(false);
+  });
+
+  it("compares nighttime heart rate with the individual's recent baseline", () => {
+    expect(personalBaselineZScore(70, [60, 61, 59, 60, 61, 59, 60])).toBeGreaterThan(
+      2
+    );
+    expect(personalBaselineZScore(70, [68, 69, 67, 70, 68, 69, 67])).toBeLessThan(
+      2
+    );
+  });
+
+  it("does not manufacture a z-score without a variable personal baseline", () => {
+    expect(personalBaselineZScore(70, [60])).toBeNull();
+    expect(personalBaselineZScore(70, [60, 60, 60])).toBeNull();
   });
 });

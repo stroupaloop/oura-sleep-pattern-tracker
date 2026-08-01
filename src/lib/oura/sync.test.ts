@@ -285,6 +285,7 @@ describe("Oura sensitive sync", () => {
             id: "sleep-time",
             day: "2026-07-30",
             optimal_bedtime: {
+              day_tz: -7 * 3600,
               start_offset: -3600,
               end_offset: 0,
             },
@@ -330,6 +331,13 @@ describe("Oura sensitive sync", () => {
     ]) {
       expect(mocks.inserts.some((insert) => insert.table === table)).toBe(true);
     }
+    expect(
+      mocks.inserts.find(({ table }) => table === sleepTime)?.values
+    ).toMatchObject({
+      optimalBedtimeStart:
+        '{"v":1,"day_tz":-25200,"offset":-3600}',
+      optimalBedtimeEnd: '{"v":1,"day_tz":-25200,"offset":0}',
+    });
     expect(
       mocks.inserts.find(({ table }) => table === syncLog)?.values
     ).toMatchObject({

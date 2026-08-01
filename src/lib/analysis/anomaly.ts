@@ -382,15 +382,6 @@ export function computeDailyAnalysis(
     absoluteBonus += 0.5;
   }
   if (
-    Number.isFinite(metrics.avgHeartRate) &&
-    metrics.avgHeartRate > abs.maxHeartRate
-  ) {
-    absoluteBonus += 0.5;
-  }
-  if (Number.isFinite(metrics.avgHrv) && metrics.avgHrv < abs.minHrv) {
-    absoluteBonus += 0.5;
-  }
-  if (
     Number.isFinite(metrics.efficiency) &&
     metrics.efficiency < abs.minEfficiency
   ) {

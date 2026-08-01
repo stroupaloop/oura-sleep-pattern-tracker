@@ -92,7 +92,7 @@ export function ReportView({ data }: { data: ReportData }) {
               </div>
             )}
             <div>
-              <p className="text-muted-foreground">Data Coverage</p>
+              <p className="text-muted-foreground">Report Window</p>
               <p className="text-lg font-semibold">
                 {data.summary.totalDays} days
               </p>
@@ -200,7 +200,7 @@ export function ReportView({ data }: { data: ReportData }) {
         <CardContent>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
-              <span>Oura Ring Data</span>
+              <span>Sleep or Step Data</span>
               <span>{data.dataCompleteness.ouraDays}/{data.dataCompleteness.totalDays} days ({(data.dataCompleteness.ouraRate * 100).toFixed(0)}%)</span>
             </div>
             <div className="flex justify-between">
