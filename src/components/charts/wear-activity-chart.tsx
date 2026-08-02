@@ -229,9 +229,8 @@ export function WearActivityChart({
           </div>
         </div>
         <CardDescription>
-          Bars show hourly average heart rate; the line connects available
-          hours. Color shows dominant Oura activity; faded color means partial
-          coverage.
+          Hourly average heart rate with Oura activity classification. Faded
+          bars indicate partial hourly coverage.
         </CardDescription>
         <div className="mt-1 space-y-2 text-sm">
           <div className="flex flex-wrap gap-x-3 gap-y-1">

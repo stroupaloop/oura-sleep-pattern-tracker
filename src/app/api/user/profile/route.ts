@@ -29,12 +29,25 @@ export async function PATCH(request: Request) {
     );
   }
 
+  const currentRows = await db
+    .select({ bipolarType: users.bipolarType })
+    .from(users)
+    .where(eq(users.id, session.user.id))
+    .limit(1);
+  const previousBipolarType =
+    currentRows[0]?.bipolarType ?? "unspecified";
+
   await db
     .update(users)
     .set({ bipolarType })
     .where(eq(users.id, session.user.id));
 
-  return NextResponse.json({ success: true, bipolarType });
+  return NextResponse.json({
+    success: true,
+    bipolarType,
+    changed: previousBipolarType !== bipolarType,
+    reprocessingRequired: true,
+  });
 }
 
 export async function GET() {

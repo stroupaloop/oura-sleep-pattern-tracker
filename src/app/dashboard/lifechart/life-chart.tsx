@@ -14,6 +14,8 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend,
+  ReferenceArea,
+  ReferenceLine,
 } from "recharts";
 import {
   Card,
@@ -153,6 +155,9 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
       <Card>
         <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm">Mood</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Personal mood scale · −3 very low · 0 neutral · +3 very high
+          </p>
         </CardHeader>
         <CardContent className="px-4 pb-2">
           <ResponsiveContainer width="100%" height={80}>
@@ -188,7 +193,12 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
                   );
                 }}
               />
-              <Bar dataKey="moodScore" fill="#6b7280" radius={[2, 2, 0, 0]}>
+              <Bar
+                dataKey="moodScore"
+                fill="#6b7280"
+                minPointSize={3}
+                radius={[2, 2, 0, 0]}
+              >
                 {moodData.map((d, i) => (
                   <Cell key={i} fill={d.color} />
                 ))}
@@ -244,6 +254,7 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
               <XAxis dataKey="day" hide />
               <YAxis fontSize={10} tick={{ fill: "oklch(0.708 0 0)" }} tickFormatter={(v) => `${v}h`} />
               <Tooltip content={<SleepTooltip />} />
+              <Legend wrapperStyle={{ fontSize: 10 }} />
               <Area
                 type="monotone"
                 dataKey="baselineHours"
@@ -274,6 +285,10 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
       <Card>
         <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm">Key Metrics (z-scores)</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            0 = personal rolling baseline · ±2 = unusual, not inherently good
+            or bad
+          </p>
         </CardHeader>
         <CardContent className="px-4 pb-2">
           <ResponsiveContainer width="100%" height={140}>
@@ -288,15 +303,61 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
                   return (
                     <div className="rounded border border-border bg-card px-2 py-1 text-xs shadow-md">
                       <p>{p.day}</p>
-                      {p.hrvZ != null && <p>HRV z: {p.hrvZ.toFixed(1)}</p>}
-                      {p.bedtimeZ != null && <p>Bedtime z: {p.bedtimeZ.toFixed(1)}</p>}
+                      {p.hrvZ != null && (
+                        <p>
+                          HRV:{" "}
+                          {p.hrvZ === 0
+                            ? "at baseline"
+                            : `${Math.abs(p.hrvZ).toFixed(1)} SD ${
+                                p.hrvZ < 0 ? "below" : "above"
+                              } baseline`}
+                        </p>
+                      )}
+                      {p.bedtimeZ != null && (
+                        <p>
+                          Bedtime:{" "}
+                          {p.bedtimeZ === 0
+                            ? "at baseline"
+                            : `${Math.abs(p.bedtimeZ).toFixed(1)} SD ${
+                                p.bedtimeZ < 0 ? "earlier" : "later"
+                              } than baseline`}
+                        </p>
+                      )}
                     </div>
                   );
                 }}
               />
               <Legend wrapperStyle={{ fontSize: 10 }} />
-              <Line type="monotone" dataKey="hrvZ" stroke="#34d399" strokeWidth={1.5} dot={false} name="HRV" connectNulls={false} />
-              <Line type="monotone" dataKey="bedtimeZ" stroke="#f59e0b" strokeWidth={1.5} dot={false} name="Bedtime" connectNulls={false} />
+              <ReferenceArea
+                y1={-2}
+                y2={2}
+                fill="oklch(0.708 0 0)"
+                fillOpacity={0.05}
+                ifOverflow="extendDomain"
+              />
+              <ReferenceLine
+                y={0}
+                stroke="oklch(0.708 0 0)"
+                strokeOpacity={0.65}
+                strokeDasharray="3 3"
+                ifOverflow="extendDomain"
+              />
+              <ReferenceLine
+                y={2}
+                stroke="oklch(0.708 0 0)"
+                strokeOpacity={0.3}
+                strokeDasharray="2 3"
+                ifOverflow="extendDomain"
+              />
+              <ReferenceLine
+                y={-2}
+                stroke="oklch(0.708 0 0)"
+                strokeOpacity={0.3}
+                strokeDasharray="2 3"
+                ifOverflow="extendDomain"
+              />
+              <Line type="monotone" dataKey="hrvZ" stroke="#60a5fa" strokeWidth={1.5} dot={false} name="HRV" connectNulls={false} />
+              <Line type="monotone" dataKey="bedtimeZ" stroke="#a78bfa" strokeWidth={1.5} dot={false} name="Bedtime" connectNulls={false} />
             </LineChart>
           </ResponsiveContainer>
         </CardContent>
@@ -305,6 +366,9 @@ export function LifeChart({ analysis, moods, episodes }: LifeChartProps) {
       <Card>
         <CardHeader className="py-3 px-4">
           <CardTitle className="text-sm">Activity</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Daily steps · compare sustained changes with your own history
+          </p>
         </CardHeader>
         <CardContent className="px-4 pb-2">
           <ResponsiveContainer width="100%" height={120}>

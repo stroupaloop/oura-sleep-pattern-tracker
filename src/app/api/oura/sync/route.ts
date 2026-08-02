@@ -50,7 +50,9 @@ export async function POST() {
       endDate,
       bipolarType
     );
-    const healthSignals = (await runHealthSignalDetection()).signals;
+    const healthSignals = (
+      await runHealthSignalDetection(cycleResult.evaluation)
+    ).signals;
 
     return NextResponse.json({
       ...result,

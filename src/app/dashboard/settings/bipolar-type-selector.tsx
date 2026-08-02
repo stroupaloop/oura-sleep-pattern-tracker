@@ -28,7 +28,22 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
         body: JSON.stringify({ bipolarType: selected }),
       });
       if (res.ok) {
-        setStatus("Saved. Reprocess recommended to apply new profile.");
+        const reprocessResponse = await fetch("/api/oura/reprocess", {
+          method: "POST",
+        });
+        const reprocess = await reprocessResponse.json();
+        if (reprocessResponse.ok) {
+          setStatus(
+            `Saved and updated ${reprocess.daysProcessed} historical days ` +
+              `(${reprocess.episodes.watch} watch, ` +
+              `${reprocess.episodes.warning} warning, ` +
+              `${reprocess.episodes.alert} alert).`
+          );
+        } else {
+          setStatus(
+            `Profile saved, but historical results could not be updated: ${reprocess.error}`
+          );
+        }
       } else {
         const data = await res.json();
         setStatus(`Error: ${data.error}`);
@@ -43,12 +58,19 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <label className="text-sm font-medium">Bipolar Type</label>
-        <div className="flex gap-2">
+        <p id="pattern-profile-label" className="text-sm font-medium">
+          Pattern Profile
+        </p>
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-labelledby="pattern-profile-label"
+        >
           {options.map((opt) => (
             <button
               key={opt.value}
               onClick={() => setSelected(opt.value)}
+              aria-pressed={selected === opt.value}
               className={`px-3 py-1.5 text-sm rounded border transition-colors ${
                 selected === opt.value
                   ? "bg-primary text-primary-foreground border-primary"
@@ -83,6 +105,10 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
             scoring only and does not make a diagnosis.
           </p>
         )}
+        <p>
+          Saving recomputes all eligible history so results never silently mix
+          profiles. This does not contact Oura or change connection scopes.
+        </p>
       </div>
 
       <Button
@@ -91,11 +117,13 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
         onClick={handleSave}
         disabled={saving}
       >
-        {saving ? "Saving..." : "Save"}
+        {saving ? "Saving and updating history..." : "Save profile"}
       </Button>
 
       {status && (
-        <p className="text-sm text-muted-foreground">{status}</p>
+        <p className="text-sm text-muted-foreground" role="status">
+          {status}
+        </p>
       )}
     </div>
   );

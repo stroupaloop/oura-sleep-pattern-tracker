@@ -22,7 +22,24 @@ export function DetectionConfig() {
       });
       const data = await res.json();
       if (res.ok) {
-        setStatus(`Config v${data.config.version} saved (${preset} sensitivity)`);
+        const reprocessRes = await fetch("/api/oura/reprocess", {
+          method: "POST",
+        });
+        const reprocessData = await reprocessRes.json();
+        if (reprocessRes.ok) {
+          setStatus(
+            `Config v${data.config.version} saved (${preset} sensitivity). ` +
+              `Reprocessed ${reprocessData.daysProcessed} days ` +
+              `(${reprocessData.episodes.watch} watch, ` +
+              `${reprocessData.episodes.warning} warning, ` +
+              `${reprocessData.episodes.alert} alert).`
+          );
+        } else {
+          setStatus(
+            `Config v${data.config.version} saved, but all-data reprocessing failed: ` +
+              `${reprocessData.error ?? "Unknown error"}. Use Reprocess All Data to retry.`
+          );
+        }
       } else {
         setStatus(`Error: ${data.error}`);
       }
@@ -57,12 +74,19 @@ export function DetectionConfig() {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <label className="text-sm font-medium">Sensitivity Preset</label>
-        <div className="flex gap-2">
+        <p id="sensitivity-preset-label" className="text-sm font-medium">
+          Sensitivity Preset
+        </p>
+        <div
+          className="flex flex-wrap gap-2"
+          role="group"
+          aria-labelledby="sensitivity-preset-label"
+        >
           {(["low", "medium", "high"] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPreset(p)}
+              aria-pressed={preset === p}
               className={`px-3 py-1.5 text-sm rounded border transition-colors ${
                 preset === p
                   ? "bg-primary text-primary-foreground border-primary"
@@ -76,34 +100,41 @@ export function DetectionConfig() {
         <p className="text-xs text-muted-foreground">
           {preset === "low" && "Fewer alerts \u2014 only strong, sustained patterns trigger warnings."}
           {preset === "medium" && "Balanced \u2014 moderate heuristic thresholds for sustained personal-baseline changes."}
-          {preset === "high" && "More sensitive \u2014 catches earlier signals but may flag more confounders."}
+          {preset === "high" &&
+            "More sensitive — uses lower heuristic thresholds and may flag more confounders."}
         </p>
         <p className="text-xs text-muted-foreground mt-1">
-          Detection now uses {">"}25 metrics including within-night sleep variability, circadian rhythm analysis, and activity patterns. Your condition profile (set above) adjusts metric weights automatically.
+          Detection combines personal-baseline sleep, physiology, activity,
+          and circadian features. Mood and episode check-ins remain context and
+          retrospective labels; they do not change the pattern score. The
+          pattern profile applies only the documented heuristic weight and
+          bounce-back adjustments and does not provide a diagnosis.
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
           size="sm"
           onClick={handleSavePreset}
-          disabled={saving}
+          disabled={saving || reprocessing}
         >
-          {saving ? "Saving..." : "Save Preset"}
+          {saving ? "Saving & Reprocessing..." : "Save Preset & Reprocess"}
         </Button>
         <Button
           variant="outline"
           size="sm"
           onClick={handleReprocess}
-          disabled={reprocessing}
+          disabled={reprocessing || saving}
         >
           {reprocessing ? "Reprocessing..." : "Reprocess All Data"}
         </Button>
       </div>
 
       {status && (
-        <p className="text-sm text-muted-foreground">{status}</p>
+        <p className="text-sm text-muted-foreground" role="status">
+          {status}
+        </p>
       )}
     </div>
   );

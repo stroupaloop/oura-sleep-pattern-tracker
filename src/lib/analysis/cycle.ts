@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { dailyReadiness, restModePeriods, cyclePredictions } from "@/lib/db/schema";
-import { gte, and, isNotNull } from "drizzle-orm";
+import { gte, lte, and, isNotNull } from "drizzle-orm";
 import {
   format,
   subDays,
@@ -12,9 +12,18 @@ import {
 import { getTodayET } from "@/lib/date-utils";
 import { isNextCalendarDay } from "./baseline";
 
+export const CYCLE_EVALUATION_DAYS = 365;
+export const REQUIRED_ELIGIBLE_TEMPERATURE_RUN = 30;
+
 interface TempPoint {
   day: string;
   temperatureDelta: number;
+}
+
+export interface CycleTemperatureDisplayPoint {
+  day: string;
+  temperatureDelta: number | null;
+  restModeExcluded: boolean;
 }
 
 export interface DetectedThermalShift {
@@ -28,8 +37,21 @@ export interface DetectedThermalShift {
 
 export interface CycleComputationOutcome {
   state: "complete" | "insufficient_data";
+  outcome: "shifts_detected" | "no_shifts" | "insufficient_data";
   cycles: DetectedThermalShift[];
-  eligibleTemperatureRun: number;
+  checkedThroughDay: string;
+  latestTemperatureDay: string | null;
+  eligibleTemperatureDays: number;
+  longestEligibleTemperatureRun: number;
+  currentEligibleTemperatureRun: number;
+  restModeExcludedTemperatureDays: number;
+  restModeActive: boolean;
+  restModeCoverageLimited: boolean;
+  insufficientReason:
+    | "no_temperature_data"
+    | "rest_mode_exclusions"
+    | "insufficient_consecutive_data"
+    | null;
 }
 
 interface RestModeDateRange {
@@ -64,6 +86,47 @@ export function buildRestModeDaySet(
   }
 
   return days;
+}
+
+export function getCycleEvaluationStartDay(endDay: string): string {
+  return format(
+    subDays(parseISO(endDay), CYCLE_EVALUATION_DAYS - 1),
+    "yyyy-MM-dd"
+  );
+}
+
+export function buildCycleTemperatureDisplayData(
+  temperatures: Array<{
+    day: string;
+    temperatureDelta: number | null;
+  }>,
+  excludedDays: Set<string>,
+  rangeStartDay: string,
+  rangeEndDay: string
+): CycleTemperatureDisplayPoint[] {
+  if (rangeStartDay > rangeEndDay) return [];
+
+  const temperatureByDay = new Map(
+    temperatures
+      .filter(
+        (point) =>
+          point.day >= rangeStartDay && point.day <= rangeEndDay
+      )
+      .map((point) => [point.day, point.temperatureDelta])
+  );
+  const start = parseISO(rangeStartDay);
+  const end = parseISO(rangeEndDay);
+  const span = differenceInCalendarDays(end, start);
+  if (!Number.isFinite(span) || span < 0) return [];
+
+  return Array.from({ length: span + 1 }, (_, offset) => {
+    const day = format(addDays(start, offset), "yyyy-MM-dd");
+    return {
+      day,
+      temperatureDelta: temperatureByDay.get(day) ?? null,
+      restModeExcluded: excludedDays.has(day),
+    };
+  });
 }
 
 function isConsecutiveRange(
@@ -110,6 +173,30 @@ export function longestConsecutiveTemperatureRun(
     }
   }
   return longest;
+}
+
+export function currentConsecutiveTemperatureRun(
+  temps: TempPoint[],
+  excludedDays: Set<string>
+): number {
+  let current = 0;
+  let previousDay: string | null = null;
+
+  for (const temp of temps) {
+    if (excludedDays.has(temp.day)) {
+      current = 0;
+      previousDay = null;
+      continue;
+    }
+
+    current =
+      previousDay != null && isNextCalendarDay(previousDay, temp.day)
+        ? current + 1
+        : 1;
+    previousDay = temp.day;
+  }
+
+  return current;
 }
 
 export function detectThermalShifts(
@@ -189,32 +276,97 @@ export function buildThermalShiftRecords(
 
 export function evaluateCycleTemperatures(
   temps: TempPoint[],
-  excludedDays: Set<string>
+  excludedDays: Set<string>,
+  checkedThroughDay: string
 ): CycleComputationOutcome {
-  const eligibleTemperatureRun = longestConsecutiveTemperatureRun(
-    temps,
+  const evaluationStartDay = getCycleEvaluationStartDay(checkedThroughDay);
+  const evaluatedTemps = [
+    ...new Map(
+      temps
+        .filter(
+          (temp) =>
+            temp.day >= evaluationStartDay &&
+            temp.day <= checkedThroughDay &&
+            Number.isFinite(temp.temperatureDelta)
+        )
+        .map((temp) => [temp.day, temp])
+    ).values(),
+  ].sort((a, b) => a.day.localeCompare(b.day));
+  const longestEligibleTemperatureRun = longestConsecutiveTemperatureRun(
+    evaluatedTemps,
     excludedDays
   );
-  if (eligibleTemperatureRun < 30) {
+  const latestEligibleTemperatureRun = currentConsecutiveTemperatureRun(
+    evaluatedTemps,
+    excludedDays
+  );
+  const latestTemperatureDay =
+    evaluatedTemps[evaluatedTemps.length - 1]?.day ?? null;
+  const currentEligibleTemperatureRun =
+    latestTemperatureDay === checkedThroughDay
+      ? latestEligibleTemperatureRun
+      : 0;
+  const restModeExcludedTemperatureDays = evaluatedTemps.filter((temp) =>
+    excludedDays.has(temp.day)
+  ).length;
+  const eligibleTemperatureDays =
+    evaluatedTemps.length - restModeExcludedTemperatureDays;
+  const restModeActive = excludedDays.has(checkedThroughDay);
+  const longestRunWithoutRestModeExclusions =
+    longestConsecutiveTemperatureRun(evaluatedTemps, new Set());
+  const restModeCoverageLimited =
+    longestEligibleTemperatureRun < REQUIRED_ELIGIBLE_TEMPERATURE_RUN &&
+    restModeExcludedTemperatureDays > 0 &&
+    longestRunWithoutRestModeExclusions >=
+      REQUIRED_ELIGIBLE_TEMPERATURE_RUN;
+
+  if (
+    longestEligibleTemperatureRun < REQUIRED_ELIGIBLE_TEMPERATURE_RUN
+  ) {
+    const insufficientReason =
+      evaluatedTemps.length === 0
+        ? "no_temperature_data"
+        : restModeCoverageLimited
+          ? "rest_mode_exclusions"
+          : "insufficient_consecutive_data";
+
     return {
       state: "insufficient_data",
+      outcome: "insufficient_data",
       cycles: [],
-      eligibleTemperatureRun,
+      checkedThroughDay,
+      latestTemperatureDay,
+      eligibleTemperatureDays,
+      longestEligibleTemperatureRun,
+      currentEligibleTemperatureRun,
+      restModeExcludedTemperatureDays,
+      restModeActive,
+      restModeCoverageLimited,
+      insufficientReason,
     };
   }
 
-  const shiftIndices = detectThermalShifts(temps, excludedDays);
+  const shiftIndices = detectThermalShifts(evaluatedTemps, excludedDays);
+  const cycles = buildThermalShiftRecords(evaluatedTemps, shiftIndices);
   return {
     state: "complete",
-    cycles: buildThermalShiftRecords(temps, shiftIndices),
-    eligibleTemperatureRun,
+    outcome: cycles.length > 0 ? "shifts_detected" : "no_shifts",
+    cycles,
+    checkedThroughDay,
+    latestTemperatureDay,
+    eligibleTemperatureDays,
+    longestEligibleTemperatureRun,
+    currentEligibleTemperatureRun,
+    restModeExcludedTemperatureDays,
+    restModeActive,
+    restModeCoverageLimited,
+    insufficientReason: null,
   };
 }
 
 export async function computeCyclePredictions(): Promise<CycleComputationOutcome> {
   const todayStr = getTodayET();
-  const todayDate = new Date(todayStr + "T12:00:00");
-  const cutoff = format(subDays(todayDate, 365), "yyyy-MM-dd");
+  const cutoff = getCycleEvaluationStartDay(todayStr);
 
   const [tempRows, restRows] = await Promise.all([
     db
@@ -226,6 +378,7 @@ export async function computeCyclePredictions(): Promise<CycleComputationOutcome
       .where(
         and(
           gte(dailyReadiness.day, cutoff),
+          lte(dailyReadiness.day, todayStr),
           isNotNull(dailyReadiness.temperatureDeviation)
         )
       )
@@ -244,10 +397,10 @@ export async function computeCyclePredictions(): Promise<CycleComputationOutcome
     temperatureDelta: r.temperatureDelta!,
   }));
 
-  const outcome = evaluateCycleTemperatures(temps, excludedDays);
+  const outcome = evaluateCycleTemperatures(temps, excludedDays, todayStr);
   if (outcome.state === "insufficient_data") {
     console.log(
-      `[cycle] Insufficient consecutive temperature data: ${outcome.eligibleTemperatureRun}/30 required. Retaining prior results.`
+      `[cycle] Insufficient consecutive temperature data: ${outcome.longestEligibleTemperatureRun}/${REQUIRED_ELIGIBLE_TEMPERATURE_RUN} required. Retaining prior results.`
     );
     return outcome;
   }
@@ -262,13 +415,15 @@ export async function runCyclePredictions(
   cyclesDetected: number;
   state: "replaced" | "retained_insufficient_data";
   eligibleTemperatureRun: number;
+  evaluation: CycleComputationOutcome;
 }> {
   const outcome = await compute();
   if (outcome.state === "insufficient_data") {
     return {
       cyclesDetected: 0,
       state: "retained_insufficient_data",
-      eligibleTemperatureRun: outcome.eligibleTemperatureRun,
+      eligibleTemperatureRun: outcome.longestEligibleTemperatureRun,
+      evaluation: outcome,
     };
   }
 
@@ -295,6 +450,7 @@ export async function runCyclePredictions(
   return {
     cyclesDetected: outcome.cycles.length,
     state: "replaced",
-    eligibleTemperatureRun: outcome.eligibleTemperatureRun,
+    eligibleTemperatureRun: outcome.longestEligibleTemperatureRun,
+    evaluation: outcome,
   };
 }

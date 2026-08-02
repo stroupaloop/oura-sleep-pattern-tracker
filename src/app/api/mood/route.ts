@@ -23,7 +23,10 @@ export async function POST(req: NextRequest) {
       .limit(1);
 
     if (existing) {
-      await db.update(dailyMood).set(fields).where(eq(dailyMood.id, existing.id));
+      await db
+        .update(dailyMood)
+        .set({ ...fields, updatedAt: now })
+        .where(eq(dailyMood.id, existing.id));
     } else {
       if (fields.moodScore === undefined) {
         return NextResponse.json(
@@ -42,6 +45,7 @@ export async function POST(req: NextRequest) {
         tags: fields.tags ?? null,
         episodeState: fields.episodeState ?? null,
         createdAt: now,
+        updatedAt: now,
       });
     }
 

@@ -65,9 +65,10 @@ export default async function SettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Condition Profile</CardTitle>
+          <CardTitle>Pattern Profile</CardTitle>
           <CardDescription>
-            Help tune detection to your needs.
+            Choose how this app weights exploratory wearable patterns. This
+            does not diagnose Bipolar I or Bipolar II.
           </CardDescription>
         </CardHeader>
         <CardContent>

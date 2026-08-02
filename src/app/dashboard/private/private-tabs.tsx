@@ -23,12 +23,13 @@ import { CyclePhaseChart } from "@/components/charts/cycle-phase-chart";
 import { WearActivityChart } from "@/components/charts/wear-activity-chart";
 import type { WearActivityDay } from "@/components/charts/wear-activity-chart";
 import type { HourlyHrPoint } from "@/lib/hr-anomalies";
+import type { CycleComputationOutcome } from "@/lib/analysis/cycle";
 import type { DatasetFreshness } from "@/lib/oura/freshness";
 
 const TABS = [
   { id: "overview", label: "Overview" },
   { id: "heart-rate", label: "Heart Rate" },
-  { id: "cycle", label: "Cycle" },
+  { id: "cycle", label: "Cycle Context" },
   { id: "fitness", label: "Fitness" },
   { id: "sleep-timing", label: "Sleep Timing" },
 ] as const;
@@ -61,16 +62,12 @@ interface PrivateTabsProps {
     weight: number | null;
     biologicalSex: string | null;
   } | null;
-  cycleData: {
-    cycleNumber: number;
-    periodStartDay: string | null;
-    thermalShiftDay: string | null;
-    nextPeriodDay: string | null;
-    interShiftDays: number | null;
-    evidenceScore: number | null;
+  cycleEvaluation: CycleComputationOutcome;
+  temperatureData: {
+    day: string;
+    temperatureDelta: number | null;
+    restModeExcluded: boolean;
   }[];
-  temperatureData: { day: string; temperatureDelta: number | null }[];
-  eligibleTemperatureRun: number;
   bedtimeData: {
     day: string;
     actualBedtime: number | null;
@@ -359,106 +356,171 @@ function HeartRateTab({
   );
 }
 
+export function getCycleEvaluationResultLabel(
+  evaluation: CycleComputationOutcome
+): string {
+  if (evaluation.outcome === "insufficient_data") {
+    return "Insufficient consecutive temperature data";
+  }
+  if (evaluation.outcome === "no_shifts") {
+    return "No qualifying thermal shifts";
+  }
+  return `${evaluation.cycles.length} qualifying thermal shift${
+    evaluation.cycles.length === 1 ? "" : "s"
+  }`;
+}
+
+export function getCycleSecondaryChartVisibility(
+  shiftCount: number,
+  intervalCount: number
+) {
+  return {
+    phaseWindows: shiftCount >= 2,
+    calendar: shiftCount >= 2,
+    intervals: intervalCount >= 3,
+  };
+}
+
+function getCycleInsufficientCopy(
+  reason: CycleComputationOutcome["insufficientReason"]
+): string {
+  if (reason === "no_temperature_data") {
+    return "No Oura nighttime temperature deviation was received in this evaluation window.";
+  }
+  if (reason === "rest_mode_exclusions") {
+    return "Without the recorded Rest Mode exclusions, this window would meet the required 30-night run.";
+  }
+  return "Available temperature days do not form the required 30-night consecutive run.";
+}
+
 function CycleTab({
   currentDay,
-  cycleData,
+  cycleEvaluation,
   temperatureData,
-  eligibleTemperatureRun,
   cyclePhaseDaily,
 }: PrivateTabsProps) {
-  const today = currentDay;
-  const detectedShifts = cycleData
+  const detectedShifts = cycleEvaluation.cycles
     .filter(
       (cycle) =>
-        cycle.thermalShiftDay != null &&
-        cycle.thermalShiftDay <= today &&
-        (cycle.evidenceScore ?? 0) >= 0.3
+        cycle.thermalShiftDay <= currentDay &&
+        cycle.evidenceStrength >= 0.3
     )
-    .sort((a, b) =>
-      b.thermalShiftDay!.localeCompare(a.thermalShiftDay!)
-    );
+    .sort((a, b) => b.thermalShiftDay.localeCompare(a.thermalShiftDay));
   const latestShift = detectedShifts[0] ?? null;
-  const thermalShiftDays = detectedShifts
-    .map((c) => c.thermalShiftDay)
-    .filter((d): d is string => d != null);
-  const hasCurrentIntervalSemantics =
-    latestShift?.periodStartDay == null &&
-    latestShift?.nextPeriodDay == null;
-
-  const validTempData = temperatureData.filter((d) => d.temperatureDelta != null);
+  const thermalShiftDays = detectedShifts.map(
+    (cycle) => cycle.thermalShiftDay
+  );
+  const intervalData = detectedShifts
+    .filter((cycle) => cycle.interShiftDays != null)
+    .map((cycle) => ({
+      cycleNumber: cycle.cycleNumber,
+      interShiftDays: cycle.interShiftDays,
+    }))
+    .reverse();
+  const chartVisibility = getCycleSecondaryChartVisibility(
+    detectedShifts.length,
+    intervalData.length
+  );
   const hasReadinessData = temperatureData.length > 0;
-  const hasValidTemp = validTempData.length > 0;
+  const hasValidTemp = temperatureData.some(
+    (point) => point.temperatureDelta != null
+  );
+  const runCopy = `Ending on evaluation day: ${cycleEvaluation.currentEligibleTemperatureRun}/30 nights${
+    cycleEvaluation.currentEligibleTemperatureRun ===
+    cycleEvaluation.longestEligibleTemperatureRun
+      ? ""
+      : ` · longest ${cycleEvaluation.longestEligibleTemperatureRun}/30`
+  }`;
+  const restModeCopy = cycleEvaluation.restModeActive
+    ? cycleEvaluation.restModeExcludedTemperatureDays > 0
+      ? `Active · ${cycleEvaluation.restModeExcludedTemperatureDays} temperature nights excluded`
+      : "Active · no temperature nights excluded yet"
+    : cycleEvaluation.restModeExcludedTemperatureDays > 0
+      ? `${cycleEvaluation.restModeExcludedTemperatureDays} temperature nights excluded`
+      : "No temperature nights excluded";
 
   return (
     <div className="space-y-6">
-      {latestShift ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Thermal Shift Summary</CardTitle>
-            <CardDescription>
-              Sustained changes detected in Oura nighttime skin-temperature deviation. This does not identify ovulation, menstruation, or fertility.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
-              {latestShift.thermalShiftDay && (
-                <div>
-                  <span className="text-muted-foreground">Latest Detected Shift</span>
-                  <p className="font-medium">{latestShift.thermalShiftDay}</p>
-                </div>
-              )}
-              {hasCurrentIntervalSemantics && latestShift.interShiftDays != null && (
-                <div>
-                  <span className="text-muted-foreground">Previous Shift Interval</span>
-                  <p className="font-medium">{latestShift.interShiftDays} days</p>
-                </div>
-              )}
-              {latestShift.evidenceScore != null && (
-                <div>
-                  <span className="text-muted-foreground">Evidence Strength</span>
-                  <p className="font-medium">
-                    {describeEvidence(latestShift.evidenceScore)}
-                  </p>
-                </div>
-              )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Cycle Context</CardTitle>
+          <CardDescription>
+            Temperature only · a 365-day app evaluation, not menstrual-cycle
+            tracking or fertility guidance.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+            <div>
+              <dt className="text-muted-foreground">Result</dt>
+              <dd className="font-medium">
+                {getCycleEvaluationResultLabel(cycleEvaluation)}
+              </dd>
             </div>
-            <p className="text-xs text-muted-foreground mt-4">
-              This evidence score is not a probability. Medication, illness, alcohol, and travel can affect temperature patterns.
-            </p>
-          </CardContent>
-        </Card>
-      ) : hasReadinessData ? (
-        <Card>
-          <CardContent className="py-6">
-            <p className="text-sm text-muted-foreground">
-              {!hasValidTemp
-                ? "Nighttime skin-temperature deviation is not available from Oura yet. This typically requires consistent nightly wear."
-                : eligibleTemperatureRun < 30
-                  ? `Not enough consecutive eligible nighttime temperature data for this app rule (${eligibleTemperatureRun}/30 consecutive days).`
-                  : "No sustained thermal shift matched the app's current rules. Medication, irregular sleep, illness, alcohol, and travel can affect the pattern."}
-            </p>
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="py-8">
-            <p className="text-sm text-muted-foreground text-center">
-              No thermal-shift result is available. Oura nighttime temperature data typically requires consistent nightly wear.
-            </p>
-          </CardContent>
-        </Card>
-      )}
+            <div>
+              <dt className="text-muted-foreground">Evaluation End</dt>
+              <dd className="font-medium">
+                {formatSourceDay(cycleEvaluation.checkedThroughDay)}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Temperature Through</dt>
+              <dd className="font-medium">
+                {cycleEvaluation.latestTemperatureDay
+                  ? formatSourceDay(cycleEvaluation.latestTemperatureDay)
+                  : "Not available"}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Eligible Run</dt>
+              <dd className="font-medium">{runCopy}</dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Eligible Nights</dt>
+              <dd className="font-medium">
+                {cycleEvaluation.eligibleTemperatureDays}
+              </dd>
+            </div>
+            <div>
+              <dt className="text-muted-foreground">Rest Mode</dt>
+              <dd className="font-medium">{restModeCopy}</dd>
+            </div>
+          </dl>
 
-      {detectedShifts.length > 0 && (
-        <CycleCalendar cycleData={detectedShifts} currentDay={currentDay} />
-      )}
+          {latestShift ? (
+            <div className="border-t pt-4 text-sm">
+              <p>
+                Latest detected shift:{" "}
+                <span className="font-medium">
+                  {formatSourceDay(latestShift.thermalShiftDay)}
+                </span>
+                {" · "}
+                {describeEvidence(latestShift.evidenceStrength)} pattern
+                strength
+                {latestShift.interShiftDays != null
+                  ? ` · ${latestShift.interShiftDays} days since the prior shift`
+                  : ""}
+              </p>
+            </div>
+          ) : cycleEvaluation.outcome === "no_shifts" ? (
+            <p className="border-t pt-4 text-sm text-muted-foreground">
+              The evaluation completed and found zero shifts matching this app
+              rule.
+            </p>
+          ) : (
+            <p className="border-t pt-4 text-sm text-muted-foreground">
+              {getCycleInsufficientCopy(cycleEvaluation.insufficientReason)}
+            </p>
+          )}
 
-      {detectedShifts.length > 0 && cyclePhaseDaily.length > 0 && (
-        <CyclePhaseChart
-          dailyData={cyclePhaseDaily}
-          thermalShiftDays={thermalShiftDays}
-        />
-      )}
+          <p className="text-xs text-muted-foreground">
+            App rule: three consecutive nights at least 0.15°C above the prior
+            six-night mean; a 30-night eligible run is required. Pattern
+            strength is not a probability, and medication, illness, alcohol,
+            travel, and hormonal changes can affect temperature.
+          </p>
+        </CardContent>
+      </Card>
 
       {hasValidTemp ? (
         <CycleTemperatureChart
@@ -468,37 +530,38 @@ function CycleTab({
       ) : hasReadinessData ? (
         <Card>
           <CardHeader>
-            <CardTitle>Temperature Trend</CardTitle>
+            <CardTitle>Nighttime Skin-Temperature Deviation</CardTitle>
           </CardHeader>
           <CardContent className="py-6">
             <p className="text-sm text-muted-foreground">
-              Oura nighttime skin-temperature deviation is not available yet. It usually appears after consistent nightly wear.
+              Oura nighttime temperature deviation is not available in this
+              90-day view.
             </p>
           </CardContent>
         </Card>
       ) : null}
 
-      {detectedShifts.filter(
-        (cycle) =>
-          cycle.periodStartDay == null &&
-          cycle.nextPeriodDay == null &&
-          cycle.interShiftDays != null
-      ).length > 0 && (
-        <CycleLengthChart
-          data={detectedShifts
-            .filter(
-              (cycle) =>
-                cycle.periodStartDay == null &&
-                cycle.nextPeriodDay == null &&
-                cycle.interShiftDays != null
-            )
-            .map((c) => ({
-              cycleNumber: c.cycleNumber,
-              interShiftDays: c.interShiftDays!,
-            }))
-            .reverse()}
+      {chartVisibility.phaseWindows && cyclePhaseDaily.length > 0 ? (
+        <CyclePhaseChart
+          dailyData={cyclePhaseDaily}
+          thermalShiftDays={thermalShiftDays}
         />
-      )}
+      ) : null}
+
+      {chartVisibility.intervals ? (
+        <CycleLengthChart data={intervalData} />
+      ) : null}
+
+      {chartVisibility.calendar ? (
+        <CycleCalendar
+          cycleData={detectedShifts.map((cycle) => ({
+            cycleNumber: cycle.cycleNumber,
+            thermalShiftDay: cycle.thermalShiftDay,
+            evidenceScore: cycle.evidenceStrength,
+          }))}
+          currentDay={currentDay}
+        />
+      ) : null}
     </div>
   );
 }

@@ -29,6 +29,11 @@ const TAGS = [
   "poor_sleep",
 ];
 
+const ACTIVATION_EPISODE_OPTIONS = [
+  { value: "hypomanic", label: "Log hypomanic?" },
+  { value: "manic", label: "Log manic?" },
+];
+
 interface Medication {
   id: number;
   name: string;
@@ -320,7 +325,7 @@ export function DailyLogCard({
           <div className="flex items-center gap-2">
             <CardTitle className="text-base">Daily Log</CardTitle>
             {lastSavedAt && (
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground" role="status">
                 Saved {lastSavedAt}
               </span>
             )}
@@ -359,7 +364,11 @@ export function DailyLogCard({
       <CardContent className="space-y-3">
         <div>
           <p className="text-xs text-muted-foreground mb-1.5">Mood</p>
-          <div className="flex items-start gap-1.5">
+          <div
+            className="flex items-start gap-1.5"
+            role="group"
+            aria-label="Personal mood score"
+          >
             {MOODS.map((m) => {
               const isSelected = moodScore === m.value;
               return (
@@ -367,6 +376,8 @@ export function DailyLogCard({
                   <button
                     onClick={() => saveMood(m.value)}
                     disabled={loading}
+                    aria-label={`${m.value > 0 ? "+" : ""}${m.value}: ${m.label}`}
+                    aria-pressed={isSelected}
                     className={`w-9 h-9 rounded-md text-xs font-bold transition-all ${m.color} ${
                       isSelected
                         ? "opacity-100 ring-2 ring-white ring-offset-1 ring-offset-background scale-110"
@@ -416,28 +427,47 @@ export function DailyLogCard({
           </p>
         )}
 
-        {moodScore != null && (moodScore <= -2 || moodScore >= 2) && (
+        {moodScore != null && moodScore <= -2 && (
           <div>
             <button
-              onClick={() =>
-                saveEpisode(moodScore <= -2 ? "depressive" : "hypomanic")
-              }
+              onClick={() => saveEpisode("depressive")}
               disabled={loading}
+              aria-pressed={episodeState === "depressive"}
               className={`px-3 py-1 text-xs rounded-full transition-all ${
-                episodeState === (moodScore <= -2 ? "depressive" : "hypomanic")
+                episodeState === "depressive"
                   ? "bg-primary text-primary-foreground"
                   : "bg-muted text-muted-foreground hover:text-foreground"
               }`}
             >
-              {moodScore <= -2
-                ? "Log as depressive episode?"
-                : "Log as hypo/manic episode?"}
+              Log as depressive episode?
             </button>
+          </div>
+        )}
+
+        {moodScore != null && moodScore >= 2 && (
+          <div className="flex flex-wrap gap-2">
+            {ACTIVATION_EPISODE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => saveEpisode(option.value)}
+                disabled={loading}
+                aria-pressed={episodeState === option.value}
+                className={`px-3 py-1 text-xs rounded-full transition-all ${
+                  episodeState === option.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
           </div>
         )}
 
         <button
           onClick={() => setShowMore(!showMore)}
+          aria-expanded={showMore}
+          aria-controls="daily-log-more-details"
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
         >
           {showMore ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
@@ -445,7 +475,7 @@ export function DailyLogCard({
         </button>
 
         {showMore && (
-          <div className="space-y-3 pt-1">
+          <div id="daily-log-more-details" className="space-y-3 pt-1">
             {moodScore == null && (
               <p className="text-xs text-muted-foreground">
                 Choose a mood before adding tags or notes.
@@ -459,6 +489,7 @@ export function DailyLogCard({
                     key={tag}
                     onClick={() => toggleTag(tag)}
                     disabled={loading || moodScore == null}
+                    aria-pressed={selectedTags.includes(tag)}
                     className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
                       selectedTags.includes(tag)
                         ? "bg-primary text-primary-foreground"

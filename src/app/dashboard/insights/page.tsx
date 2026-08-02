@@ -2,12 +2,20 @@ export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
 import { dailyAnalysis, episodeAssessments, workouts, dailyMood } from "@/lib/db/schema";
-import { gte, ne, and } from "drizzle-orm";
+import { gte } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import Link from "next/link";
 import { InsightsTabs } from "./insights-tabs";
 import { getTodayET } from "@/lib/date-utils";
 import { normalizeEvidenceScore } from "@/lib/analysis/window";
+import {
+  loadActiveConfig,
+  loadBipolarType,
+} from "@/lib/analysis/config";
+import {
+  currentDailyPatternFields,
+  filterCurrentPatternAssessments,
+} from "@/lib/analysis/provenance";
 
 export default async function InsightsPage() {
   const ninetyDaysAgo = format(
@@ -15,7 +23,14 @@ export default async function InsightsPage() {
     "yyyy-MM-dd"
   );
 
-  const [analysis, episodes, workoutData, moodData] = await Promise.all([
+  const [
+    analysisRows,
+    assessmentRows,
+    workoutData,
+    moodData,
+    patternConfig,
+    bipolarType,
+  ] = await Promise.all([
     db
       .select({
         day: dailyAnalysis.day,
@@ -54,14 +69,13 @@ export default async function InsightsPage() {
         tier: episodeAssessments.tier,
         direction: episodeAssessments.direction,
         confidence: episodeAssessments.confidence,
+        configVersion: episodeAssessments.configVersion,
+        bipolarProfile: episodeAssessments.bipolarProfile,
+        algorithmVersion: episodeAssessments.algorithmVersion,
+        signalMode: episodeAssessments.signalMode,
       })
       .from(episodeAssessments)
-      .where(
-        and(
-          ne(episodeAssessments.tier, "none"),
-          gte(episodeAssessments.day, ninetyDaysAgo)
-        )
-      )
+      .where(gte(episodeAssessments.day, ninetyDaysAgo))
       .orderBy(episodeAssessments.day),
     db
       .select({
@@ -87,7 +101,32 @@ export default async function InsightsPage() {
       .from(dailyMood)
       .where(gte(dailyMood.day, ninetyDaysAgo))
       .orderBy(dailyMood.day),
+    loadActiveConfig(),
+    loadBipolarType(),
   ]);
+  const currentAssessments = filterCurrentPatternAssessments(
+    assessmentRows,
+    patternConfig.version,
+    bipolarType
+  );
+  const currentAssessmentDays = new Set(
+    currentAssessments.map((assessment) => assessment.day)
+  );
+  const analysis = analysisRows.map((row) => ({
+    ...row,
+    ...currentDailyPatternFields(
+      row.day,
+      {
+        anomalyScore: row.anomalyScore,
+        isAnomaly: row.isAnomaly,
+        anomalyDirection: row.anomalyDirection,
+      },
+      currentAssessmentDays
+    ),
+  }));
+  const episodes = currentAssessments.filter(
+    (assessment) => assessment.tier !== "none"
+  );
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">

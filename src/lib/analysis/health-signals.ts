@@ -6,10 +6,11 @@ import {
   cyclePredictions,
   healthSignals,
 } from "@/lib/db/schema";
-import { gte, desc, and, isNotNull, eq, lt } from "drizzle-orm";
+import { gte, lte, desc, and, isNotNull, eq, lt } from "drizzle-orm";
 import { format, subDays, differenceInDays, parseISO } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
 import { isNextCalendarDay } from "./baseline";
+import type { CycleComputationOutcome } from "./cycle";
 
 type SignalType =
   | "sustained_temperature"
@@ -144,7 +145,45 @@ function resolvedSummary(signalType: string): string {
   return "The previously observed cycle-variation pattern is not present in the latest eligible data.";
 }
 
-export async function runHealthSignalDetection(): Promise<{
+export function isCycleDependentHealthSignal(signalType: string): boolean {
+  return (
+    signalType === "early_pregnancy" ||
+    signalType === "sustained_temperature" ||
+    signalType === "thermal_shift_timing"
+  );
+}
+
+export function canEvaluateCycleHealthSignals(
+  cycleEvaluation: CycleComputationOutcome
+): boolean {
+  return cycleEvaluation.state === "complete";
+}
+
+export function getHealthSignalResolutionCopy(
+  signalType: string,
+  todayStr: string,
+  cycleSignalsAreEligible: boolean
+): { summary: string; details: string } {
+  if (
+    !cycleSignalsAreEligible &&
+    isCycleDependentHealthSignal(signalType)
+  ) {
+    return {
+      summary:
+        "This prior temperature-based signal is no longer active because current coverage is insufficient to reevaluate it.",
+      details: `Marked inactive on ${todayStr}; retained historical thermal shifts were not reused without a complete current temperature evaluation.`,
+    };
+  }
+
+  return {
+    summary: resolvedSummary(signalType),
+    details: `Resolved on ${todayStr} after reevaluating current eligible data.`,
+  };
+}
+
+export async function runHealthSignalDetection(
+  cycleEvaluation: CycleComputationOutcome
+): Promise<{
   signals: number;
   resolved: number;
 }> {
@@ -152,11 +191,17 @@ export async function runHealthSignalDetection(): Promise<{
   const todayDate = new Date(`${todayStr}T12:00:00`);
   const now = Math.floor(Date.now() / 1000);
 
+  const cycleSignalsAreEligible =
+    canEvaluateCycleHealthSignals(cycleEvaluation);
   const detectedSignals = (
     await Promise.all([
-      detectSustainedTemperaturePattern(todayStr, todayDate),
+      cycleSignalsAreEligible
+        ? detectSustainedTemperaturePattern(todayStr, todayDate)
+        : Promise.resolve([]),
       detectAcuteIllness(todayStr, todayDate),
-      detectThermalShiftTimingChange(todayStr),
+      cycleSignalsAreEligible
+        ? detectThermalShiftTimingChange(todayStr)
+        : Promise.resolve([]),
     ])
   ).flat();
 
@@ -175,14 +220,19 @@ export async function runHealthSignalDetection(): Promise<{
   let resolved = 0;
   for (const activeRow of activeRows) {
     if (currentKeys.has(`${activeRow.day}:${activeRow.signalType}`)) continue;
+    const resolutionCopy = getHealthSignalResolutionCopy(
+      activeRow.signalType,
+      todayStr,
+      cycleSignalsAreEligible
+    );
     await db
       .update(healthSignals)
       .set({
         status: "resolved",
         confidence: 0,
         indicators: "[]",
-        summary: resolvedSummary(activeRow.signalType),
-        details: `Resolved on ${todayStr} after reevaluating current eligible data.`,
+        summary: resolutionCopy.summary,
+        details: resolutionCopy.details,
         updatedAt: now,
       })
       .where(eq(healthSignals.id, activeRow.id));
@@ -258,6 +308,7 @@ async function detectSustainedTemperaturePattern(
         .where(
           and(
             gte(dailyReadiness.day, postShiftCutoff),
+            lte(dailyReadiness.day, todayStr),
             isNotNull(dailyReadiness.temperatureDeviation)
           )
         )
@@ -271,6 +322,7 @@ async function detectSustainedTemperaturePattern(
         .where(
           and(
             gte(sleepPeriods.day, postShiftCutoff),
+            lte(sleepPeriods.day, todayStr),
             isNotNull(sleepPeriods.averageHeartRate),
             eq(sleepPeriods.type, "long_sleep")
           )
@@ -390,7 +442,7 @@ async function detectSustainedTemperaturePattern(
 }
 
 async function detectAcuteIllness(
-  _todayStr: string,
+  todayStr: string,
   todayDate: Date
 ): Promise<HealthSignal[]> {
   const baselineCutoff = format(subDays(todayDate, 21), "yyyy-MM-dd");
@@ -406,6 +458,7 @@ async function detectAcuteIllness(
       .where(
         and(
           gte(sleepPeriods.day, baselineCutoff),
+          lte(sleepPeriods.day, todayStr),
           isNotNull(sleepPeriods.averageHeartRate),
           eq(sleepPeriods.type, "long_sleep")
         )
@@ -420,6 +473,7 @@ async function detectAcuteIllness(
       .where(
         and(
           gte(dailyReadiness.day, baselineCutoff),
+          lte(dailyReadiness.day, todayStr),
           isNotNull(dailyReadiness.temperatureDeviation)
         )
       )
@@ -430,6 +484,7 @@ async function detectAcuteIllness(
       .where(
         and(
           gte(sleepPeriods.day, baselineCutoff),
+          lte(sleepPeriods.day, todayStr),
           isNotNull(sleepPeriods.averageHrv),
           eq(sleepPeriods.type, "long_sleep")
         )
@@ -441,6 +496,7 @@ async function detectAcuteIllness(
       .where(
         and(
           gte(dailySpo2.day, baselineCutoff),
+          lte(dailySpo2.day, todayStr),
           isNotNull(dailySpo2.averageSpo2)
         )
       )

@@ -35,4 +35,14 @@ describe("parseMoodWrite", () => {
       error: "energyScore must be null or an integer from 1 to 5",
     });
   });
+
+  it("keeps mania distinct from hypomania for retrospective review", () => {
+    expect(
+      parseMoodWrite({ day: "2026-07-30", episodeState: "manic" })
+    ).toEqual({
+      ok: true,
+      day: "2026-07-30",
+      fields: { episodeState: "manic" },
+    });
+  });
 });

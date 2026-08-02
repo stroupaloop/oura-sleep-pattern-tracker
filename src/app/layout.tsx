@@ -14,7 +14,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Slothie's Bipolar Tracker",
-  description: "Track sleep and activity patterns using Oura Ring data for early detection of bipolar mood episode indicators.",
+  description:
+    "Track personal sleep, activity, and wearable pattern trends using Oura Ring data for personal awareness.",
 };
 
 export default function RootLayout({

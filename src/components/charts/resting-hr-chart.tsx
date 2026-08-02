@@ -9,6 +9,7 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  Legend,
 } from "recharts";
 import {
   Card,
@@ -54,6 +55,25 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
     };
   });
 
+  if (filtered.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Heart Rate During Oura-Labelled Rest</CardTitle>
+          <CardDescription>
+            App-derived hourly averages from Oura samples labelled rest
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
+            No Oura-labelled rest or awake heart-rate averages are available for
+            this range.
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -62,6 +82,10 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
           App-derived hourly averages from Oura samples labelled rest. This is
           not Oura&apos;s nightly resting-heart-rate metric.
         </CardDescription>
+        <p className="text-xs text-muted-foreground">
+          Unit: bpm · trend: 7-day average · compare with your own history; no
+          universal range is applied
+        </p>
       </CardHeader>
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
@@ -79,6 +103,13 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
               tick={{ fill: "oklch(0.708 0 0)" }}
               tickFormatter={(v) => `${v}`}
               domain={["dataMin - 5", "dataMax + 5"]}
+              label={{
+                value: "bpm",
+                angle: -90,
+                position: "insideLeft",
+                fontSize: 10,
+                fill: "oklch(0.708 0 0)",
+              }}
             />
             <Tooltip
               contentStyle={{
@@ -99,29 +130,33 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
               }}
               labelFormatter={(label) => `Date: ${label}`}
             />
+            <Legend />
             <Area
               type="monotone"
               dataKey="minBpm"
-              fill="oklch(0.65 0.15 15 / 10%)"
+              fill="oklch(0.708 0 0 / 12%)"
               stroke="none"
               connectNulls={false}
+              name="Minimum"
             />
             <Line
               type="monotone"
               dataKey="restingBpm"
-              stroke="#f87171"
+              stroke="#60a5fa"
               strokeWidth={2}
               dot={false}
               connectNulls={false}
+              name="Oura-labelled rest"
             />
             <Line
               type="monotone"
               dataKey="rollingAvg"
-              stroke="#f87171"
+              stroke="#60a5fa"
               strokeWidth={1.5}
               strokeDasharray="4 4"
               dot={false}
               connectNulls={false}
+              name="7-day average"
             />
             <Line
               type="monotone"
@@ -131,6 +166,7 @@ export function RestingHrChart({ data }: RestingHrChartProps) {
               dot={false}
               connectNulls={false}
               opacity={0.5}
+              name="Oura-labelled awake"
             />
           </ComposedChart>
         </ResponsiveContainer>

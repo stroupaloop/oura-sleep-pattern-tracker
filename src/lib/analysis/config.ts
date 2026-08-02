@@ -18,46 +18,34 @@ export interface MetricWeights {
   withinNightVariability: number;
   activityLevel: number;
   circadianRegularity: number;
-  mood?: number;
-  energy?: number;
-  irritability?: number;
 }
 
 export type BipolarType = "bp1" | "bp2" | "unspecified";
 
 export interface BipolarProfile {
+  dailyWeightOverrides: Partial<MetricWeights>;
   hyperBounceBackMultiplier: number;
   hypoBounceBackMultiplier: number;
-  hyperSignalThreshold: number;
-  variabilityWeight: number;
-  activityWeight: number;
-  circadianWeight: number;
 }
 
 const BIPOLAR_PROFILES: Record<BipolarType, BipolarProfile> = {
   bp1: {
+    dailyWeightOverrides: {},
     hyperBounceBackMultiplier: 0.35,
     hypoBounceBackMultiplier: 0.35,
-    hyperSignalThreshold: 1.5,
-    variabilityWeight: 0.10,
-    activityWeight: 0.04,
-    circadianWeight: 0.04,
   },
   bp2: {
+    dailyWeightOverrides: {
+      sleepDuration: 0.11,
+      withinNightVariability: 0.10,
+    },
     hyperBounceBackMultiplier: 0.50,
     hypoBounceBackMultiplier: 0.35,
-    hyperSignalThreshold: 1.0,
-    variabilityWeight: 0.20,
-    activityWeight: 0.04,
-    circadianWeight: 0.04,
   },
   unspecified: {
+    dailyWeightOverrides: {},
     hyperBounceBackMultiplier: 0.50,
     hypoBounceBackMultiplier: 0.35,
-    hyperSignalThreshold: 1.0,
-    variabilityWeight: 0.10,
-    activityWeight: 0.04,
-    circadianWeight: 0.04,
   },
 };
 
@@ -104,9 +92,6 @@ export const DEFAULT_WEIGHTS: MetricWeights = {
   withinNightVariability: 0.06,
   activityLevel: 0.04,
   circadianRegularity: 0.04,
-  mood: 0.08,
-  energy: 0.04,
-  irritability: 0.04,
 };
 
 export const DEFAULT_ABSOLUTE_THRESHOLDS: AbsoluteThresholds = {

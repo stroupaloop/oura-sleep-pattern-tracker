@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       "cron"
     );
 
-    await runCyclePredictions();
+    const cycleResult = await runCyclePredictions();
 
     const config = await loadActiveConfig();
     const bipolarType = await loadBipolarType();
@@ -45,7 +45,9 @@ export async function GET(request: NextRequest) {
       bipolarType
     );
 
-    const healthResult = await runHealthSignalDetection();
+    const healthResult = await runHealthSignalDetection(
+      cycleResult.evaluation
+    );
     const warnings = [...syncResult.warnings, ...sensitiveResult.warnings];
 
     return NextResponse.json({

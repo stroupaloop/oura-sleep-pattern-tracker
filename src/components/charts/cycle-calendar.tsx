@@ -14,7 +14,13 @@ import {
   subMonths,
 } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 interface CycleEntry {
   cycleNumber: number;
@@ -99,7 +105,14 @@ export function CycleCalendar({
 
   return (
     <Card>
-      <CardContent className="pt-6 space-y-4">
+      <CardHeader>
+        <CardTitle>Detected Shift Dates</CardTitle>
+        <CardDescription>
+          {shifts.length} app-detected temperature shift
+          {shifts.length === 1 ? "" : "s"} in the current evaluation
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
         <div className="flex items-center justify-between">
           <button
             onClick={() => setViewDate(subMonths(viewDate, 1))}
@@ -226,7 +239,7 @@ export function CycleCalendar({
           </div>
         )}
 
-        <div className="flex justify-center text-[10px] text-muted-foreground">
+        <div className="flex justify-center text-xs text-muted-foreground">
           <div className="flex items-center gap-1">
             <span className="w-3 h-3 rounded-sm bg-amber-500/15 flex items-center justify-center">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
@@ -234,7 +247,7 @@ export function CycleCalendar({
             Detected thermal shift
           </div>
         </div>
-        <p className="text-center text-[10px] text-muted-foreground">
+        <p className="text-center text-xs text-muted-foreground">
           Temperature-pattern evidence only; this does not confirm ovulation,
           menstruation, or fertility.
         </p>

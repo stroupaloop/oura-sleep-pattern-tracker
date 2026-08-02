@@ -6,6 +6,10 @@ import { DailyAnalysisResult } from "./anomaly";
 import { WindowResult, analyzeAllWindows } from "./window";
 import { getReferencesForDirection } from "@/lib/research/references";
 import { isNextCalendarDay } from "./baseline";
+import {
+  PATTERN_ALGORITHM_VERSION,
+  PATTERN_SIGNAL_MODE,
+} from "./provenance";
 
 export type Tier = "none" | "watch" | "warning" | "alert";
 
@@ -37,6 +41,9 @@ export interface EpisodeResult {
   summary: string;
   researchContext: AlertResearchContext | null;
   configVersion: number;
+  bipolarProfile: BipolarType;
+  algorithmVersion: string;
+  signalMode: string;
 }
 
 export function finiteMetricOrNull(
@@ -296,6 +303,9 @@ export function assessEpisode(
       summary: "Insufficient data for episode assessment.",
       researchContext: null,
       configVersion: config.version,
+      bipolarProfile: bipolarType,
+      algorithmVersion: PATTERN_ALGORITHM_VERSION,
+      signalMode: PATTERN_SIGNAL_MODE,
     };
   }
 
@@ -345,6 +355,9 @@ export function assessEpisode(
     summary,
     researchContext,
     configVersion: config.version,
+    bipolarProfile: bipolarType,
+    algorithmVersion: PATTERN_ALGORITHM_VERSION,
+    signalMode: PATTERN_SIGNAL_MODE,
   };
 }
 
@@ -379,6 +392,10 @@ export async function upsertEpisodeAssessment(result: EpisodeResult) {
       summary: result.summary,
       researchContext: result.researchContext ? JSON.stringify(result.researchContext) : null,
       configVersion: result.configVersion,
+      bipolarProfile: result.bipolarProfile,
+      algorithmVersion: result.algorithmVersion,
+      signalMode: result.signalMode,
+      evaluatedAt: now,
       createdAt: now,
     })
     .onConflictDoUpdate({
@@ -407,6 +424,10 @@ export async function upsertEpisodeAssessment(result: EpisodeResult) {
         summary: sql`excluded.summary`,
         researchContext: sql`excluded.research_context`,
         configVersion: sql`excluded.config_version`,
+        bipolarProfile: sql`excluded.bipolar_profile`,
+        algorithmVersion: sql`excluded.algorithm_version`,
+        signalMode: sql`excluded.signal_mode`,
+        evaluatedAt: sql`excluded.evaluated_at`,
       },
     });
 }

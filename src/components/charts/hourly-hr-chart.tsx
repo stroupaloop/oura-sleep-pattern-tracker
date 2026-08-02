@@ -15,6 +15,7 @@ import {
 import {
   Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -122,6 +123,7 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
 
   const canPrev = availableDays.indexOf(selectedDay) > 0;
   const canNext = availableDays.indexOf(selectedDay) < availableDays.length - 1;
+  const hasChartHeartRate = chartData.some((point) => point.avgBpm != null);
 
   if (availableDays.length === 0) return null;
 
@@ -181,15 +183,26 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
             </Button>
           </div>
           {anomalies.length > 0 && (
-            <p className="text-xs text-red-400">
-              {anomalies.length} anomal{anomalies.length === 1 ? "y" : "ies"} detected
+            <p className="text-xs text-amber-300">
+              {anomalies.length} unusual hour{anomalies.length === 1 ? "" : "s"}{" "}
+              vs prior same-hour pattern
             </p>
           )}
         </div>
+        <CardDescription>
+          Hourly average and observed min–max band (bpm). Markers compare with
+          your prior average for the same local hour; they are not clinical
+          alerts.
+        </CardDescription>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <ComposedChart data={chartData}>
+        {!hasChartHeartRate ? (
+          <div className="flex min-h-[300px] items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
+            No hourly heart-rate samples are available for this view.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
             <XAxis
               dataKey="label"
@@ -202,6 +215,13 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
               tick={{ fill: "oklch(0.708 0 0)" }}
               tickFormatter={(v) => `${v}`}
               domain={["dataMin - 5", "dataMax + 5"]}
+              label={{
+                value: "bpm",
+                angle: -90,
+                position: "insideLeft",
+                fontSize: 10,
+                fill: "oklch(0.708 0 0)",
+              }}
             />
             <Tooltip
               contentStyle={{
@@ -227,14 +247,20 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
                 );
                 const parts = [`Time: ${formatHour(entry.actualHour)}`];
                 if (entry.source) parts.push(`Source: ${entry.source}`);
-                if (anomaly) parts.push(anomaly.message);
+                if (anomaly) {
+                  parts.push(
+                    `Unusual vs prior same-hour avg ~${Math.round(
+                      anomaly.baseline
+                    )} bpm`
+                  );
+                }
                 return parts.join(" | ");
               }}
             />
             <Area
               type="monotone"
               dataKey="maxBpm"
-              fill="oklch(0.65 0.15 15 / 10%)"
+              fill="oklch(0.65 0.08 250 / 12%)"
               stroke="none"
             />
             <Area
@@ -246,7 +272,7 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
             <Line
               type="monotone"
               dataKey="avgBpm"
-              stroke="#f87171"
+              stroke="#60a5fa"
               strokeWidth={2}
               dot={false}
             />
@@ -266,8 +292,9 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
                 />
               );
             })}
-          </ComposedChart>
-        </ResponsiveContainer>
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   );
