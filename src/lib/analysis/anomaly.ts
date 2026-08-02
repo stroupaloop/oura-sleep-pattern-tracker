@@ -10,7 +10,12 @@ import {
   zScore,
   minutesFromMidnight,
 } from "./baseline";
-import { DetectionConfigValues, DEFAULT_CONFIG, BipolarType } from "./config";
+import {
+  DetectionConfigValues,
+  DEFAULT_CONFIG,
+  BipolarType,
+  getBipolarProfile,
+} from "./config";
 
 export interface DayMetrics {
   day: string;
@@ -134,25 +139,21 @@ export function extractMetrics(
 
 function classifyDirection(
   zScores: Record<string, number>,
-  metrics: DayMetrics,
   config: DetectionConfigValues
 ): "hyper" | "hypo" | null {
   const t = config.dailyAnomalyThreshold;
-  const ep = metrics.episodeState;
 
   const hyperSignals =
     (zScores.sleep < -t ? 1 : 0) +
     (Math.abs(zScores.bedtime) > t && zScores.sleep < 0 ? 1 : 0) +
     (zScores.wake < -t ? 1 : 0) +
-    (zScores.activity > t ? 1 : 0) +
-    (ep === "hypomanic" || ep === "mixed" ? 1 : 0);
+    (zScores.activity > t ? 1 : 0);
 
   const hypoSignals =
     (zScores.sleep > t ? 1 : 0) +
     (zScores.bedtime > t ? 1 : 0) +
     (zScores.wake > t ? 1 : 0) +
-    (zScores.activity < -t ? 1 : 0) +
-    (ep === "depressive" || ep === "mixed" ? 1 : 0);
+    (zScores.activity < -t ? 1 : 0);
 
   if (hyperSignals >= 2) return "hyper";
   if (hypoSignals >= 2) return "hypo";
@@ -303,26 +304,6 @@ export function computeDailyAnalysis(
     circadianIS: zScore(metrics.circadianIS, baselines.circadianIS, stds.circadianIS),
   };
 
-  const moodVals = priorMetrics.filter((m) => m.moodScore != null).map((m) => m.moodScore!);
-  const energyVals = priorMetrics.filter((m) => m.energyScore != null).map((m) => m.energyScore!);
-  const irritabilityVals = priorMetrics.filter((m) => m.irritabilityScore != null).map((m) => m.irritabilityScore!);
-
-  if (moodVals.length >= 5) {
-    baselines.mood = trimmedMean(moodVals, trimPct);
-    stds.mood = standardDeviation(moodVals, baselines.mood);
-    zScores.mood = metrics.moodScore != null ? zScore(metrics.moodScore, baselines.mood, stds.mood) : 0;
-  }
-  if (energyVals.length >= 5) {
-    baselines.energy = trimmedMean(energyVals, trimPct);
-    stds.energy = standardDeviation(energyVals, baselines.energy);
-    zScores.energy = metrics.energyScore != null ? zScore(metrics.energyScore, baselines.energy, stds.energy) : 0;
-  }
-  if (irritabilityVals.length >= 5) {
-    baselines.irritability = trimmedMean(irritabilityVals, trimPct);
-    stds.irritability = standardDeviation(irritabilityVals, baselines.irritability);
-    zScores.irritability = metrics.irritabilityScore != null ? zScore(metrics.irritabilityScore, baselines.irritability, stds.irritability) : 0;
-  }
-
   const withinNightVarZ = Math.max(
     zScores.withinNightHrvCV,
     zScores.withinNightHrCV,
@@ -338,11 +319,11 @@ export function computeDailyAnalysis(
   const circadianZ = zScores.circadianIV;
   zScores.circadianReg = circadianZ;
 
-  const effectiveWeights = { ...w };
-  if (bipolarType === "bp2") {
-    effectiveWeights.withinNightVariability = 0.10;
-    effectiveWeights.sleepDuration = 0.11;
-  }
+  const profile = getBipolarProfile(bipolarType);
+  const effectiveWeights = {
+    ...w,
+    ...profile.dailyWeightOverrides,
+  };
 
   let compositeScore =
     effectiveWeights.sleepDuration * Math.abs(zScores.sleep) +
@@ -358,14 +339,7 @@ export function computeDailyAnalysis(
     effectiveWeights.remPct * Math.abs(zScores.remPct) +
     effectiveWeights.withinNightVariability * Math.abs(withinNightVarZ) +
     effectiveWeights.activityLevel * Math.abs(activityZ) +
-    effectiveWeights.circadianRegularity * Math.abs(circadianZ) +
-    (effectiveWeights.mood ?? 0) * Math.abs(zScores.mood ?? 0) +
-    (effectiveWeights.energy ?? 0) * Math.abs(zScores.energy ?? 0) +
-    (effectiveWeights.irritability ?? 0) * Math.abs(zScores.irritability ?? 0);
-
-  if (metrics.episodeState && metrics.episodeState !== "none") {
-    compositeScore += 0.3;
-  }
+    effectiveWeights.circadianRegularity * Math.abs(circadianZ);
 
   const hrvCrash =
     Number.isFinite(metrics.avgHrv) &&
@@ -393,7 +367,7 @@ export function computeDailyAnalysis(
     compositeScore > config.dailyAnomalyThreshold ||
     Math.abs(zScores.sleep) > 2.0;
 
-  const direction = isAnomaly ? classifyDirection(zScores, metrics, config) : null;
+  const direction = isAnomaly ? classifyDirection(zScores, config) : null;
   const notes = isAnomaly
     ? buildNotes(metrics, baselines, zScores, config.dailyAnomalyThreshold)
     : "";

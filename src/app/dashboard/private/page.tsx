@@ -11,7 +11,6 @@ import {
   vo2Max,
   sleepTime,
   personalInfo,
-  cyclePredictions,
   restModePeriods,
   sleepPeriods,
   dailyReadiness,
@@ -20,7 +19,7 @@ import {
   dailyMood,
   syncLog,
 } from "@/lib/db/schema";
-import { desc, gte, eq, and, isNotNull, ne, sql } from "drizzle-orm";
+import { desc, gte, lte, eq, and, isNotNull, ne, sql } from "drizzle-orm";
 import { format, parseISO, subDays } from "date-fns";
 import {
   APP_TIME_ZONE,
@@ -30,7 +29,9 @@ import {
 } from "@/lib/date-utils";
 import {
   buildRestModeDaySet,
-  longestConsecutiveTemperatureRun,
+  buildCycleTemperatureDisplayData,
+  evaluateCycleTemperatures,
+  getCycleEvaluationStartDay,
 } from "@/lib/analysis/cycle";
 import { projectActivityToCalendarDays } from "@/lib/oura/activity";
 import { getOuraSleepDayForTimestamp } from "@/lib/oura/sleep-day";
@@ -65,6 +66,7 @@ export default async function PrivatePage() {
   const currentDay = getTodayET();
   const today = parseISO(currentDay);
   const cutoff = format(subDays(today, 89), "yyyy-MM-dd");
+  const cycleCutoff = getCycleEvaluationStartDay(currentDay);
   const fourteenDayCutoff = format(subDays(today, 13), "yyyy-MM-dd");
   const activitySourceCutoff =
     shiftIsoDay(fourteenDayCutoff, -1) ?? fourteenDayCutoff;
@@ -104,7 +106,6 @@ export default async function PrivatePage() {
     vo2Data,
     sleepTimeData,
     personalInfoData,
-    cycleData,
     sleepData,
     readinessTempData,
     restModeData,
@@ -130,11 +131,6 @@ export default async function PrivatePage() {
       .orderBy(sleepTime.day),
     db.select().from(personalInfo).limit(1),
     db
-      .select()
-      .from(cyclePredictions)
-      .orderBy(desc(cyclePredictions.cycleNumber))
-      .limit(12),
-    db
       .select({
         day: sleepPeriods.day,
         bedtimeStart: sleepPeriods.bedtimeStart,
@@ -149,7 +145,12 @@ export default async function PrivatePage() {
         temperatureDeviation: dailyReadiness.temperatureDeviation,
       })
       .from(dailyReadiness)
-      .where(gte(dailyReadiness.day, cutoff))
+      .where(
+        and(
+          gte(dailyReadiness.day, cycleCutoff),
+          lte(dailyReadiness.day, currentDay)
+        )
+      )
       .orderBy(dailyReadiness.day),
     db
       .select({
@@ -214,7 +215,12 @@ export default async function PrivatePage() {
         avgHrv: dailyAnalysis.avgHrv,
       })
       .from(dailyAnalysis)
-      .where(gte(dailyAnalysis.day, cutoff))
+      .where(
+        and(
+          gte(dailyAnalysis.day, cutoff),
+          lte(dailyAnalysis.day, currentDay)
+        )
+      )
       .orderBy(dailyAnalysis.day),
     db
       .select({
@@ -222,7 +228,12 @@ export default async function PrivatePage() {
         moodScore: dailyMood.moodScore,
       })
       .from(dailyMood)
-      .where(gte(dailyMood.day, cutoff))
+      .where(
+        and(
+          gte(dailyMood.day, cutoff),
+          lte(dailyMood.day, currentDay)
+        )
+      )
       .orderBy(dailyMood.day),
   ]);
 
@@ -232,10 +243,10 @@ export default async function PrivatePage() {
   );
   const restModeDays = buildRestModeDaySet(
     restModeData,
-    cutoff,
+    cycleCutoff,
     currentDay
   );
-  const eligibleTemperatureRun = longestConsecutiveTemperatureRun(
+  const cycleEvaluation = evaluateCycleTemperatures(
     readinessTempData
       .filter(
         (
@@ -247,7 +258,8 @@ export default async function PrivatePage() {
         day: row.day,
         temperatureDelta: row.temperatureDeviation,
       })),
-    restModeDays
+    restModeDays,
+    currentDay
   );
   const cyclePhaseDaily = cyclePhaseAnalysis.map((a) => ({
     day: a.day,
@@ -345,9 +357,16 @@ export default async function PrivatePage() {
         cvAgeData={cvAgeData.map((c) => ({ day: c.day, vascularAge: c.vascularAge }))}
         vo2Data={vo2Data.map((v) => ({ day: v.day, vo2Max: v.vo2Max }))}
         personalInfo={person ? { age: person.age, height: person.height, weight: person.weight, biologicalSex: person.biologicalSex } : null}
-        cycleData={cycleData.map((c) => ({ cycleNumber: c.cycleNumber, periodStartDay: c.periodStartDay, thermalShiftDay: c.thermalShiftDay, nextPeriodDay: c.nextPeriodDay, interShiftDays: c.interShiftDays, evidenceScore: c.confidence }))}
-        temperatureData={readinessTempData.map((t) => ({ day: t.day, temperatureDelta: t.temperatureDeviation }))}
-        eligibleTemperatureRun={eligibleTemperatureRun}
+        cycleEvaluation={cycleEvaluation}
+        temperatureData={buildCycleTemperatureDisplayData(
+          readinessTempData.map((row) => ({
+            day: row.day,
+            temperatureDelta: row.temperatureDeviation,
+          })),
+          restModeDays,
+          cutoff,
+          currentDay
+        )}
         bedtimeData={bedtimeData}
         hrData={hrData.map((h) => ({ day: h.day, restingBpm: h.restingBpm, awakeBpm: h.awakeBpm, minBpm: h.minBpm, maxBpm: h.maxBpm }))}
         hourlyHrData={hourlyHrData}

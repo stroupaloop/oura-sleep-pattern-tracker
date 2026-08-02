@@ -60,6 +60,9 @@ function CircadianTooltipContent({
 }
 
 export function CircadianChart({ data, limitations }: CircadianChartProps) {
+  const hasCircadianData = data.some(
+    (point) => point.is != null || point.iv != null || point.ra != null
+  );
   const episodeRanges: { start: string; end: string; tier: string }[] = [];
   let rangeStart: string | null = null;
   let currentTier = "";
@@ -86,18 +89,25 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
           <ResearchTooltip metric="circadianIS" />
         </CardTitle>
         <CardDescription>
-          IS and RA use a 0–1 scale; IV uses a separate fragmentation scale
+          Personal activity-rhythm trends · IS and RA use 0–1; IV uses a
+          separate scale
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
-          <span className="font-medium text-blue-300">What to watch for:</span>{" "}
-          Dropping IS (stability) suggests your daily rhythm is becoming less consistent and has been associated with mood episode relapse.
-          Rising IV (variability) means your activity pattern is more fragmented within the day.
-          Low RA (amplitude) suggests flattened activity cycles (less difference between active and rest periods).
+          <span className="font-medium text-blue-300">Direction:</span>{" "}
+          IS ↑ more stable · IV ↑ more fragmented · RA ↑ stronger day/rest
+          contrast. Compare sustained changes with your own history.
         </div>
-        <ResponsiveContainer width="100%" height={280}>
-          <LineChart data={data}>
+        {!hasCircadianData ? (
+          <div className="flex min-h-56 items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
+            No eligible circadian metric is available yet. IS needs 3
+            consecutive activity days; these metrics require at least 80%
+            classified intervals.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={data}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
             <XAxis
               dataKey="day"
@@ -111,6 +121,13 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               domain={[0, 1]}
               fontSize={11}
               tick={{ fill: "oklch(0.708 0 0)" }}
+              label={{
+                value: "IS / RA",
+                angle: -90,
+                position: "insideLeft",
+                fontSize: 10,
+                fill: "oklch(0.708 0 0)",
+              }}
             />
             <YAxis
               yAxisId="iv"
@@ -118,6 +135,13 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               domain={[0, "auto"]}
               fontSize={11}
               tick={{ fill: "oklch(0.708 0 0)" }}
+              label={{
+                value: "IV",
+                angle: 90,
+                position: "insideRight",
+                fontSize: 10,
+                fill: "oklch(0.708 0 0)",
+              }}
             />
             <Tooltip content={<CircadianTooltipContent />} />
             <Legend />
@@ -138,6 +162,12 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               strokeDasharray="3 3"
               strokeOpacity={0.35}
               ifOverflow="extendDomain"
+              label={{
+                value: "IV 2.0 reference",
+                position: "insideTopRight",
+                fill: "oklch(0.708 0 0)",
+                fontSize: 10,
+              }}
             />
             <Line
               yAxisId="bounded"
@@ -169,8 +199,14 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               name="RA (Amplitude)"
               connectNulls={false}
             />
-          </LineChart>
-        </ResponsiveContainer>
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+        {hasCircadianData && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            The IV 2.0 line is a mathematical reference, not a clinical cutoff.
+          </p>
+        )}
         {limitations && (
           <p className="text-xs text-muted-foreground mt-2">{limitations}</p>
         )}

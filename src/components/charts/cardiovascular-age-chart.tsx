@@ -46,6 +46,17 @@ export function CardiovascularAgeChart({
   days = 90,
 }: CardiovascularAgeChartProps) {
   const chartData = data.slice(-days);
+  const latest = [...chartData]
+    .reverse()
+    .find((point) => point.vascularAge != null);
+  const latestDifference =
+    latest?.vascularAge != null && actualAge != null
+      ? latest.vascularAge - actualAge
+      : null;
+  const latestCategory =
+    latest?.vascularAge != null
+      ? getOuraCategory(latest.vascularAge, actualAge)
+      : null;
 
   return (
     <Card>
@@ -56,6 +67,28 @@ export function CardiovascularAgeChart({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {latest?.vascularAge != null && (
+          <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-sm">
+            <span className="font-medium">
+              Latest: {latest.vascularAge} years
+            </span>
+            {latestDifference != null && (
+              <span className="text-muted-foreground">
+                {latestDifference === 0
+                  ? "Matches actual age"
+                  : `${Math.abs(latestDifference)} years ${
+                      latestDifference < 0 ? "below" : "above"
+                    } actual age`}
+              </span>
+            )}
+            {latestCategory && (
+              <span className="text-muted-foreground">
+                Oura category: {latestCategory}
+              </span>
+            )}
+            <span className="text-muted-foreground">Through {latest.day}</span>
+          </div>
+        )}
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData}>
             <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
@@ -70,6 +103,13 @@ export function CardiovascularAgeChart({
               fontSize={11}
               tick={{ fill: "oklch(0.708 0 0)" }}
               tickFormatter={(v) => `${v}y`}
+              label={{
+                value: "years",
+                angle: -90,
+                position: "insideLeft",
+                fontSize: 10,
+                fill: "oklch(0.708 0 0)",
+              }}
             />
             <Tooltip
               contentStyle={{
@@ -116,6 +156,9 @@ export function CardiovascularAgeChart({
             />
           </LineChart>
         </ResponsiveContainer>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Source: Oura · estimated cardiovascular age, not a diagnosis
+        </p>
       </CardContent>
     </Card>
   );

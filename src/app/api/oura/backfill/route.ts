@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, isSensitiveUser } from "@/lib/auth";
 import { syncDateRange, syncSensitiveDateRange } from "@/lib/oura/sync";
-import { runCyclePredictions } from "@/lib/analysis/cycle";
+import {
+  runCyclePredictions,
+  type CycleComputationOutcome,
+} from "@/lib/analysis/cycle";
 import { runHealthSignalDetection } from "@/lib/analysis/health-signals";
 import { reprocessAll } from "@/lib/analysis/reprocess";
 import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
@@ -37,6 +40,7 @@ export async function POST(request: NextRequest) {
 
     let sensitiveRecords = 0;
     let cyclesDetected = 0;
+    let cycleEvaluation: CycleComputationOutcome | null = null;
     const warnings = [...result.warnings];
     const canProcessSensitive = Boolean(isCron || isSensitiveUser(userEmail));
     if (canProcessSensitive) {
@@ -50,6 +54,7 @@ export async function POST(request: NextRequest) {
 
       const cycleResult = await runCyclePredictions();
       cyclesDetected = cycleResult.cyclesDetected;
+      cycleEvaluation = cycleResult.evaluation;
     }
 
     const [config, bipolarType] = await Promise.all([
@@ -62,8 +67,8 @@ export async function POST(request: NextRequest) {
       endDate,
       bipolarType
     );
-    const healthSignals = canProcessSensitive
-      ? (await runHealthSignalDetection()).signals
+    const healthSignals = canProcessSensitive && cycleEvaluation
+      ? (await runHealthSignalDetection(cycleEvaluation)).signals
       : 0;
 
     return NextResponse.json({

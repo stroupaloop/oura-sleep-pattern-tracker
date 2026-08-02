@@ -105,4 +105,87 @@ describe("window analysis coverage", () => {
     expect(normalizeEvidenceScore(-1)).toBe(0);
     expect(normalizeEvidenceScore(Number.NaN)).toBe(0);
   });
+
+  it("applies the BP1 higher-activation bounce-back profile while unspecified keeps the default", () => {
+    const bouncedPattern = [
+      { ...result("2026-07-01"), compositeScore: 2 },
+      { ...result("2026-07-02"), compositeScore: 4 },
+      { ...result("2026-07-03"), compositeScore: 2 },
+    ];
+
+    const bp1 = analyzeWindow(
+      bouncedPattern,
+      3,
+      [],
+      DEFAULT_CONFIG,
+      3,
+      "bp1"
+    );
+    const bp2 = analyzeWindow(
+      bouncedPattern,
+      3,
+      [],
+      DEFAULT_CONFIG,
+      3,
+      "bp2"
+    );
+    const unspecified = analyzeWindow(
+      bouncedPattern,
+      3,
+      [],
+      DEFAULT_CONFIG,
+      3,
+      "unspecified"
+    );
+
+    expect(bp1).not.toBeNull();
+    expect(bp2).not.toBeNull();
+    expect(unspecified).not.toBeNull();
+    expect(bp1!.bounceBackScore).toBeGreaterThan(0);
+    expect(bp1!.confidence).toBeGreaterThan(bp2!.confidence);
+    expect(unspecified!.confidence).toBeCloseTo(bp2!.confidence, 10);
+  });
+
+  it("does not use self-reported episode labels as multi-day evidence", () => {
+    const wearableOnly = [
+      result("2026-07-01"),
+      result("2026-07-02"),
+      result("2026-07-03"),
+    ];
+    const withLabels = wearableOnly.map((entry, index) => ({
+      ...entry,
+      metrics: {
+        ...entry.metrics,
+        moodScore: 3,
+        energyScore: 5,
+        irritabilityScore: 5,
+        episodeState: index === 2 ? "mixed" : "hypomanic",
+      },
+    }));
+
+    const wearableWindow = analyzeWindow(
+      wearableOnly,
+      3,
+      [],
+      DEFAULT_CONFIG,
+      3,
+      "bp2"
+    );
+    const labelledWindow = analyzeWindow(
+      withLabels,
+      3,
+      [],
+      DEFAULT_CONFIG,
+      3,
+      "bp2"
+    );
+
+    expect(wearableWindow).not.toBeNull();
+    expect(labelledWindow).not.toBeNull();
+    expect(labelledWindow!.confidence).toBeCloseTo(
+      wearableWindow!.confidence,
+      10
+    );
+    expect(labelledWindow!.direction).toBe(wearableWindow!.direction);
+  });
 });

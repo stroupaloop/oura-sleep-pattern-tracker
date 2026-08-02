@@ -6,14 +6,31 @@ import {
   dailySleep,
   dailyAnalysis,
   dailyReadiness,
+  episodeAssessments,
 } from "@/lib/db/schema";
 import { desc, sql } from "drizzle-orm";
 import { SleepCalendar } from "./sleep-calendar";
 import type { NightData, AnalysisData } from "./night-card";
 import { summarizeStoredSamples } from "@/lib/dashboard-metrics";
+import {
+  loadActiveConfig,
+  loadBipolarType,
+} from "@/lib/analysis/config";
+import {
+  currentDailyPatternFields,
+  filterCurrentPatternAssessments,
+} from "@/lib/analysis/provenance";
 
 export default async function SleepPage() {
-  const [nights, scores, analyses, readiness] = await Promise.all([
+  const [
+    nights,
+    scores,
+    analysisRows,
+    readiness,
+    assessmentRows,
+    patternConfig,
+    bipolarType,
+  ] = await Promise.all([
     db
       .select()
       .from(sleepPeriods)
@@ -41,7 +58,39 @@ export default async function SleepPage() {
       .from(dailyReadiness)
       .orderBy(desc(dailyReadiness.day))
       .limit(35),
+    db
+      .select({
+        day: episodeAssessments.day,
+        configVersion: episodeAssessments.configVersion,
+        bipolarProfile: episodeAssessments.bipolarProfile,
+        algorithmVersion: episodeAssessments.algorithmVersion,
+        signalMode: episodeAssessments.signalMode,
+      })
+      .from(episodeAssessments)
+      .orderBy(desc(episodeAssessments.day))
+      .limit(35),
+    loadActiveConfig(),
+    loadBipolarType(),
   ]);
+  const currentAssessments = filterCurrentPatternAssessments(
+    assessmentRows,
+    patternConfig.version,
+    bipolarType
+  );
+  const currentAssessmentDays = new Set(
+    currentAssessments.map((assessment) => assessment.day)
+  );
+  const analyses = analysisRows.map((row) => ({
+    ...row,
+    ...currentDailyPatternFields(
+      row.day,
+      {
+        isAnomaly: row.isAnomaly,
+        anomalyDirection: row.anomalyDirection,
+      },
+      currentAssessmentDays
+    ),
+  }));
 
   const readinessTemperature = new Map(
     readiness.map((row) => [row.day, row.temperatureDeviation])

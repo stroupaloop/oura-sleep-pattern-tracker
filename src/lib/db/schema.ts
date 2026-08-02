@@ -178,6 +178,7 @@ export const dailyMood = sqliteTable("daily_mood", {
   tags: text("tags"),
   episodeState: text("episode_state"),
   createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at"),
 });
 
 export const medications = sqliteTable(
@@ -358,6 +359,10 @@ export const episodeAssessments = sqliteTable("episode_assessments", {
   summary: text("summary"),
   researchContext: text("research_context"),
   configVersion: integer("config_version"),
+  bipolarProfile: text("bipolar_profile"),
+  algorithmVersion: text("algorithm_version"),
+  signalMode: text("signal_mode"),
+  evaluatedAt: integer("evaluated_at"),
   createdAt: integer("created_at").notNull(),
 });
 

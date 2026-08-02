@@ -146,4 +146,87 @@ describe("daily analysis source and missingness", () => {
     expect(result?.compositeScore).toBeLessThan(0.5);
     expect(result?.isAnomaly).toBe(false);
   });
+
+  it("applies the documented BP2 daily weight overrides while unspecified keeps base weights", () => {
+    const variablePrior = prior.map((metric, index) => ({
+      ...metric,
+      totalSleepMinutes: 390 + (index % 5) * 15,
+      withinNightHrvCV: 0.08 + (index % 5) * 0.01,
+      withinNightHrCV: 0.07 + (index % 5) * 0.01,
+      hypnogramFragmentation: 0.12 + (index % 5) * 0.01,
+    }));
+    const current = {
+      ...dayMetrics("2026-07-15", 0),
+      totalSleepMinutes: 375,
+      withinNightHrvCV: 0.25,
+      withinNightHrCV: 0.22,
+      hypnogramFragmentation: 0.30,
+    };
+
+    const bp1 = computeDailyAnalysis(current, variablePrior, DEFAULT_CONFIG, "bp1");
+    const bp2 = computeDailyAnalysis(current, variablePrior, DEFAULT_CONFIG, "bp2");
+    const unspecified = computeDailyAnalysis(
+      current,
+      variablePrior,
+      DEFAULT_CONFIG,
+      "unspecified"
+    );
+
+    expect(bp1).not.toBeNull();
+    expect(bp2).not.toBeNull();
+    expect(unspecified).not.toBeNull();
+    expect(unspecified!.compositeScore).toBeCloseTo(
+      bp1!.compositeScore,
+      10
+    );
+    expect(bp2!.compositeScore).toBeGreaterThan(bp1!.compositeScore);
+  });
+
+  it("keeps self-report context independent from the persisted pattern score", () => {
+    const variablePrior = prior.map((metric, index) => ({
+      ...metric,
+      totalSleepMinutes: 390 + (index % 5) * 15,
+      bedtimeMinutes: -60 + (index % 5) * 15,
+      wakeTimeMinutes: 420 + (index % 5) * 15,
+      moodScore: (index % 5) - 2,
+      energyScore: (index % 5) + 1,
+      irritabilityScore: (index % 5) + 1,
+    }));
+    const wearableMetrics = {
+      ...dayMetrics("2026-07-15", 0),
+      totalSleepMinutes: 240,
+      bedtimeMinutes: -150,
+      wakeTimeMinutes: 300,
+    };
+    const withSelfReport = {
+      ...wearableMetrics,
+      moodScore: 3,
+      energyScore: 5,
+      irritabilityScore: 5,
+      anxietyScore: 5,
+      episodeState: "hypomanic",
+    };
+
+    const wearableOnly = computeDailyAnalysis(
+      wearableMetrics,
+      variablePrior,
+      DEFAULT_CONFIG,
+      "bp2"
+    );
+    const contextualized = computeDailyAnalysis(
+      withSelfReport,
+      variablePrior,
+      DEFAULT_CONFIG,
+      "bp2"
+    );
+
+    expect(wearableOnly).not.toBeNull();
+    expect(contextualized).not.toBeNull();
+    expect(contextualized!.compositeScore).toBeCloseTo(
+      wearableOnly!.compositeScore,
+      10
+    );
+    expect(contextualized!.isAnomaly).toBe(wearableOnly!.isAnomaly);
+    expect(contextualized!.direction).toBe(wearableOnly!.direction);
+  });
 });

@@ -32,7 +32,8 @@ const MOOD_OPTIONS = [
 const EPISODE_STATES = [
   { value: "none", label: "None" },
   { value: "depressive", label: "Depressive" },
-  { value: "hypomanic", label: "Hypo/Manic" },
+  { value: "hypomanic", label: "Hypomanic" },
+  { value: "manic", label: "Manic" },
   { value: "mixed", label: "Mixed" },
 ];
 
@@ -405,15 +406,23 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
               <CardTitle>
                 {isToday ? "How are you feeling today?" : `How were you feeling on ${formatDisplayDate(selectedDay)}?`}
               </CardTitle>
-              <CardDescription>Tap your mood level (NIMH Life Chart scale: -3 to +3)</CardDescription>
+              <CardDescription>
+                Tap your mood level on your personal scale from -3 to +3
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex gap-2 justify-center flex-wrap">
+              <div
+                className="flex gap-2 justify-center flex-wrap"
+                role="group"
+                aria-label="Personal mood score"
+              >
                 {MOOD_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => setMoodScore(opt.value)}
                     disabled={loadingDay}
+                    aria-label={`${opt.value > 0 ? "+" : ""}${opt.value}: ${opt.label}`}
+                    aria-pressed={moodScore === opt.value}
                     className={`w-12 h-12 rounded-lg text-sm font-bold transition-all ${opt.color} ${
                       moodScore === opt.value
                         ? "ring-2 ring-white scale-110"
@@ -437,14 +446,22 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">Episode State</CardTitle>
-                  <CardDescription>Do you think you&apos;re in an episode?</CardDescription>
+                  <CardDescription>
+                    Optional self-report used as retrospective context, not as
+                    an input to the wearable pattern score.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex gap-2 flex-wrap">
+                  <div
+                    className="flex gap-2 flex-wrap"
+                    role="group"
+                    aria-label="Optional episode-state self-report"
+                  >
                     {EPISODE_STATES.map((ep) => (
                       <button
                         key={ep.value}
                         onClick={() => setEpisodeState(episodeState === ep.value ? null : ep.value)}
+                        aria-pressed={episodeState === ep.value}
                         className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
                           episodeState === ep.value
                             ? "bg-primary text-primary-foreground"
@@ -460,13 +477,15 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
 
               <button
                 onClick={() => setShowOptional(!showOptional)}
+                aria-expanded={showOptional}
+                aria-controls="optional-check-in-details"
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors"
               >
                 {showOptional ? "Hide" : "Show"} optional details (energy, irritability, anxiety, sleep quality)
               </button>
 
               {showOptional && (
-                <Card>
+                <Card id="optional-check-in-details">
                   <CardContent className="pt-6 space-y-4">
                     {[
                       { label: "Energy", value: energy, set: setEnergy },
@@ -481,6 +500,7 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
                           min={1}
                           max={5}
                           value={value}
+                          aria-label={label}
                           onChange={(e) => set(Number(e.target.value))}
                           className="flex-1"
                         />
@@ -505,6 +525,7 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
                             prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
                           )
                         }
+                        aria-pressed={selectedTags.includes(tag)}
                         className={`px-3 py-1 text-xs rounded-full transition-colors ${
                           selectedTags.includes(tag)
                             ? "bg-primary text-primary-foreground"

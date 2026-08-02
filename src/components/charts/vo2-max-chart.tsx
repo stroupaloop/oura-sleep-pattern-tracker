@@ -29,6 +29,16 @@ interface Vo2MaxChartProps {
 
 export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
   const chartData = data.slice(-days);
+  const measured = chartData.filter(
+    (point): point is Vo2MaxPoint & { vo2Max: number } =>
+      point.vo2Max != null
+  );
+  const first = measured[0] ?? null;
+  const latest = measured[measured.length - 1] ?? null;
+  const change =
+    first && latest && first.day !== latest.day
+      ? latest.vo2Max - first.vo2Max
+      : null;
 
   return (
     <Card>
@@ -40,18 +50,37 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {latest && (
+          <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-sm">
+            <span className="font-medium">
+              Latest: {latest.vo2Max.toFixed(1)} mL/kg/min
+            </span>
+            {change != null && (
+              <span className="text-muted-foreground">
+                Visible-range change: {change > 0 ? "+" : ""}
+                {change.toFixed(1)}
+              </span>
+            )}
+            <span className="text-muted-foreground">Through {latest.day}</span>
+          </div>
+        )}
+        <p className="mb-4 text-xs text-muted-foreground">
+          Higher generally reflects greater aerobic capacity. Compare trends
+          only when the source method is consistent; no population range is
+          applied.
+        </p>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="vo2MaxGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop
                   offset="5%"
-                  stopColor="oklch(0.65 0.2 150)"
+                  stopColor="oklch(0.65 0.16 240)"
                   stopOpacity={0.4}
                 />
                 <stop
                   offset="95%"
-                  stopColor="oklch(0.65 0.2 150)"
+                  stopColor="oklch(0.65 0.16 240)"
                   stopOpacity={0.05}
                 />
               </linearGradient>
@@ -68,6 +97,13 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
               fontSize={11}
               tick={{ fill: "oklch(0.708 0 0)" }}
               tickFormatter={(v) => `${v}`}
+              label={{
+                value: "mL/kg/min",
+                angle: -90,
+                position: "insideLeft",
+                fontSize: 10,
+                fill: "oklch(0.708 0 0)",
+              }}
             />
             <Tooltip
               contentStyle={{
@@ -86,7 +122,7 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
             <Area
               type="monotone"
               dataKey="vo2Max"
-              stroke="oklch(0.65 0.2 150)"
+              stroke="oklch(0.65 0.16 240)"
               strokeWidth={2}
               fill="url(#vo2MaxGradient)"
               connectNulls={false}
@@ -94,6 +130,9 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
             />
           </AreaChart>
         </ResponsiveContainer>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Source: Oura · profile estimate, walking test, or manually added value
+        </p>
       </CardContent>
     </Card>
   );

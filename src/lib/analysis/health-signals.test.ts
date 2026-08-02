@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  canEvaluateCycleHealthSignals,
+  getHealthSignalResolutionCopy,
+  isCycleDependentHealthSignal,
   latestConsecutiveValues,
   latestConsecutiveMatchingRun,
   longestConsecutiveMatchingRun,
@@ -7,6 +10,7 @@ import {
   isWithinRecentCalendarDays,
   personalBaselineZScore,
 } from "./health-signals";
+import type { CycleComputationOutcome } from "./cycle";
 
 describe("health signal continuity", () => {
   const values = [
@@ -65,5 +69,39 @@ describe("health signal continuity", () => {
   it("does not manufacture a z-score without a variable personal baseline", () => {
     expect(personalBaselineZScore(70, [60])).toBeNull();
     expect(personalBaselineZScore(70, [60, 60, 60])).toBeNull();
+  });
+
+  it("does not reuse retained thermal shifts when the current cycle evaluation is insufficient", () => {
+    const insufficientEvaluation: CycleComputationOutcome = {
+      state: "insufficient_data",
+      outcome: "insufficient_data",
+      cycles: [],
+      checkedThroughDay: "2026-08-02",
+      latestTemperatureDay: "2026-07-30",
+      eligibleTemperatureDays: 20,
+      longestEligibleTemperatureRun: 20,
+      currentEligibleTemperatureRun: 0,
+      restModeExcludedTemperatureDays: 0,
+      restModeActive: false,
+      restModeCoverageLimited: false,
+      insufficientReason: "insufficient_consecutive_data",
+    };
+
+    expect(canEvaluateCycleHealthSignals(insufficientEvaluation)).toBe(false);
+    expect(isCycleDependentHealthSignal("sustained_temperature")).toBe(true);
+    expect(isCycleDependentHealthSignal("thermal_shift_timing")).toBe(true);
+    expect(isCycleDependentHealthSignal("acute_illness")).toBe(false);
+    expect(
+      getHealthSignalResolutionCopy(
+        "sustained_temperature",
+        "2026-08-02",
+        false
+      )
+    ).toEqual({
+      summary:
+        "This prior temperature-based signal is no longer active because current coverage is insufficient to reevaluate it.",
+      details:
+        "Marked inactive on 2026-08-02; retained historical thermal shifts were not reused without a complete current temperature evaluation.",
+    });
   });
 });

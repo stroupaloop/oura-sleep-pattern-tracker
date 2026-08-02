@@ -99,7 +99,8 @@ export default function MethodologyPage() {
             <div className="text-sm font-medium">Self-Report</div>
             <p className="text-xs text-muted-foreground">
               Mood score, energy level, irritability, anxiety &mdash; captured
-              through daily check-ins
+              through daily check-ins and retained as context and retrospective
+              labels, not inputs to the pattern score
             </p>
           </div>
         </div>
@@ -194,16 +195,23 @@ export default function MethodologyPage() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="rounded-lg border p-4 space-y-1">
-            <div className="text-sm font-medium">Bipolar Type</div>
+            <div className="text-sm font-medium">Pattern Profile</div>
             <p className="text-xs text-muted-foreground">
-              <strong>BP1:</strong> Changes the weighting and persistence rules
-              for higher-activation patterns. It is not validated to detect
-              manic episodes.
+              <strong>BP1 pattern profile:</strong> Uses the base daily metric
+              weights and applies less bounce-back attenuation to
+              higher-activation evidence. It is not validated to detect manic
+              episodes.
             </p>
             <p className="text-xs text-muted-foreground">
-              <strong>BP2:</strong> Gives more weight to exploratory
-              within-night variability. It is not a validated hypomania
+              <strong>BP2 pattern profile:</strong> Gives more daily-score
+              weight to exploratory within-night variability, slightly less to
+              sleep duration, and applies the default higher-activation
+              bounce-back attenuation. It is not a validated hypomania
               detector.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              <strong>Not specified:</strong> Uses the base daily metric
+              weights and default bounce-back attenuation.
             </p>
           </div>
           <div className="rounded-lg border p-4 space-y-1">

@@ -7,7 +7,12 @@ import {
   medications,
   sleepPeriods,
 } from "@/lib/db/schema";
-import { gte, lte, and, ne, desc, eq } from "drizzle-orm";
+import { gte, lte, and, desc, eq } from "drizzle-orm";
+import {
+  loadActiveConfig,
+  loadBipolarType,
+} from "@/lib/analysis/config";
+import { filterCurrentPatternAssessments } from "@/lib/analysis/provenance";
 import { summarizeRecordedMedicationLogs } from "./medication-adherence";
 
 export type ReportTrend =
@@ -70,7 +75,16 @@ export async function generateReport(
   startDate: string,
   endDate: string
 ): Promise<ReportData> {
-  const [sleepRows, activityRows, moodRows, episodeRows, medRows, medLogRows] = await Promise.all([
+  const [
+    sleepRows,
+    activityRows,
+    moodRows,
+    assessmentRows,
+    medRows,
+    medLogRows,
+    patternConfig,
+    bipolarType,
+  ] = await Promise.all([
     db
       .select({
         day: sleepPeriods.day,
@@ -109,11 +123,14 @@ export async function generateReport(
         day: episodeAssessments.day,
         tier: episodeAssessments.tier,
         direction: episodeAssessments.direction,
+        configVersion: episodeAssessments.configVersion,
+        bipolarProfile: episodeAssessments.bipolarProfile,
+        algorithmVersion: episodeAssessments.algorithmVersion,
+        signalMode: episodeAssessments.signalMode,
       })
       .from(episodeAssessments)
       .where(
         and(
-          ne(episodeAssessments.tier, "none"),
           gte(episodeAssessments.day, startDate),
           lte(episodeAssessments.day, endDate)
         )
@@ -124,7 +141,16 @@ export async function generateReport(
       .select()
       .from(medicationLogs)
       .where(and(gte(medicationLogs.day, startDate), lte(medicationLogs.day, endDate))),
+    loadActiveConfig(),
+    loadBipolarType(),
   ]);
+  const episodeRows = filterCurrentPatternAssessments(
+    assessmentRows,
+    patternConfig.version,
+    bipolarType
+  )
+    .filter((assessment) => assessment.tier !== "none")
+    .map(({ day, tier, direction }) => ({ day, tier, direction }));
 
   const start = Date.parse(`${startDate}T00:00:00Z`);
   const end = Date.parse(`${endDate}T00:00:00Z`);

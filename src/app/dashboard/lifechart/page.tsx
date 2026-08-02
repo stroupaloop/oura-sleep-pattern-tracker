@@ -3,8 +3,16 @@ export const dynamic = "force-dynamic";
 import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { dailyAnalysis, dailyMood, episodeAssessments } from "@/lib/db/schema";
-import { gte, lte, ne, and } from "drizzle-orm";
+import { gte, lte, and } from "drizzle-orm";
 import { getTodayET } from "@/lib/date-utils";
+import {
+  loadActiveConfig,
+  loadBipolarType,
+} from "@/lib/analysis/config";
+import {
+  currentDailyPatternFields,
+  filterCurrentPatternAssessments,
+} from "@/lib/analysis/provenance";
 import {
   getLifeChartStartDay,
   resolveLifeChartRange,
@@ -22,7 +30,13 @@ export default async function LifeChartPage({ searchParams }: Props) {
   const endDate = getTodayET();
   const startDate = getLifeChartStartDay(endDate, rangeDays);
 
-  const [analysis, moods, episodes] = await Promise.all([
+  const [
+    analysisRows,
+    moods,
+    assessmentRows,
+    patternConfig,
+    bipolarType,
+  ] = await Promise.all([
     db
       .select({
         day: dailyAnalysis.day,
@@ -64,17 +78,44 @@ export default async function LifeChartPage({ searchParams }: Props) {
         day: episodeAssessments.day,
         tier: episodeAssessments.tier,
         direction: episodeAssessments.direction,
+        configVersion: episodeAssessments.configVersion,
+        bipolarProfile: episodeAssessments.bipolarProfile,
+        algorithmVersion: episodeAssessments.algorithmVersion,
+        signalMode: episodeAssessments.signalMode,
       })
       .from(episodeAssessments)
       .where(
         and(
-          ne(episodeAssessments.tier, "none"),
           gte(episodeAssessments.day, startDate),
           lte(episodeAssessments.day, endDate)
         )
       )
       .orderBy(episodeAssessments.day),
+    loadActiveConfig(),
+    loadBipolarType(),
   ]);
+  const currentAssessments = filterCurrentPatternAssessments(
+    assessmentRows,
+    patternConfig.version,
+    bipolarType
+  );
+  const currentAssessmentDays = new Set(
+    currentAssessments.map((assessment) => assessment.day)
+  );
+  const analysis = analysisRows.map((row) => ({
+    ...row,
+    ...currentDailyPatternFields(
+      row.day,
+      {
+        isAnomaly: row.isAnomaly,
+        anomalyDirection: row.anomalyDirection,
+      },
+      currentAssessmentDays
+    ),
+  }));
+  const episodes = currentAssessments.filter(
+    (assessment) => assessment.tier !== "none"
+  );
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
@@ -82,7 +123,7 @@ export default async function LifeChartPage({ searchParams }: Props) {
         <div>
           <h1 className="text-2xl md:text-3xl font-bold">Life Chart</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            NIMH-style multi-panel timeline
+            Personal mood, sleep, and activity timeline
           </p>
         </div>
         <Suspense>

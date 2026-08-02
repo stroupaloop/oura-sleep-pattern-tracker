@@ -24,18 +24,21 @@ interface CycleLengthPoint {
 
 interface CycleLengthChartProps {
   data: CycleLengthPoint[];
-  days?: number;
 }
+
+export const MIN_THERMAL_SHIFT_INTERVALS = 3;
 
 export function CycleLengthChart({ data }: CycleLengthChartProps) {
   const filtered = data.filter((d) => d.interShiftDays != null);
+  if (filtered.length < MIN_THERMAL_SHIFT_INTERVALS) return null;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Thermal-Shift Intervals</CardTitle>
         <CardDescription>
-          Calendar days between consecutive detected temperature shifts
+          {filtered.length} observed intervals · calendar days between detected
+          temperature shifts, not menstrual-cycle length
         </CardDescription>
       </CardHeader>
       <CardContent>

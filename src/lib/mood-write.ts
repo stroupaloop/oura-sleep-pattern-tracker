@@ -100,6 +100,7 @@ export function parseMoodWrite(value: unknown): ParsedMoodWrite {
       state !== "none" &&
       state !== "depressive" &&
       state !== "hypomanic" &&
+      state !== "manic" &&
       state !== "mixed"
     ) {
       return { ok: false, error: "Invalid episodeState" };

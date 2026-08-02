@@ -12,7 +12,7 @@ import {
   medicationLogs,
   episodeAssessments,
 } from "@/lib/db/schema";
-import { desc, sql, and, gte, ne, eq } from "drizzle-orm";
+import { desc, sql, gte, eq } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import {
   formatIsoDay,
@@ -44,6 +44,14 @@ import { ResearchTooltip } from "@/components/research-tooltip";
 import { DailyLogCard } from "@/components/daily-log-card";
 import { DataAvailabilityCard } from "@/components/confidence-indicator";
 import { computeDataAvailability } from "@/lib/analysis/confidence";
+import {
+  loadActiveConfig,
+  loadBipolarType,
+} from "@/lib/analysis/config";
+import {
+  currentDailyPatternFields,
+  filterCurrentPatternAssessments,
+} from "@/lib/analysis/provenance";
 import { selectSleepForSleepDay } from "@/lib/oura/sleep-day";
 
 function formatTime(iso: string | null): string {
@@ -113,22 +121,38 @@ export default async function DashboardPage() {
 
   const todayDate = new Date(today + "T12:00:00");
   const fourteenDaysAgo = format(subDays(todayDate, 13), "yyyy-MM-dd");
-  const recentEpisodes = await db
-    .select({
-      id: episodeAssessments.id,
-      day: episodeAssessments.day,
-      tier: episodeAssessments.tier,
-      direction: episodeAssessments.direction,
-      confidence: episodeAssessments.confidence,
-    })
-    .from(episodeAssessments)
-    .where(
-      and(
-        ne(episodeAssessments.tier, "none"),
-        gte(episodeAssessments.day, fourteenDaysAgo)
-      )
-    )
-    .orderBy(desc(episodeAssessments.day));
+  const thirtyDaysAgo = format(subDays(todayDate, 29), "yyyy-MM-dd");
+  const [patternConfig, bipolarType, recentAssessmentRows] = await Promise.all([
+    loadActiveConfig(),
+    loadBipolarType(),
+    db
+      .select({
+        id: episodeAssessments.id,
+        day: episodeAssessments.day,
+        tier: episodeAssessments.tier,
+        direction: episodeAssessments.direction,
+        confidence: episodeAssessments.confidence,
+        configVersion: episodeAssessments.configVersion,
+        bipolarProfile: episodeAssessments.bipolarProfile,
+        algorithmVersion: episodeAssessments.algorithmVersion,
+        signalMode: episodeAssessments.signalMode,
+      })
+      .from(episodeAssessments)
+      .where(gte(episodeAssessments.day, thirtyDaysAgo))
+      .orderBy(desc(episodeAssessments.day)),
+  ]);
+  const currentAssessments = filterCurrentPatternAssessments(
+    recentAssessmentRows,
+    patternConfig.version,
+    bipolarType
+  );
+  const currentAssessmentDays = new Set(
+    currentAssessments.map((assessment) => assessment.day)
+  );
+  const recentEpisodes = currentAssessments.filter(
+    (assessment) =>
+      assessment.tier !== "none" && assessment.day >= fourteenDaysAgo
+  );
 
   const todayMood = await db
     .select({
@@ -164,7 +188,6 @@ export default async function DashboardPage() {
 
   const availabilityData = await computeDataAvailability(30);
 
-  const thirtyDaysAgo = format(subDays(todayDate, 29), "yyyy-MM-dd");
   const recentAnalysis = await db
     .select({
       day: dailyAnalysis.day,
@@ -233,15 +256,24 @@ export default async function DashboardPage() {
     .reverse();
 
   const analysisChartData = recentAnalysis
-    .map((a) => ({
-      day: a.day,
-      baselineHrv: a.baselineHrv,
-      baselineHeartRate: a.baselineHeartRate,
-      isAnomaly: a.isAnomaly,
-      anomalyDirection: a.anomalyDirection,
-      hrvZScore: a.hrvZScore,
-      heartRateZScore: a.heartRateZScore,
-    }))
+    .map((a) => {
+      const patternFields = currentDailyPatternFields(
+        a.day,
+        {
+          isAnomaly: a.isAnomaly,
+          anomalyDirection: a.anomalyDirection,
+        },
+        currentAssessmentDays
+      );
+      return {
+        day: a.day,
+        baselineHrv: a.baselineHrv,
+        baselineHeartRate: a.baselineHeartRate,
+        ...patternFields,
+        hrvZScore: a.hrvZScore,
+        heartRateZScore: a.heartRateZScore,
+      };
+    })
     .reverse();
 
   const compositionData = recentSleep

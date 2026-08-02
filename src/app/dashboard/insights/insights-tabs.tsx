@@ -13,7 +13,7 @@ const TABS = [
   { id: "activity", label: "Activity & Recovery" },
   { id: "variability", label: "Sleep Variability" },
   { id: "within-night", label: "Within-Night" },
-  { id: "correlations", label: "Correlations" },
+  { id: "correlations", label: "Relationships" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -259,11 +259,16 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+      <div
+        className="flex flex-wrap gap-2"
+        role="group"
+        aria-label="Insight sections"
+      >
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
+            aria-pressed={activeTab === tab.id}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               activeTab === tab.id
                 ? "bg-primary text-primary-foreground"
@@ -290,13 +295,13 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
       {activeTab === "variability" && (
         <VariabilityChart
           data={variabilityData}
-          limitations="CV requires at least 3 days in the rolling window. Higher values indicate more irregular patterns."
+          limitations="Rolling variability uses up to 7 consecutive calendar days and requires enough measured values. Higher values mean less regularity."
         />
       )}
       {activeTab === "within-night" && (
         <WithinNightChart
           data={withinNightData}
-          limitations="Within-night metrics require 5-min HR/HRV data from long sleep periods."
+          limitations="CV requires 5-minute HR/HRV series; sleep-stage changes require a long-sleep hypnogram."
         />
       )}
       {activeTab === "correlations" && (
