@@ -2,7 +2,7 @@ export default function PrivacyPolicy() {
   return (
     <div className="max-w-2xl mx-auto p-8 space-y-6">
       <h1 className="text-3xl font-bold">Privacy Policy</h1>
-      <p className="text-sm text-muted-foreground">Last updated: March 2026</p>
+      <p className="text-sm text-muted-foreground">Last updated: September 2026</p>
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold">What We Collect</h2>
@@ -10,6 +10,20 @@ export default function PrivacyPolicy() {
           This application collects sleep, readiness, and heart rate data from
           your Oura Ring account via the Oura API. We also store your email
           address for authentication purposes.
+        </p>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-xl font-semibold">Visit Logging</h2>
+        <p>
+          When you open the home page we record the visit: the time, the page,
+          your IP address, an approximate city and country derived from it, your
+          browser&apos;s user-agent string, the referring page, and a random
+          identifier stored in a cookie so repeat visits from the same browser
+          can be recognised. If you are signed in, your email address is
+          recorded with the visit. These records are visible only to the site
+          administrator, are used only to know when someone has visited, and are
+          never sold or shared.
         </p>
       </section>
 

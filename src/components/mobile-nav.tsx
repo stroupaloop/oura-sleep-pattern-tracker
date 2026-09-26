@@ -20,6 +20,7 @@ const navLinks = [
   { href: "/dashboard/checkin", label: "Check-in" },
   { href: "/dashboard/reports", label: "Reports" },
   { href: "/dashboard/methodology", label: "Methodology" },
+  { href: "/dashboard/visits", label: "Visits" },
   { href: "/dashboard/settings", label: "Settings" },
 ];
 
