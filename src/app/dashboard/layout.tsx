@@ -62,7 +62,7 @@ export default async function DashboardLayout({
         <div className="flex min-w-0 items-center gap-2">
           <MobileNav email={session.user.email} isSensitive={sensitive} />
           <div className="min-w-0">
-            <Link href="/" className="block truncate font-semibold">
+            <Link href="/dashboard" className="block truncate font-semibold">
               🦥 Slothie&apos;s Bipolar Tracker
             </Link>
             {syncCopy && (
