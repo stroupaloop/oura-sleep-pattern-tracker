@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/sheet";
 
 const navLinks = [
-  { href: "/", label: "Thinking of You" },
-  { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard", label: "Thoughts" },
+  { href: "/dashboard/health", label: "Health" },
   { href: "/dashboard/sleep", label: "Sleep" },
   { href: "/dashboard/insights", label: "Insights" },
   { href: "/dashboard/lifechart", label: "Life Chart" },
@@ -23,6 +23,7 @@ const navLinks = [
   { href: "/dashboard/methodology", label: "Methodology" },
   { href: "/dashboard/visits", label: "Visits" },
   { href: "/dashboard/settings", label: "Settings" },
+  { href: "/", label: "Public page" },
 ];
 
 export function MobileNav({ email, isSensitive }: { email?: string | null; isSensitive?: boolean }) {
