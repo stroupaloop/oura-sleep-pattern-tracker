@@ -80,6 +80,16 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+
+  /* Thought-frequency heatmap: single-hue sequential ramp.
+     Validated against the dark surface (the app forces dark mode) for
+     lightness monotonicity, step gaps, hue spread, and contrast. */
+  --thought-empty: oklch(0.24 0 0);
+  --thought-1: oklch(0.40 0.09 15);
+  --thought-2: oklch(0.50 0.13 15);
+  --thought-3: oklch(0.60 0.16 15);
+  --thought-4: oklch(0.70 0.19 15);
+  --thought-5: oklch(0.80 0.16 15);
 }
 
 .dark {

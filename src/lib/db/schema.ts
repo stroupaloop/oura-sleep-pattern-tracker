@@ -4,6 +4,7 @@ import {
   integer,
   real,
   primaryKey,
+  index,
   uniqueIndex,
   type AnySQLiteColumn,
 } from "drizzle-orm/sqlite-core";
@@ -528,5 +529,50 @@ export const healthSignals = sqliteTable(
   },
   (table) => [
     uniqueIndex("health_signal_day_type").on(table.day, table.signalType),
+  ]
+);
+
+export const thoughts = sqliteTable(
+  "thoughts",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    day: text("day").notNull(),
+    kind: text("kind").notNull().default("thought"),
+    source: text("source").notNull().default("manual"),
+    slot: text("slot"),
+    note: text("note"),
+    link: text("link"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("thoughts_day_idx").on(table.day),
+    index("thoughts_created_idx").on(table.createdAt),
+    uniqueIndex("thoughts_slot_uniq")
+      .on(table.slot)
+      .where(sql`${table.slot} IS NOT NULL`),
+  ]
+);
+
+export const siteVisits = sqliteTable(
+  "site_visits",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    day: text("day").notNull(),
+    visitorId: text("visitor_id").notNull(),
+    path: text("path").notNull(),
+    email: text("email"),
+    isAuthed: integer("is_authed").notNull(),
+    ip: text("ip"),
+    city: text("city"),
+    region: text("region"),
+    country: text("country"),
+    userAgent: text("user_agent"),
+    referrer: text("referrer"),
+    alerted: integer("alerted").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("site_visits_visitor_idx").on(table.visitorId, table.createdAt),
+    index("site_visits_created_idx").on(table.createdAt),
   ]
 );

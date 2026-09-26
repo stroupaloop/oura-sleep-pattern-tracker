@@ -28,3 +28,16 @@ export function isPrimarySensitiveEmail(
   if (!email) return false;
   return email.toLowerCase() === getPrimarySensitiveEmail();
 }
+
+export function getAuthorEmail(): string | null {
+  const explicit = (process.env.THOUGHTS_AUTHOR_EMAIL ?? "").trim().toLowerCase();
+  if (explicit) return explicit;
+  return getAllowedEmails()[0] ?? null;
+}
+
+export function isAuthorEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  const author = getAuthorEmail();
+  if (!author) return false;
+  return email.toLowerCase() === author;
+}

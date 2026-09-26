@@ -6,6 +6,10 @@ export function getTodayET(): string {
   }).format(new Date());
 }
 
+export function getNowUnixSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
 export function getNowET(): Date {
   const etStr = new Date().toLocaleString("en-US", {
     timeZone: APP_TIME_ZONE,
