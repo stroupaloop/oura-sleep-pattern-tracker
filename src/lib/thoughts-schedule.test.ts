@@ -3,6 +3,7 @@ import {
   DEFAULT_SCHEDULE_OPTIONS,
   duePlannedThoughts,
   etWallClockToUnix,
+  expandDayRange,
   planThoughtsForDay,
   unixToEtDay,
 } from "./thoughts-schedule";
@@ -125,5 +126,42 @@ describe("duePlannedThoughts", () => {
     const planned = planThoughtsForDay("2026-09-25", OPTS);
     const after = etWallClockToUnix("2026-09-26", 12 * 60)!;
     expect(duePlannedThoughts(planned, after)).toHaveLength(planned.length);
+  });
+});
+
+describe("expandDayRange", () => {
+  it("returns an inclusive range", () => {
+    expect(expandDayRange("2026-09-14", "2026-09-17")).toEqual([
+      "2026-09-14",
+      "2026-09-15",
+      "2026-09-16",
+      "2026-09-17",
+    ]);
+  });
+
+  it("handles a single day", () => {
+    expect(expandDayRange("2026-09-14", "2026-09-14")).toEqual(["2026-09-14"]);
+  });
+
+  it("crosses a month boundary", () => {
+    expect(expandDayRange("2026-08-30", "2026-09-02")).toEqual([
+      "2026-08-30",
+      "2026-08-31",
+      "2026-09-01",
+      "2026-09-02",
+    ]);
+  });
+
+  it("rejects an inverted range", () => {
+    expect(expandDayRange("2026-09-20", "2026-09-14")).toBeNull();
+  });
+
+  it("rejects a malformed date", () => {
+    expect(expandDayRange("14/09/2026", "2026-09-20")).toBeNull();
+    expect(expandDayRange("2026-09-14", "nope")).toBeNull();
+  });
+
+  it("refuses a span longer than a year", () => {
+    expect(expandDayRange("2020-01-01", "2026-09-14")).toBeNull();
   });
 });
