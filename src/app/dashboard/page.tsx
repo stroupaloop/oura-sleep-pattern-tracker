@@ -12,6 +12,7 @@ import { StatTiles } from "@/components/thoughts/stat-tiles";
 import { ThoughtGrid } from "@/components/thoughts/thought-grid";
 import { ThoughtComposer } from "@/components/thoughts/thought-composer";
 import { ThoughtTimeline } from "@/components/thoughts/thought-timeline";
+import { EditableThoughtTimeline } from "@/components/thoughts/editable-thought-timeline";
 
 /**
  * The signed-in home. Everything gated lives here: the compose controls for
@@ -49,7 +50,11 @@ export default async function DashboardPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-muted-foreground">The notes</h2>
-        <ThoughtTimeline entries={timeline} />
+        {isAuthor ? (
+          <EditableThoughtTimeline entries={timeline} />
+        ) : (
+          <ThoughtTimeline entries={timeline} />
+        )}
       </section>
 
       <div className="flex flex-wrap gap-2 pt-2">

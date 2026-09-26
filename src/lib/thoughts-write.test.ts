@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MAX_NOTE_LENGTH, parseThoughtWrite } from "./thoughts-write";
+import {
+  MAX_NOTE_LENGTH,
+  parseThoughtEdit,
+  parseThoughtWrite,
+} from "./thoughts-write";
 
 describe("parseThoughtWrite", () => {
   it("accepts a bare quick tap with no fields", () => {
@@ -71,5 +75,59 @@ describe("parseThoughtWrite", () => {
     });
     expect(parseThoughtWrite([]).ok).toBe(false);
     expect(parseThoughtWrite(null).ok).toBe(false);
+  });
+});
+
+describe("parseThoughtEdit", () => {
+  const NOW = Date.parse("2026-09-25T22:00:00Z") / 1000;
+
+  it("accepts an edit with a new timestamp", () => {
+    const past = NOW - 86400;
+    expect(
+      parseThoughtEdit({ note: "updated", link: "", createdAt: past }, NOW)
+    ).toEqual({
+      ok: true,
+      fields: { note: "updated", link: null, createdAt: past },
+    });
+  });
+
+  it("requires a timestamp", () => {
+    expect(parseThoughtEdit({ note: "x" }, NOW)).toEqual({
+      ok: false,
+      error: "createdAt is required",
+    });
+  });
+
+  it("rejects a future timestamp", () => {
+    expect(parseThoughtEdit({ createdAt: NOW + 3600 }, NOW)).toEqual({
+      ok: false,
+      error: "That date is in the future",
+    });
+  });
+
+  it("tolerates a minute of clock skew", () => {
+    expect(parseThoughtEdit({ createdAt: NOW + 30 }, NOW).ok).toBe(true);
+  });
+
+  it("rejects a timestamp before the app existed", () => {
+    expect(parseThoughtEdit({ createdAt: 100 }, NOW)).toEqual({
+      ok: false,
+      error: "That date is too far in the past",
+    });
+  });
+
+  it("rejects a non-integer timestamp", () => {
+    expect(parseThoughtEdit({ createdAt: "yesterday" }, NOW).ok).toBe(false);
+  });
+
+  it("still validates the note and link", () => {
+    expect(
+      parseThoughtEdit({ link: "javascript:alert(1)", createdAt: NOW }, NOW)
+    ).toEqual({ ok: false, error: "link must be a valid http(s) URL" });
+  });
+
+  it("allows clearing a note back to empty", () => {
+    const result = parseThoughtEdit({ note: "", link: "", createdAt: NOW }, NOW);
+    expect(result.ok && result.fields.note).toBeNull();
   });
 });

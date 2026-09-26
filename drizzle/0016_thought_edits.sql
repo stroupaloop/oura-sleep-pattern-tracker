@@ -1,0 +1,1 @@
+ALTER TABLE `thoughts` ADD `updated_at` integer;
