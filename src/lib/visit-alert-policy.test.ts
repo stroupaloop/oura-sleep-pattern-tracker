@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { decideAlert, isLikelyBot } from "./visit-alert-policy";
+import {
+  decideAlert,
+  isLikelyBot,
+  isProductionDeployment,
+} from "./visit-alert-policy";
 
 const IPHONE =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Safari/604.1";
@@ -71,5 +75,26 @@ describe("decideAlert", () => {
     expect(
       decideAlert({ ...BASE, isAuthor: true, lastAlertedAt: BASE.now - 90 * 60 })
     ).toEqual({ alert: false, reason: "author" });
+  });
+});
+
+describe("isProductionDeployment", () => {
+  it("is true only for the production Vercel environment", () => {
+    expect(isProductionDeployment({ vercelEnv: "production" })).toBe(true);
+    expect(isProductionDeployment({ vercelEnv: "preview" })).toBe(false);
+    expect(isProductionDeployment({ vercelEnv: "development" })).toBe(false);
+  });
+
+  it("ignores NODE_ENV when VERCEL_ENV is present", () => {
+    // Vercel sets NODE_ENV=production on preview builds too.
+    expect(
+      isProductionDeployment({ vercelEnv: "preview", nodeEnv: "production" })
+    ).toBe(false);
+  });
+
+  it("falls back to NODE_ENV off-platform", () => {
+    expect(isProductionDeployment({ nodeEnv: "production" })).toBe(true);
+    expect(isProductionDeployment({ nodeEnv: "development" })).toBe(false);
+    expect(isProductionDeployment({})).toBe(false);
   });
 });

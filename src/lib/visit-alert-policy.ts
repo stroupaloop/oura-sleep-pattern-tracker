@@ -55,3 +55,16 @@ export function decideAlert(input: AlertDecisionInput): AlertDecision {
   }
   return { alert: true, reason: null };
 }
+
+/**
+ * True only for the production deployment. Vercel sets NODE_ENV=production on
+ * preview builds as well, so NODE_ENV alone would make every preview deploy
+ * write visits into the live table and send an alert.
+ */
+export function isProductionDeployment(env: {
+  vercelEnv?: string;
+  nodeEnv?: string;
+}): boolean {
+  if (env.vercelEnv) return env.vercelEnv === "production";
+  return env.nodeEnv === "production";
+}

@@ -5,7 +5,7 @@ import { siteVisits } from "@/lib/db/schema";
 import { auth } from "@/lib/auth";
 import { getAuthorEmail, isAuthorEmail } from "@/lib/access";
 import { getTodayET } from "@/lib/date-utils";
-import { decideAlert } from "@/lib/visit-alert-policy";
+import { decideAlert, isProductionDeployment } from "@/lib/visit-alert-policy";
 import { buildVisitAlert } from "@/lib/notifications/visit-alert";
 import { sendEmail } from "@/lib/notifications/email";
 
@@ -26,13 +26,20 @@ function clean(value: string | null, maxLength = 512): string | null {
   return trimmed.slice(0, maxLength);
 }
 
+function onProduction(): boolean {
+  return isProductionDeployment({
+    vercelEnv: process.env.VERCEL_ENV,
+    nodeEnv: process.env.NODE_ENV,
+  });
+}
+
 /**
- * Visit logging is off outside production by default: dev and prod share one
- * Turso database, so a local page load would otherwise write real rows and
- * send a real alert.
+ * Visit logging is off anywhere but the production deployment: every
+ * environment shares one Turso database, so a local page load or a preview
+ * deploy would otherwise write real rows and send a real alert.
  */
 function trackingEnabled(): boolean {
-  if (process.env.NODE_ENV === "production") return true;
+  if (onProduction()) return true;
   return process.env.VISIT_TRACK_DEV === "1";
 }
 
@@ -40,7 +47,7 @@ function alertsEnabled(): boolean {
   const flag = process.env.VISIT_ALERTS_ENABLED;
   if (flag === "0") return false;
   if (flag === "1") return true;
-  return process.env.NODE_ENV === "production";
+  return onProduction();
 }
 
 function alertWindowMinutes(): number {
