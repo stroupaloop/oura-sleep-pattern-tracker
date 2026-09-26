@@ -1,6 +1,8 @@
 import NextAuth from "next-auth";
 import Resend from "next-auth/providers/resend";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { sendEmail } from "@/lib/notifications/email";
+import { buildSignInEmail } from "@/lib/notifications/signin-email";
 import { db } from "@/lib/db";
 import {
   users,
@@ -42,6 +44,16 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Resend({
       apiKey: process.env.AUTH_RESEND_KEY ?? process.env.RESEND_API_KEY,
       from: process.env.EMAIL_FROM ?? "noreply@resend.dev",
+      // Replaces Auth.js's default link-only template, which scores badly
+      // as spam coming from a low-volume sender.
+      async sendVerificationRequest({ identifier, url }) {
+        const { host } = new URL(url);
+        const { subject, html, text } = buildSignInEmail({ url, host });
+        await sendEmail(identifier, subject, html, {
+          text,
+          headers: { "X-Entity-Ref-ID": crypto.randomUUID() },
+        });
+      },
     }),
   ],
   callbacks: {
