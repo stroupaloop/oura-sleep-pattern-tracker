@@ -10,14 +10,21 @@ export interface SchedulePlanOptions {
   /** Window end, exclusive. May exceed 24 to cross midnight (25 = 1am). */
   endHour: number;
   minGapMinutes: number;
+  /**
+   * Bias of the daily count toward the low end. 1 is uniform; higher values
+   * make most days ordinary and leave a thin tail of heavy days, so the grid
+   * uses the whole colour ramp instead of two steps.
+   */
+  skew: number;
 }
 
 export const DEFAULT_SCHEDULE_OPTIONS: Omit<SchedulePlanOptions, "seed"> = {
   min: 1,
-  max: 3,
+  max: 8,
   startHour: 7,
   endHour: 25,
-  minGapMinutes: 45,
+  minGapMinutes: 35,
+  skew: 2.2,
 };
 
 export interface PlannedThought {
@@ -138,7 +145,10 @@ export function planThoughtsForDay(
   if (windowEnd <= windowStart) return [];
 
   const rng = mulberry32(hashSeed(`${day}:${seed}`));
-  const count = lo + Math.floor(rng() * (hi - lo + 1));
+  // Raising a uniform sample to a power > 1 pushes it toward zero, so most
+  // days land near `lo` and only occasionally reach `hi`.
+  const skew = Number.isFinite(options.skew) && options.skew > 0 ? options.skew : 1;
+  const count = lo + Math.floor(Math.pow(rng(), skew) * (hi - lo + 1));
   if (count <= 0) return [];
 
   const span = windowEnd - windowStart;

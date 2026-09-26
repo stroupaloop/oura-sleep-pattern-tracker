@@ -13,8 +13,13 @@ import {
   currentStreak,
   formatCompactAgo,
   gridWeekCount,
+  noteSizeBucket,
 } from "@/lib/thoughts-stats";
 import { Button } from "@/components/ui/button";
+import {
+  SignInTease,
+  type NotePreview,
+} from "@/components/thoughts/sign-in-tease";
 import { StatTiles } from "@/components/thoughts/stat-tiles";
 import { ThoughtGrid } from "@/components/thoughts/thought-grid";
 import { ThoughtComposer } from "@/components/thoughts/thought-composer";
@@ -73,6 +78,30 @@ export default async function Home() {
 
   // Notes are the gated payload: never queried for a signed-out render, so
   // they are not in the HTML at all.
+  // Signed out we select only shape — when, whether a link is attached, and a
+  // coarse length. The note text is never read on this path.
+  const notePreviews: NotePreview[] = signedIn
+    ? []
+    : await db
+        .select({
+          id: thoughts.id,
+          createdAt: thoughts.createdAt,
+          hasLink: sql<number>`(${thoughts.link} is not null)`,
+          noteLength: sql<number>`length(coalesce(${thoughts.note}, ''))`,
+        })
+        .from(thoughts)
+        .where(or(isNotNull(thoughts.note), isNotNull(thoughts.link)))
+        .orderBy(desc(thoughts.createdAt))
+        .limit(3)
+        .then((rows) =>
+          rows.map((row) => ({
+            id: row.id,
+            createdAt: row.createdAt,
+            hasLink: Number(row.hasLink) === 1,
+            size: noteSizeBucket(Number(row.noteLength)),
+          }))
+        );
+
   const timeline: TimelineEntry[] = signedIn
     ? await db
         .select({
@@ -120,24 +149,13 @@ export default async function Home() {
 
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-muted-foreground">
-            {signedIn ? "The notes" : "There's more here"}
+            {signedIn ? "The notes" : "There's more to these"}
           </h2>
 
           {signedIn ? (
             <ThoughtTimeline entries={timeline} />
           ) : (
-            <div className="rounded-lg border bg-card px-4 py-5 text-sm">
-              <p className="text-muted-foreground">
-                {noteCountRow > 0
-                  ? `${noteCountRow} ${
-                      noteCountRow === 1 ? "note is" : "notes are"
-                    } attached to those — what made me think of you, and the links I saved. Sign in to read them.`
-                  : "Sign in to see the notes as they get added."}
-              </p>
-              <Button asChild className="mt-3">
-                <Link href="/login">Sign in</Link>
-              </Button>
-            </div>
+            <SignInTease noteCount={noteCountRow} previews={notePreviews} />
           )}
         </section>
 

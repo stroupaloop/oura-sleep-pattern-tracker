@@ -59,7 +59,7 @@ export function buildSignInEmail({
       <p style="margin:0 0 16px;font-size:18px;font-weight:600">Sign in to ${safeHost}</p>
       <p style="margin:0 0 20px;font-size:14px;line-height:1.6;color:#444">
         You asked to sign in. Use the button below and you will be taken
-        straight to your dashboard — there is no password to remember.
+        straight in — there is no password to remember.
       </p>
       <p style="margin:0 0 20px">
         <a href="${safeUrl}" style="display:inline-block;background:#1a1a1a;color:#ffffff;text-decoration:none;padding:12px 22px;border-radius:8px;font-size:14px;font-weight:600">Sign in</a>

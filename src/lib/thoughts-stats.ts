@@ -150,3 +150,16 @@ export function formatCompactAgo(
   if (months < 12) return `${months}mo ago`;
   return `${Math.round(days / 365)}y ago`;
 }
+
+export type NoteSize = "short" | "medium" | "long";
+
+/**
+ * Coarse length bucket for a gated note. Signed-out visitors see redacted
+ * bars sized from this, so the bucket is deliberately blunt — it conveys
+ * "there is something here" without approximating the content.
+ */
+export function noteSizeBucket(length: number): NoteSize {
+  if (!Number.isFinite(length) || length <= 60) return "short";
+  if (length <= 200) return "medium";
+  return "long";
+}

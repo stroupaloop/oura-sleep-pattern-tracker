@@ -8,6 +8,7 @@ import {
   currentStreak,
   formatCompactAgo,
   gridWeekCount,
+  noteSizeBucket,
 } from "./thoughts-stats";
 
 describe("bucketForCount", () => {
@@ -140,5 +141,23 @@ describe("formatCompactAgo", () => {
 
   it("never reports a negative age for a clock skew", () => {
     expect(formatCompactAgo(now + 600, now)).toBe("just now");
+  });
+});
+
+describe("noteSizeBucket", () => {
+  it("buckets by coarse length", () => {
+    expect(noteSizeBucket(0)).toBe("short");
+    expect(noteSizeBucket(60)).toBe("short");
+    expect(noteSizeBucket(61)).toBe("medium");
+    expect(noteSizeBucket(200)).toBe("medium");
+    expect(noteSizeBucket(201)).toBe("long");
+  });
+
+  it("treats a link-only entry as short", () => {
+    expect(noteSizeBucket(0)).toBe("short");
+  });
+
+  it("is safe on non-finite input", () => {
+    expect(noteSizeBucket(Number.NaN)).toBe("short");
   });
 });

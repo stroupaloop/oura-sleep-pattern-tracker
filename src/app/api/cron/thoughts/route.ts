@@ -34,6 +34,7 @@ function scheduleOptions(): SchedulePlanOptions | null {
       "THOUGHTS_AUTO_MIN_GAP_MIN",
       DEFAULT_SCHEDULE_OPTIONS.minGapMinutes
     ),
+    skew: numberFromEnv("THOUGHTS_AUTO_SKEW", DEFAULT_SCHEDULE_OPTIONS.skew),
   };
 }
 

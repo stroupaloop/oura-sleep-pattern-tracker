@@ -165,3 +165,43 @@ describe("expandDayRange", () => {
     expect(expandDayRange("2020-01-01", "2026-09-14")).toBeNull();
   });
 });
+
+describe("daily count distribution", () => {
+  function sample(overrides: Partial<typeof OPTS>) {
+    const opts = { ...OPTS, ...overrides };
+    const counts: number[] = [];
+    const d = new Date(Date.UTC(2026, 0, 1));
+    for (let i = 0; i < 200; i++) {
+      counts.push(planThoughtsForDay(d.toISOString().slice(0, 10), opts).length);
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
+    return counts;
+  }
+
+  it("reaches the whole configured range, so the grid uses every shade", () => {
+    const counts = sample({});
+    expect(Math.min(...counts)).toBe(OPTS.min);
+    expect(Math.max(...counts)).toBeGreaterThanOrEqual(7);
+    expect(new Set(counts).size).toBeGreaterThanOrEqual(5);
+  });
+
+  it("keeps most days ordinary rather than spreading evenly", () => {
+    const counts = sample({});
+    const low = counts.filter((n) => n <= 3).length / counts.length;
+    expect(low).toBeGreaterThan(0.6);
+  });
+
+  it("a higher skew biases further toward the low end", () => {
+    const flat = sample({ skew: 1 });
+    const steep = sample({ skew: 4 });
+    const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+    expect(mean(steep)).toBeLessThan(mean(flat));
+  });
+
+  it("never exceeds the configured bounds", () => {
+    for (const n of sample({})) {
+      expect(n).toBeGreaterThanOrEqual(OPTS.min);
+      expect(n).toBeLessThanOrEqual(OPTS.max);
+    }
+  });
+});
