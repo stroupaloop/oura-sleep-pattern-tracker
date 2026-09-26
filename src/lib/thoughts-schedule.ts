@@ -173,3 +173,31 @@ export function duePlannedThoughts(
 ): PlannedThought[] {
   return planned.filter((entry) => entry.createdAt <= nowUnixSeconds);
 }
+
+export const MAX_BACKFILL_DAYS = 366;
+
+/**
+ * Inclusive list of ET days from `from` to `to`, or null when the input is
+ * malformed, inverted, or spans more than a year.
+ */
+export function expandDayRange(from: string, to: string): string[] | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from)) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) return null;
+  const start = Date.parse(`${from}T12:00:00Z`);
+  const end = Date.parse(`${to}T12:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) {
+    return null;
+  }
+  const span = Math.floor((end - start) / 86_400_000) + 1;
+  if (span > MAX_BACKFILL_DAYS) return null;
+
+  const days: string[] = [];
+  let cursor = from;
+  for (let i = 0; i < span; i++) {
+    days.push(cursor);
+    const next = shiftIsoDay(cursor, 1);
+    if (!next) break;
+    cursor = next;
+  }
+  return days;
+}

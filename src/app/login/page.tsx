@@ -82,7 +82,7 @@ function LoginForm() {
     setLoading(true);
     setError(null);
     try {
-      const result = await signIn("resend", { email, redirect: false, callbackUrl: "/dashboard" });
+      const result = await signIn("resend", { email, redirect: false, callbackUrl: "/" });
       if (result?.error) {
         setError(result.error);
       } else {

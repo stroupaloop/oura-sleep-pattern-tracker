@@ -5,6 +5,7 @@ import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import {
   DEFAULT_SCHEDULE_OPTIONS,
   duePlannedThoughts,
+  expandDayRange,
   planThoughtsForDay,
   type SchedulePlanOptions,
 } from "@/lib/thoughts-schedule";
@@ -63,7 +64,22 @@ export async function GET(request: NextRequest) {
 
     // Yesterday's plan can still have entries pending: the 7am-1am window runs
     // past midnight, and a missed tick should be caught up rather than lost.
-    const planDays = yesterday ? [yesterday, today] : [today];
+    let planDays = yesterday ? [yesterday, today] : [today];
+
+    // ?from=YYYY-MM-DD backfills every day from that date to today. The plan
+    // is deterministic, so a backfill produces exactly the rows the scheduled
+    // runs would have produced, and re-running it inserts nothing new.
+    const from = request.nextUrl.searchParams.get("from");
+    if (from) {
+      const days = expandDayRange(from, today);
+      if (!days) {
+        return NextResponse.json(
+          { error: "from must be a YYYY-MM-DD date within the last year" },
+          { status: 400 }
+        );
+      }
+      planDays = days;
+    }
     const due = planDays.flatMap((day) =>
       duePlannedThoughts(planThoughtsForDay(day, options), now)
     );
