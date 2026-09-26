@@ -132,3 +132,74 @@ export function shiftIsoDay(day: string, offset: number): string | null {
   date.setUTCDate(date.getUTCDate() + offset);
   return date.toISOString().slice(0, 10);
 }
+
+function zoneOffsetMs(timestampMs: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(timestampMs));
+  const get = (type: string) =>
+    Number(parts.find((part) => part.type === type)?.value);
+  return (
+    Date.UTC(
+      get("year"),
+      get("month") - 1,
+      get("day"),
+      get("hour"),
+      get("minute"),
+      get("second")
+    ) - timestampMs
+  );
+}
+
+/**
+ * Unix seconds rendered as the value a <input type="datetime-local"> expects,
+ * in app time. The input has no time zone of its own, so it must be handed
+ * wall-clock text rather than an instant.
+ */
+export function unixToEtInputValue(
+  unixSeconds: number,
+  timeZone = APP_TIME_ZONE
+): string | null {
+  if (!Number.isFinite(unixSeconds)) return null;
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(new Date(unixSeconds * 1000));
+  const get = (type: string) => parts.find((part) => part.type === type)?.value;
+  const day = `${get("year")}-${get("month")}-${get("day")}`;
+  const time = `${get("hour")}:${get("minute")}`;
+  if (day.includes("undefined") || time.includes("undefined")) return null;
+  return `${day}T${time}`;
+}
+
+/** Inverse of unixToEtInputValue; returns null on malformed input. */
+export function etInputValueToUnix(
+  value: string,
+  timeZone = APP_TIME_ZONE
+): number | null {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const [, day, hh, mm] = match;
+  const naive = Date.parse(`${day}T${hh}:${mm}:00Z`);
+  if (!Number.isFinite(naive)) return null;
+
+  // Correct for the offset, then re-check in case the first guess landed on
+  // the far side of a DST transition.
+  const first = zoneOffsetMs(naive, timeZone);
+  let resolved = naive - first;
+  const second = zoneOffsetMs(resolved, timeZone);
+  if (second !== first) resolved = naive - second;
+  return Math.floor(resolved / 1000);
+}

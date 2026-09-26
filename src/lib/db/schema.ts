@@ -543,6 +543,7 @@ export const thoughts = sqliteTable(
     note: text("note"),
     link: text("link"),
     createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at"),
   },
   (table) => [
     index("thoughts_day_idx").on(table.day),

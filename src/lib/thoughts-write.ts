@@ -80,3 +80,50 @@ export function parseThoughtWrite(value: unknown): ParsedThoughtWrite {
 
   return { ok: true, fields: { kind, note, link } };
 }
+
+export interface ThoughtEditFields {
+  note: string | null;
+  link: string | null;
+  /** Unix seconds; when present the stored day is recomputed from it. */
+  createdAt: number;
+}
+
+export type ParsedThoughtEdit =
+  | { ok: true; fields: ThoughtEditFields }
+  | { ok: false; error: string };
+
+/** Guards against a fat-fingered year knocking an entry off the grid. */
+export const EARLIEST_EDIT = Date.parse("2020-01-01T00:00:00Z") / 1000;
+
+export function parseThoughtEdit(
+  value: unknown,
+  nowUnixSeconds: number
+): ParsedThoughtEdit {
+  const base = parseThoughtWrite(value);
+  if (!base.ok) return base;
+
+  const body = value as Record<string, unknown>;
+  if (!Object.hasOwn(body, "createdAt") || body.createdAt === null) {
+    return { ok: false, error: "createdAt is required" };
+  }
+  const createdAt = Number(body.createdAt);
+  if (!Number.isInteger(createdAt)) {
+    return { ok: false, error: "createdAt must be a whole number of seconds" };
+  }
+  if (createdAt < EARLIEST_EDIT) {
+    return { ok: false, error: "That date is too far in the past" };
+  }
+  // A minute of slack absorbs clock skew between the browser and the server.
+  if (createdAt > nowUnixSeconds + 60) {
+    return { ok: false, error: "That date is in the future" };
+  }
+
+  return {
+    ok: true,
+    fields: {
+      note: base.fields.note,
+      link: base.fields.link,
+      createdAt,
+    },
+  };
+}
