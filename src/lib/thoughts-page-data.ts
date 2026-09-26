@@ -1,4 +1,4 @@
-import { and, desc, gte, isNotNull, or, sql } from "drizzle-orm";
+import { desc, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { thoughts } from "@/lib/db/schema";
 import { getNowUnixSeconds, getTodayET, shiftIsoDay } from "@/lib/date-utils";
@@ -14,7 +14,6 @@ import {
 import type { NotePreview } from "@/components/thoughts/sign-in-tease";
 import type { TimelineEntry } from "@/components/thoughts/thought-timeline";
 
-export const TIMELINE_LIMIT = 25;
 const PREVIEW_LIMIT = 3;
 
 export interface ThoughtOverview {
@@ -109,9 +108,14 @@ export async function loadNotePreviews(): Promise<NotePreview[]> {
     );
 }
 
-/** Full note content. Only ever called from an authenticated render. */
+/**
+ * Full note content, newest first. Only ever called from an authenticated
+ * render. Paginated over every note rather than the grid window, so older
+ * entries stay reachable as the list grows.
+ */
 export async function loadTimeline(
-  windowStart: string
+  limit: number,
+  offset: number
 ): Promise<TimelineEntry[]> {
   return db
     .select({
@@ -121,12 +125,8 @@ export async function loadTimeline(
       createdAt: thoughts.createdAt,
     })
     .from(thoughts)
-    .where(
-      and(
-        or(isNotNull(thoughts.note), isNotNull(thoughts.link)),
-        gte(thoughts.day, windowStart)
-      )
-    )
+    .where(or(isNotNull(thoughts.note), isNotNull(thoughts.link)))
     .orderBy(desc(thoughts.createdAt))
-    .limit(TIMELINE_LIMIT);
+    .limit(limit)
+    .offset(offset);
 }
