@@ -47,15 +47,27 @@ export function isPrimarySensitiveEmail(
   return email.toLowerCase() === getPrimarySensitiveEmail();
 }
 
+/**
+ * Everyone allowed to write thoughts. THOUGHTS_AUTHOR_EMAILS takes a
+ * comma-separated list; the older singular name still works. With neither
+ * set it falls back to the first allowed email, so a misconfiguration grants
+ * nothing extra rather than opening writes to every signed-in viewer.
+ */
+export function getAuthorEmails(): string[] {
+  const explicit = parseEmailList(
+    process.env.THOUGHTS_AUTHOR_EMAILS ?? process.env.THOUGHTS_AUTHOR_EMAIL
+  );
+  if (explicit.length > 0) return explicit;
+  const first = getAllowedEmails()[0];
+  return first ? [first] : [];
+}
+
+/** The first author, used where a single address is needed (alert recipient). */
 export function getAuthorEmail(): string | null {
-  const explicit = (process.env.THOUGHTS_AUTHOR_EMAIL ?? "").trim().toLowerCase();
-  if (explicit) return explicit;
-  return getAllowedEmails()[0] ?? null;
+  return getAuthorEmails()[0] ?? null;
 }
 
 export function isAuthorEmail(email: string | null | undefined): boolean {
   if (!email) return false;
-  const author = getAuthorEmail();
-  if (!author) return false;
-  return email.toLowerCase() === author;
+  return getAuthorEmails().includes(email.toLowerCase());
 }

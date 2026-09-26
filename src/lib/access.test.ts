@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   getAllowedEmails,
   getAuthorEmail,
+  getAuthorEmails,
   getPrimarySensitiveEmail,
   isAuthorEmail,
   isPrimarySensitiveEmail,
@@ -11,6 +12,7 @@ import {
 const originalSensitiveEmails = process.env.SENSITIVE_EMAILS;
 const originalAllowedEmails = process.env.ALLOWED_EMAILS;
 const originalAuthorEmail = process.env.THOUGHTS_AUTHOR_EMAIL;
+const originalAuthorEmails = process.env.THOUGHTS_AUTHOR_EMAILS;
 
 function restore(name: string, value: string | undefined) {
   if (value === undefined) {
@@ -24,6 +26,7 @@ afterEach(() => {
   restore("SENSITIVE_EMAILS", originalSensitiveEmails);
   restore("ALLOWED_EMAILS", originalAllowedEmails);
   restore("THOUGHTS_AUTHOR_EMAIL", originalAuthorEmail);
+  restore("THOUGHTS_AUTHOR_EMAILS", originalAuthorEmails);
 });
 
 describe("sensitive email ownership", () => {
@@ -117,5 +120,55 @@ describe("author helpers", () => {
     delete process.env.ALLOWED_EMAILS;
     expect(getAuthorEmail()).toBeNull();
     expect(isAuthorEmail("anyone@example.com")).toBe(false);
+  });
+});
+
+describe("multiple authors", () => {
+  it("allows every address in THOUGHTS_AUTHOR_EMAILS", () => {
+    process.env.THOUGHTS_AUTHOR_EMAILS =
+      "andrew@example.com, second@example.com";
+    delete process.env.THOUGHTS_AUTHOR_EMAIL;
+    expect(getAuthorEmails()).toEqual([
+      "andrew@example.com",
+      "second@example.com",
+    ]);
+    expect(isAuthorEmail("ANDREW@example.com")).toBe(true);
+    expect(isAuthorEmail("second@example.com")).toBe(true);
+    expect(isAuthorEmail("her@example.com")).toBe(false);
+  });
+
+  it("survives a quoted list, like the single-value form does", () => {
+    process.env.THOUGHTS_AUTHOR_EMAILS =
+      '"first@example.com, second@example.com"';
+    delete process.env.THOUGHTS_AUTHOR_EMAIL;
+    expect(isAuthorEmail("first@example.com")).toBe(true);
+    expect(isAuthorEmail("second@example.com")).toBe(true);
+  });
+
+  it("still honours the older singular variable", () => {
+    delete process.env.THOUGHTS_AUTHOR_EMAILS;
+    process.env.THOUGHTS_AUTHOR_EMAIL = "only@example.com";
+    expect(getAuthorEmails()).toEqual(["only@example.com"]);
+    expect(isAuthorEmail("only@example.com")).toBe(true);
+  });
+
+  it("prefers the plural variable when both are set", () => {
+    process.env.THOUGHTS_AUTHOR_EMAILS = "a@example.com,b@example.com";
+    process.env.THOUGHTS_AUTHOR_EMAIL = "legacy@example.com";
+    expect(isAuthorEmail("b@example.com")).toBe(true);
+    expect(isAuthorEmail("legacy@example.com")).toBe(false);
+  });
+
+  it("grants only the first allowed email when nothing is configured", () => {
+    delete process.env.THOUGHTS_AUTHOR_EMAILS;
+    delete process.env.THOUGHTS_AUTHOR_EMAIL;
+    process.env.ALLOWED_EMAILS = "me@example.com,her@example.com";
+    expect(getAuthorEmails()).toEqual(["me@example.com"]);
+    expect(isAuthorEmail("her@example.com")).toBe(false);
+  });
+
+  it("getAuthorEmail returns the first for alert routing", () => {
+    process.env.THOUGHTS_AUTHOR_EMAILS = "a@example.com,b@example.com";
+    expect(getAuthorEmail()).toBe("a@example.com");
   });
 });
