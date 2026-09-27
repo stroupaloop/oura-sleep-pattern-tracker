@@ -7,10 +7,6 @@
     {
       "path": "/api/cron/hr-sync",
       "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/cron/thoughts",
-      "schedule": "0 * * * *"
     }
   ]
 }

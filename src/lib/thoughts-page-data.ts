@@ -109,9 +109,10 @@ export async function loadNotePreviews(): Promise<NotePreview[]> {
 }
 
 /**
- * Full note content, newest first. Only ever called from an authenticated
- * render. Paginated over every note rather than the grid window, so older
- * entries stay reachable as the list grows.
+ * Every entry, newest first: written notes and the bare "thought of you" pings
+ * alike, so the feed shows each time she crossed your mind and exactly when.
+ * Only ever called from an authenticated render. Paginated over the whole log
+ * rather than the grid window, so older entries stay reachable as it grows.
  */
 export async function loadTimeline(
   limit: number,
@@ -125,7 +126,6 @@ export async function loadTimeline(
       createdAt: thoughts.createdAt,
     })
     .from(thoughts)
-    .where(or(isNotNull(thoughts.note), isNotNull(thoughts.link)))
     .orderBy(desc(thoughts.createdAt))
     .limit(limit)
     .offset(offset);

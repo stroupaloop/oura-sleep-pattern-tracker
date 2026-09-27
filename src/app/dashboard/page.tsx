@@ -28,7 +28,7 @@ export default async function DashboardPage({
   const isAuthor = isAuthorEmail(session?.user?.email);
 
   const overview = await loadThoughtOverview();
-  const page = buildPageModel(params.page, overview.noteCount);
+  const page = buildPageModel(params.page, overview.total);
   const timeline = await loadTimeline(page.limit, page.offset);
 
   return (
@@ -71,10 +71,7 @@ export default async function DashboardPage({
 
       <section className="space-y-3">
         <h2 className="text-sm font-medium text-muted-foreground">
-          The notes
-          {overview.noteCount > 0 && (
-            <span className="ml-1.5 tabular-nums">({overview.noteCount})</span>
-          )}
+          Every time
         </h2>
         {isAuthor ? (
           <EditableThoughtTimeline entries={timeline} />

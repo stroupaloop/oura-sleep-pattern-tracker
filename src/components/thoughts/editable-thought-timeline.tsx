@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Link2, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Heart, Link2, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -188,52 +188,59 @@ export function EditableThoughtTimeline({
 
   if (entries.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No notes yet — just the count.
-      </p>
+      <p className="text-sm text-muted-foreground">Nothing logged yet.</p>
     );
   }
 
   return (
     <ul className="space-y-2">
-      {entries.map((entry) => (
-        <li key={entry.id} className="rounded-lg border bg-card px-3 py-2.5">
-          {editing === entry.id ? (
-            <EntryEditor entry={entry} onDone={() => setEditing(null)} />
-          ) : (
-            <>
-              <div className="flex items-start justify-between gap-2">
-                <div className="text-[11px] text-muted-foreground">
-                  {formatWhen(entry.createdAt)}
+      {entries.map((entry) => {
+        const isPing = !entry.note && !entry.link;
+        return (
+          <li key={entry.id} className="rounded-lg border bg-card px-3 py-2.5">
+            {editing === entry.id ? (
+              <EntryEditor entry={entry} onDone={() => setEditing(null)} />
+            ) : (
+              <>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-[11px] text-muted-foreground">
+                    {formatWhen(entry.createdAt)}
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditing(entry.id)}
+                    className="-mt-1 h-7 gap-1.5 px-2 text-muted-foreground"
+                  >
+                    <Pencil className="size-3" />
+                    Edit
+                  </Button>
                 </div>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setEditing(entry.id)}
-                  className="-mt-1 h-7 gap-1.5 px-2 text-muted-foreground"
-                >
-                  <Pencil className="size-3" />
-                  Edit
-                </Button>
-              </div>
-              {entry.note && (
-                <p className="mt-1 text-sm whitespace-pre-wrap">{entry.note}</p>
-              )}
-              {entry.link && (
-                <a
-                  href={entry.link}
-                  target="_blank"
-                  rel="noreferrer noopener"
-                  className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:underline"
-                >
-                  <Link2 className="size-3.5" />
-                  {hostOf(entry.link)}
-                </a>
-              )}
-            </>
-          )}
-        </li>
-      ))}
+                {isPing && (
+                  <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <Heart className="size-3.5" />
+                    Thought of you
+                  </p>
+                )}
+                {entry.note && (
+                  <p className="mt-1 text-sm whitespace-pre-wrap">{entry.note}</p>
+                )}
+                {entry.link && (
+                  <a
+                    href={entry.link}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:underline"
+                  >
+                    <Link2 className="size-3.5" />
+                    {hostOf(entry.link)}
+                  </a>
+                )}
+              </>
+            )}
+          </li>
+        );
+      })}
     </ul>
   );
 }
