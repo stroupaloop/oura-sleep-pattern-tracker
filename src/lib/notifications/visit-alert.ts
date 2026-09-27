@@ -37,14 +37,23 @@ export function describeDevice(userAgent: string | null): string {
   return "Unknown device";
 }
 
+/** Vercel percent-encodes geo headers, so "New York City" arrives as "New%20York%20City". */
+function decodeGeo(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 export function describeLocation(input: {
   city: string | null;
   region: string | null;
   country: string | null;
 }): string {
-  const parts = [input.city, input.region, input.country].filter(
-    (part): part is string => Boolean(part && part.trim())
-  );
+  const parts = [input.city, input.region, input.country]
+    .map((part) => (part ? decodeGeo(part).trim() : ""))
+    .filter(Boolean);
   if (parts.length === 0) return "Unknown location";
   return parts.join(", ");
 }
@@ -73,7 +82,7 @@ export function describeVisitor(input: {
   return `Anonymous #${shortVisitorId(input.visitorId)}`;
 }
 
-function formatEt(unixSeconds: number): string {
+export function formatEt(unixSeconds: number): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: APP_TIME_ZONE,
     weekday: "short",
@@ -85,7 +94,7 @@ function formatEt(unixSeconds: number): string {
   }).format(new Date(unixSeconds * 1000));
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -93,7 +102,7 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function row(label: string, value: string): string {
+export function row(label: string, value: string): string {
   return `<tr><td style="padding:4px 12px 4px 0;color:#888;white-space:nowrap">${escapeHtml(
     label
   )}</td><td style="padding:4px 0">${escapeHtml(value)}</td></tr>`;

@@ -1,8 +1,14 @@
 import NextAuth from "next-auth";
 import Resend from "next-auth/providers/resend";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
+import { headers } from "next/headers";
 import { sendEmail } from "@/lib/notifications/email";
 import { buildSignInEmail } from "@/lib/notifications/signin-email";
+import {
+  buildSignInAlert,
+  shouldAlertSignIn,
+  signInAlertsEnabled,
+} from "@/lib/notifications/signin-alert";
 import { db } from "@/lib/db";
 import {
   users,
@@ -12,6 +18,8 @@ import {
 } from "@/lib/db/schema";
 import {
   getAllowedEmails,
+  getAuthorEmail,
+  isAuthorEmail,
   isSensitiveEmail,
   isPrimarySensitiveEmail,
 } from "@/lib/access";
@@ -34,6 +42,58 @@ export function isPrimarySensitiveUser(
   email: string | null | undefined
 ): boolean {
   return isPrimarySensitiveEmail(email);
+}
+
+async function requestHeadersOrNull() {
+  try {
+    return await headers();
+  } catch {
+    return null;
+  }
+}
+
+function headerValue(
+  source: { get(name: string): string | null } | null,
+  name: string
+): string | null {
+  const value = source?.get(name)?.trim();
+  return value ? value : null;
+}
+
+/**
+ * Emails the author when anyone else signs in. Visit alerts cannot stand in
+ * for this: their per-visitor throttle swallows a signed-in visit that follows
+ * an anonymous one inside the window.
+ */
+async function sendSignInAlert(
+  email: string | null | undefined,
+  isNewUser: boolean
+) {
+  const enabled = signInAlertsEnabled({
+    flag: process.env.SIGNIN_ALERTS_ENABLED,
+    vercelEnv: process.env.VERCEL_ENV,
+    nodeEnv: process.env.NODE_ENV,
+  });
+  if (!shouldAlertSignIn({ enabled, email, isAuthor: isAuthorEmail(email) })) {
+    return;
+  }
+  const recipient = process.env.VISIT_ALERT_TO ?? getAuthorEmail();
+  if (!email || !recipient) return;
+
+  // The event fires inside the magic-link callback request, so these are the
+  // headers of the browser that opened the link.
+  const requestHeaders = await requestHeadersOrNull();
+  const alert = buildSignInAlert({
+    email,
+    isNewUser,
+    city: headerValue(requestHeaders, "x-vercel-ip-city"),
+    region: headerValue(requestHeaders, "x-vercel-ip-country-region"),
+    country: headerValue(requestHeaders, "x-vercel-ip-country"),
+    userAgent: headerValue(requestHeaders, "user-agent"),
+    createdAt: Math.floor(Date.now() / 1000),
+    siteUrl: process.env.NEXTAUTH_URL ?? null,
+  });
+  await sendEmail(recipient, alert.subject, alert.html, { text: alert.text });
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -64,6 +124,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         return process.env.NODE_ENV !== "production";
       }
       return allowedEmails.includes(user.email.toLowerCase());
+    },
+  },
+  events: {
+    async signIn({ user, isNewUser }) {
+      // A failed alert must not fail the sign-in.
+      await sendSignInAlert(user.email, Boolean(isNewUser)).catch((error) => {
+        console.error("Failed to send sign-in alert:", error);
+      });
     },
   },
   cookies: {

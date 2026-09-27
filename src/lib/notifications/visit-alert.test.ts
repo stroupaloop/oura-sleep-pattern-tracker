@@ -51,6 +51,18 @@ describe("describeLocation", () => {
       describeLocation({ city: null, region: null, country: null })
     ).toBe("Unknown location");
   });
+
+  it("decodes the percent-encoded city Vercel sends", () => {
+    expect(
+      describeLocation({ city: "Jersey%20City", region: "NJ", country: "US" })
+    ).toBe("Jersey City, NJ, US");
+  });
+
+  it("keeps a value that is not valid percent-encoding", () => {
+    expect(
+      describeLocation({ city: "100%", region: null, country: null })
+    ).toBe("100%");
+  });
 });
 
 describe("ordinal", () => {
