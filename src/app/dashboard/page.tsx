@@ -39,7 +39,7 @@ export default async function DashboardPage({
             Thinking of you
           </h1>
           <p className="text-sm text-muted-foreground">
-            Every time she crossed your mind, and when.
+            Every time you crossed my mind, and when.
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center gap-1">
