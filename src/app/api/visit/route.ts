@@ -11,7 +11,7 @@ import { sendEmail } from "@/lib/notifications/email";
 
 const VISITOR_COOKIE = "sv_id";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
-const DEFAULT_WINDOW_MINUTES = 30;
+const DEFAULT_WINDOW_MINUTES = 5;
 
 function firstHeaderValue(value: string | null): string | null {
   if (!value) return null;
