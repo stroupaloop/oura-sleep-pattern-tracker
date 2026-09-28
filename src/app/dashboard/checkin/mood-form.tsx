@@ -521,6 +521,22 @@ export function MoodForm({
 
               <Card>
                 <CardHeader className="pb-2">
+                  <CardTitle className="text-base">Notes</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <textarea
+                    aria-label="Notes"
+                    placeholder="Any notes? (optional)"
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    className="w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground"
+                    rows={4}
+                  />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
                   <CardTitle className="text-base">Tags</CardTitle>
                 </CardHeader>
                 <CardContent>
@@ -544,13 +560,6 @@ export function MoodForm({
                       </button>
                     ))}
                   </div>
-                  <textarea
-                    placeholder="Any notes? (optional)"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="mt-3 w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground"
-                    rows={4}
-                  />
                 </CardContent>
               </Card>
 
