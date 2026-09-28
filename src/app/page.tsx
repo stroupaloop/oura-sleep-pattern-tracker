@@ -62,7 +62,7 @@ export default async function Home() {
           lastThought={overview.lastThought}
         />
 
-        <ThoughtGrid grid={overview.grid} total={overview.total} />
+        <ThoughtGrid grid={overview.grid} />
 
         <section className="space-y-3">
           <h2 className="text-sm font-medium text-muted-foreground">

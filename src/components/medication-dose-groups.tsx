@@ -14,6 +14,8 @@ interface MedicationDoseGroupsProps {
   checks: MedCheckMap;
   disabled?: boolean;
   compact?: boolean;
+  /** "inline" puts each time of day on one line, for narrow spots. */
+  layout?: "rows" | "inline";
   onCheckedChange: (dose: DoseEntry, checked: boolean) => void;
 }
 
@@ -39,12 +41,47 @@ export function MedicationDoseGroups({
   checks,
   disabled = false,
   compact = false,
+  layout = "rows",
   onCheckedChange,
 }: MedicationDoseGroupsProps) {
   const groups = buildMedicationDoseGroups(medications);
   const rowPadding = compact ? "py-0.5" : "py-1";
 
   if (groups.length === 0) return null;
+
+  if (layout === "inline") {
+    return (
+      <div className="space-y-1.5">
+        {groups.map((group) => (
+          <div key={group.key} className="flex min-w-0 items-baseline gap-3">
+            <span className="w-16 shrink-0 text-xs text-muted-foreground">
+              {group.label}
+            </span>
+            <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1">
+              {group.doses.map((dose) => (
+                <label
+                  key={`${dose.medId}-${dose.slotKey}`}
+                  title={dose.dosage ?? undefined}
+                  className="inline-flex cursor-pointer items-center gap-1.5 text-sm"
+                >
+                  <input
+                    type="checkbox"
+                    checked={checks[dose.medId]?.[dose.slotKey] ?? false}
+                    onChange={(event) =>
+                      onCheckedChange(dose, event.target.checked)
+                    }
+                    disabled={disabled}
+                    className="h-3.5 w-3.5 shrink-0 rounded border-muted-foreground"
+                  />
+                  {dose.medName}
+                </label>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">

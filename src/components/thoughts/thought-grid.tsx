@@ -31,7 +31,7 @@ function describeCell(day: string, count: number): string {
   return `${count} ${count === 1 ? "thought" : "thoughts"} on ${when}`;
 }
 
-export function ThoughtGrid({ grid, total }: { grid: GridModel; total: number }) {
+export function ThoughtGrid({ grid }: { grid: GridModel }) {
   const [hovered, setHovered] = useState<{
     day: string;
     count: number;
@@ -117,10 +117,7 @@ export function ThoughtGrid({ grid, total }: { grid: GridModel; total: number })
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-4 pl-8 text-[11px] text-muted-foreground">
-        <span>
-          {total} {total === 1 ? "time" : "times"} in all
-        </span>
+      <div className="flex items-center justify-end gap-4 pl-8 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-[3px]">
           Less
           {RAMP.map((color, index) => (

@@ -12,10 +12,6 @@ export async function loadDailyLog(day: string) {
       .select({
         moodScore: dailyMood.moodScore,
         episodeState: dailyMood.episodeState,
-        energyScore: dailyMood.energyScore,
-        irritabilityScore: dailyMood.irritabilityScore,
-        anxietyScore: dailyMood.anxietyScore,
-        sleepSubjective: dailyMood.sleepSubjective,
         tags: dailyMood.tags,
         notes: dailyMood.notes,
       })
@@ -45,5 +41,3 @@ export async function loadDailyLog(day: string) {
   ]);
   return { mood, medications: trackedMeds, medLogs };
 }
-
-export type DailyLog = Awaited<ReturnType<typeof loadDailyLog>>;

@@ -50,6 +50,8 @@ interface DailyLogCardProps {
     notes: string | null;
   } | null;
   initialMedLogs: { medicationId: number; slot: string | null; taken: number }[];
+  /** A tighter layout for narrow spots such as the dashboard's side column. */
+  dense?: boolean;
 }
 
 type MedCheckMap = Record<number, Record<string, boolean>>;
@@ -111,6 +113,7 @@ export function DailyLogCard({
   medications,
   initialMood,
   initialMedLogs,
+  dense = false,
 }: DailyLogCardProps) {
   const [selectedDay, setSelectedDay] = useState(initialDay);
   const [moodScore, setMoodScore] = useState<number | null>(
@@ -312,6 +315,7 @@ export function DailyLogCard({
   const todayStr = getTodayET();
   const isToday = selectedDay === todayStr;
   const dayMeds = medsForDay(medications, selectedDay);
+  const selectedMood = MOODS.find((m) => m.value === moodScore);
 
   return (
     <Card>
@@ -358,7 +362,12 @@ export function DailyLogCard({
       </CardHeader>
       <CardContent className="space-y-3">
         <div>
-          <p className="text-xs text-muted-foreground mb-1.5">Mood</p>
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Mood
+            {dense && selectedMood && (
+              <span className="text-foreground"> · {selectedMood.label}</span>
+            )}
+          </p>
           <div
             className="flex items-start gap-1.5"
             role="group"
@@ -373,7 +382,7 @@ export function DailyLogCard({
                     disabled={loading}
                     aria-label={`${m.value > 0 ? "+" : ""}${m.value}: ${m.label}`}
                     aria-pressed={isSelected}
-                    className={`w-9 h-9 rounded-md text-xs font-bold transition-all ${m.color} ${
+                    className={`${dense ? "w-8 h-8" : "w-9 h-9"} rounded-md text-xs font-bold transition-all ${m.color} ${
                       isSelected
                         ? "opacity-100 ring-2 ring-white ring-offset-1 ring-offset-background scale-110"
                         : "opacity-50 hover:opacity-80"
@@ -381,7 +390,7 @@ export function DailyLogCard({
                   >
                     {m.value > 0 ? `+${m.value}` : m.value}
                   </button>
-                  {isSelected && (
+                  {isSelected && !dense && (
                     <span className="text-[10px] text-muted-foreground whitespace-nowrap">
                       {m.label}
                     </span>
@@ -400,6 +409,7 @@ export function DailyLogCard({
               checks={medStates}
               disabled={loading}
               compact
+              layout={dense ? "inline" : "rows"}
               onCheckedChange={(dose, checked) =>
                 saveMedSlot(dose.medId, dose.slotKey, checked)
               }
@@ -422,7 +432,7 @@ export function DailyLogCard({
           </p>
         )}
 
-        <div className="space-y-4 pt-1">
+        <div className={dense ? "space-y-3" : "space-y-4 pt-1"}>
           {moodScore == null && (
             <p className="text-xs text-muted-foreground">
               Choose a mood before adding an episode state, notes, or tags.
@@ -441,7 +451,7 @@ export function DailyLogCard({
                   onClick={() => saveEpisode(state.value)}
                   disabled={loading || moodScore == null}
                   aria-pressed={episodeState === state.value}
-                  className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
+                  className={`${dense ? "px-3 py-1" : "px-3.5 py-1.5"} text-sm font-medium rounded-full transition-colors ${
                     episodeState === state.value
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:text-foreground"
@@ -463,7 +473,7 @@ export function DailyLogCard({
               onBlur={saveNotes}
               disabled={loading || moodScore == null}
               className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
-              rows={4}
+              rows={dense ? 3 : 4}
             />
           </div>
           <div>

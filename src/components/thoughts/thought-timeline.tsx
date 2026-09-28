@@ -34,20 +34,20 @@ export function ThoughtTimeline({ entries }: { entries: TimelineEntry[] }) {
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="divide-y rounded-lg border bg-card">
       {entries.map((entry) => {
         const isPing = !entry.note && !entry.link;
         return (
-          <li key={entry.id} className="rounded-lg border bg-card px-3 py-2.5">
-            <div className="text-[11px] text-muted-foreground">
-              {formatWhen(entry.createdAt)}
+          <li key={entry.id} className="px-3 py-2">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{formatWhen(entry.createdAt)}</span>
+              {isPing && (
+                <span className="inline-flex items-center gap-1">
+                  <Heart className="size-3" />
+                  Thought of you
+                </span>
+              )}
             </div>
-            {isPing && (
-              <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                <Heart className="size-3.5" />
-                Thought of you
-              </p>
-            )}
             {entry.note && (
               <p className="mt-1 text-sm whitespace-pre-wrap">{entry.note}</p>
             )}

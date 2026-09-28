@@ -193,35 +193,35 @@ export function EditableThoughtTimeline({
   }
 
   return (
-    <ul className="space-y-2">
+    <ul className="divide-y rounded-lg border bg-card">
       {entries.map((entry) => {
         const isPing = !entry.note && !entry.link;
         return (
-          <li key={entry.id} className="rounded-lg border bg-card px-3 py-2.5">
+          <li key={entry.id} className="px-3 py-2">
             {editing === entry.id ? (
               <EntryEditor entry={entry} onDone={() => setEditing(null)} />
             ) : (
               <>
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-[11px] text-muted-foreground">
-                    {formatWhen(entry.createdAt)}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                    <span>{formatWhen(entry.createdAt)}</span>
+                    {isPing && (
+                      <span className="inline-flex items-center gap-1">
+                        <Heart className="size-3" />
+                        Thought of you
+                      </span>
+                    )}
                   </div>
                   <Button
                     size="sm"
                     variant="ghost"
                     onClick={() => setEditing(entry.id)}
-                    className="-mt-1 h-7 gap-1.5 px-2 text-muted-foreground"
+                    className="-my-1 h-7 shrink-0 gap-1.5 px-2 text-muted-foreground"
                   >
                     <Pencil className="size-3" />
                     Edit
                   </Button>
                 </div>
-                {isPing && (
-                  <p className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground">
-                    <Heart className="size-3.5" />
-                    Thought of you
-                  </p>
-                )}
                 {entry.note && (
                   <p className="mt-1 text-sm whitespace-pre-wrap">{entry.note}</p>
                 )}

@@ -8,10 +8,8 @@ import { getTodayET } from "@/lib/date-utils";
 import { loadDailyLog } from "@/lib/daily-log-data";
 import { loadThoughtOverview, loadTimeline } from "@/lib/thoughts-page-data";
 import { buildPageModel } from "@/lib/pagination";
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { DailyLogCard } from "@/components/daily-log-card";
-import { DailyLogSummary } from "@/components/daily-log-summary";
 import { StatTiles } from "@/components/thoughts/stat-tiles";
 import { ThoughtGrid } from "@/components/thoughts/thought-grid";
 import { ThoughtComposer } from "@/components/thoughts/thought-composer";
@@ -21,9 +19,8 @@ import { NotesPagination } from "@/components/thoughts/notes-pagination";
 
 /**
  * The signed-in home, in two halves: the thoughts written to her, and the
- * day's log she writes back. She gets the log itself; the author gets a
- * read-only summary of it. The surrounding layout already enforces
- * authentication.
+ * day's log, which both of them can fill in. The surrounding layout already
+ * enforces authentication.
  */
 export default async function DashboardPage({
   searchParams,
@@ -43,7 +40,7 @@ export default async function DashboardPage({
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-8">
-      <div className="min-w-0 space-y-6">
+      <div className="min-w-0 space-y-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
@@ -74,9 +71,10 @@ export default async function DashboardPage({
           thisWeek={overview.thisWeek}
           streak={overview.streak}
           lastThought={overview.lastThought}
+          compact
         />
 
-        <ThoughtGrid grid={overview.grid} total={overview.total} />
+        <ThoughtGrid grid={overview.grid} />
 
         {isAuthor && <ThoughtComposer />}
 
@@ -93,24 +91,16 @@ export default async function DashboardPage({
         </section>
       </div>
 
-      {/* On a phone her log comes first, since it is the part she acts on
-          each day; on a wide screen it sits beside the thoughts, in view. */}
-      <aside
-        className={cn(
-          "lg:sticky lg:top-6 lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto",
-          !isAuthor && "order-first lg:order-none"
-        )}
-      >
-        {isAuthor ? (
-          <DailyLogSummary day={today} {...dailyLog} />
-        ) : (
-          <DailyLogCard
-            initialDay={today}
-            medications={dailyLog.medications}
-            initialMood={dailyLog.mood}
-            initialMedLogs={dailyLog.medLogs}
-          />
-        )}
+      {/* She mostly opens this on her phone, so the log comes first there; on
+          a wide screen it sits beside the thoughts and stays in view. */}
+      <aside className="order-first lg:sticky lg:top-6 lg:order-none lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto">
+        <DailyLogCard
+          initialDay={today}
+          medications={dailyLog.medications}
+          initialMood={dailyLog.mood}
+          initialMedLogs={dailyLog.medLogs}
+          dense
+        />
       </aside>
     </div>
   );
