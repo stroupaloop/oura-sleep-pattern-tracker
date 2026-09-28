@@ -7,28 +7,47 @@ const MEDS = [
   { id: 2, name: "Lithium", dosage: null, frequency: "daily", doseSchedule: '["evening"]', startDate: null, endDate: null },
 ];
 
+const MOOD = {
+  moodScore: 2,
+  episodeState: "depressive",
+  energyScore: 4,
+  irritabilityScore: null,
+  anxietyScore: null,
+  sleepSubjective: 2,
+  tags: '["poor_sleep"]',
+  notes: "I watched the movie\nand thought of us",
+};
+
 describe("DailyLogSummary", () => {
-  it("summarises the day's log without showing the note itself", () => {
+  it("shows the whole log, note included", () => {
     const html = renderToStaticMarkup(
       <DailyLogSummary
         day="2026-09-27"
-        mood={{
-          moodScore: 2,
-          episodeState: "depressive",
-          tags: '["poor_sleep"]',
-          notes: "private words",
-        }}
+        mood={MOOD}
         medications={MEDS}
         medLogs={[{ medicationId: 1, slot: "morning", taken: 1 }]}
       />
     );
     expect(html).toContain("+2");
     expect(html).toContain("Depressive");
+    expect(html).toContain("Energy 4/5 · Sleep quality 2/5");
+    expect(html).toContain("I watched the movie\nand thought of us");
     expect(html).toContain("Lamotrigine (Morning)");
     expect(html).toContain("Lithium (Evening)");
     expect(html).toContain("poor sleep");
-    expect(html).toContain("Added");
-    expect(html).not.toContain("private words");
+  });
+
+  it("escapes the note rather than rendering it as markup", () => {
+    const html = renderToStaticMarkup(
+      <DailyLogSummary
+        day="2026-09-27"
+        mood={{ ...MOOD, notes: "<script>alert(1)</script>" }}
+        medications={MEDS}
+        medLogs={[]}
+      />
+    );
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 
   it("says when nothing has been logged yet", () => {
@@ -38,5 +57,6 @@ describe("DailyLogSummary", () => {
     expect(html).toContain("Not logged yet");
     expect(html).toContain("None marked");
     expect(html).not.toContain("Episode");
+    expect(html).not.toContain("Note");
   });
 });

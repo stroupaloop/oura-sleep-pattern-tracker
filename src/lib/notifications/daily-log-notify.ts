@@ -5,7 +5,7 @@ import { dailyMood, medications, medicationLogs } from "@/lib/db/schema";
 import { getAuthorEmail, isAuthorEmail } from "@/lib/access";
 import { getTodayET } from "@/lib/date-utils";
 import { summarizeDoses } from "@/lib/dose-summary";
-import { parseMoodTags } from "@/lib/mood-tags";
+import { parseMoodTags } from "@/lib/daily-log-format";
 import { sendEmail } from "@/lib/notifications/email";
 import {
   DAILY_LOG_QUIET_SECONDS,

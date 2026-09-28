@@ -1,6 +1,11 @@
 import { isProductionDeployment } from "@/lib/visit-alert-policy";
 import { EPISODE_STATES } from "@/lib/episode-states";
 import type { DoseSummary } from "@/lib/dose-summary";
+import {
+  formatMoodScore,
+  formatMoodTags,
+  formatOptionalScores,
+} from "@/lib/daily-log-format";
 import { escapeHtml, row } from "@/lib/notifications/visit-alert";
 
 /** How long the log must sit untouched before the alert goes out. */
@@ -79,30 +84,16 @@ export function buildDailyLogAlert(input: DailyLogAlertInput): DailyLogAlert {
   const episode =
     EPISODE_STATES.find((state) => state.value === input.episodeState)
       ?.label ?? "Not set";
-  const scoreEntries: [string, number | null][] = [
-    ["Energy", input.energyScore],
-    ["Irritability", input.irritabilityScore],
-    ["Anxiety", input.anxietyScore],
-    ["Sleep quality", input.sleepSubjective],
-  ];
-  const scores = scoreEntries
-    .filter((entry): entry is [string, number] => entry[1] !== null)
-    .map(([label, value]) => `${label} ${value}/5`);
-  const mood = input.moodScore > 0 ? `+${input.moodScore}` : `${input.moodScore}`;
+  const scores = formatOptionalScores(input);
 
   const details: [string, string][] = [
     ["Who", input.email],
-    ["Mood", `${mood} (scale -3 to +3)`],
+    ["Mood", `${formatMoodScore(input.moodScore)} (scale -3 to +3)`],
     ["Episode state", episode],
     ...(scores.length > 0
       ? [["Also", scores.join(" · ")] as [string, string]]
       : []),
-    [
-      "Tags",
-      input.tags.length > 0
-        ? input.tags.map((tag) => tag.replace(/_/g, " ")).join(", ")
-        : "None",
-    ],
+    ["Tags", formatMoodTags(input.tags) || "None"],
     ["Medications taken", input.doses.taken.join(", ") || "None marked"],
     ...(input.doses.notTaken.length > 0
       ? [["Not marked taken", input.doses.notTaken.join(", ")] as [string, string]]
