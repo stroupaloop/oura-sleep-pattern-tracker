@@ -4,6 +4,10 @@ import { dailyMood } from "@/lib/db/schema";
 import { eq, gte, lte, and } from "drizzle-orm";
 import { requireApiUser, unauthorizedResponse } from "@/lib/api-auth";
 import { parseMoodWrite } from "@/lib/mood-write";
+import { queueDailyLogAlert } from "@/lib/notifications/daily-log-notify";
+
+// The daily-log alert waits out a quiet period after the response is sent.
+export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
   const user = await requireApiUser();
@@ -48,6 +52,8 @@ export async function POST(req: NextRequest) {
         updatedAt: now,
       });
     }
+
+    queueDailyLogAlert({ day, savedAt: now, email: user.email });
 
     return NextResponse.json({ success: true, savedAt: new Date(now * 1000).toISOString() });
   } catch (error) {
