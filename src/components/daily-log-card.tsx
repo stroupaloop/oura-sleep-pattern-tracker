@@ -422,16 +422,16 @@ export function DailyLogCard({
           </p>
         )}
 
-        <div className="space-y-3 pt-1">
+        <div className="space-y-4 pt-1">
           {moodScore == null && (
             <p className="text-xs text-muted-foreground">
-              Choose a mood before adding an episode state, tags, or notes.
+              Choose a mood before adding an episode state, notes, or tags.
             </p>
           )}
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Episode state</p>
+            <p className="text-sm text-muted-foreground mb-2">Episode state</p>
             <div
-              className="flex flex-wrap gap-1.5"
+              className="flex flex-wrap gap-2"
               role="group"
               aria-label="Optional episode-state self-report"
             >
@@ -441,7 +441,7 @@ export function DailyLogCard({
                   onClick={() => saveEpisode(state.value)}
                   disabled={loading || moodScore == null}
                   aria-pressed={episodeState === state.value}
-                  className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
+                  className={`px-3.5 py-1.5 text-sm font-medium rounded-full transition-colors ${
                     episodeState === state.value
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-muted-foreground hover:text-foreground"
@@ -451,6 +451,20 @@ export function DailyLogCard({
                 </button>
               ))}
             </div>
+          </div>
+          {/* Notes sit between the two rows of chips so episode state and
+              tags do not read as one list. */}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Notes</p>
+            <textarea
+              placeholder="Any notes? (optional)"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={saveNotes}
+              disabled={loading || moodScore == null}
+              className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
+              rows={4}
+            />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1.5">Tags</p>
@@ -471,18 +485,6 @@ export function DailyLogCard({
                 </button>
               ))}
             </div>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Notes</p>
-            <textarea
-              placeholder="Any notes? (optional)"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              onBlur={saveNotes}
-              disabled={loading || moodScore == null}
-              className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
-              rows={4}
-            />
           </div>
         </div>
       </CardContent>
