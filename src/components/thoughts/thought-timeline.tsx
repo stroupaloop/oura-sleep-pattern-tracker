@@ -6,6 +6,8 @@ export interface TimelineEntry {
   note: string | null;
   link: string | null;
   createdAt: number;
+  /** Times a reader has opened the link; shown only to authors. */
+  linkClicks?: number;
 }
 
 function formatWhen(unixSeconds: number): string {
@@ -53,7 +55,7 @@ export function ThoughtTimeline({ entries }: { entries: TimelineEntry[] }) {
             )}
             {entry.link && (
               <a
-                href={entry.link}
+                href={`/api/thoughts/${entry.id}/link`}
                 target="_blank"
                 rel="noreferrer noopener"
                 className="mt-1.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:underline"

@@ -120,6 +120,13 @@
       "when": 1790391085664,
       "tag": "0016_thought_edits",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "6",
+      "when": 1790619470434,
+      "tag": "0017_thought_link_clicks",
+      "breakpoints": true
     }
   ]
 }

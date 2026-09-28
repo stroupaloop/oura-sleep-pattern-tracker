@@ -2,6 +2,7 @@ import { desc, isNotNull, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { thoughts } from "@/lib/db/schema";
 import { getNowUnixSeconds, getTodayET, shiftIsoDay } from "@/lib/date-utils";
+import { loadLinkClickCounts } from "@/lib/link-clicks";
 import {
   buildGrid,
   countSince,
@@ -118,7 +119,7 @@ export async function loadTimeline(
   limit: number,
   offset: number
 ): Promise<TimelineEntry[]> {
-  return db
+  const entries = await db
     .select({
       id: thoughts.id,
       note: thoughts.note,
@@ -129,4 +130,12 @@ export async function loadTimeline(
     .orderBy(desc(thoughts.createdAt))
     .limit(limit)
     .offset(offset);
+
+  const clicks = await loadLinkClickCounts(
+    entries.filter((entry) => entry.link).map((entry) => entry.id)
+  );
+  return entries.map((entry) => ({
+    ...entry,
+    linkClicks: clicks ? (clicks.get(entry.id) ?? 0) : undefined,
+  }));
 }
