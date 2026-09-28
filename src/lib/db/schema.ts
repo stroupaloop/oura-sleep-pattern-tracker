@@ -554,6 +554,25 @@ export const thoughts = sqliteTable(
   ]
 );
 
+/** One row per time a signed-in reader follows a thought's link. */
+export const thoughtLinkClicks = sqliteTable(
+  "thought_link_clicks",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    thoughtId: integer("thought_id").notNull(),
+    email: text("email"),
+    userAgent: text("user_agent"),
+    alerted: integer("alerted").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("thought_link_clicks_thought_idx").on(
+      table.thoughtId,
+      table.createdAt
+    ),
+  ]
+);
+
 export const siteVisits = sqliteTable(
   "site_visits",
   {

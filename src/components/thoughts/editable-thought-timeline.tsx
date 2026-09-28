@@ -14,6 +14,12 @@ import {
 } from "@/lib/date-utils";
 import type { TimelineEntry } from "@/components/thoughts/thought-timeline";
 
+function describeOpens(count: number): string {
+  if (count === 0) return "Not opened yet";
+  if (count === 1) return "Opened once";
+  return `Opened ${count} times`;
+}
+
 function formatWhen(unixSeconds: number): string {
   return new Intl.DateTimeFormat("en-US", {
     timeZone: APP_TIME_ZONE,
@@ -235,6 +241,11 @@ export function EditableThoughtTimeline({
                     <Link2 className="size-3.5" />
                     {hostOf(entry.link)}
                   </a>
+                )}
+                {entry.link && entry.linkClicks !== undefined && (
+                  <span className="ml-2 text-xs text-muted-foreground">
+                    · {describeOpens(entry.linkClicks)}
+                  </span>
                 )}
               </>
             )}
