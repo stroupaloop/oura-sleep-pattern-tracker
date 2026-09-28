@@ -17,6 +17,7 @@ import {
   slotsForMedication,
 } from "@/lib/medication-schedule";
 import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
+import { useDayRollover } from "@/lib/day-rollover";
 import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 import { EPISODE_STATES } from "@/lib/episode-states";
 import type { EpisodePatternSummary } from "@/lib/episode-pattern";
@@ -157,7 +158,16 @@ function medicationsForDay(
   });
 }
 
-export function MoodForm({
+/**
+ * Keyed by day, so when the page refreshes onto a new day the form starts
+ * over from that day's data instead of keeping yesterday's.
+ */
+export function MoodForm(props: MoodFormProps) {
+  useDayRollover(props.initialDay);
+  return <MoodFormForDay key={props.initialDay} {...props} />;
+}
+
+function MoodFormForDay({
   initialDay,
   existingMood,
   medications,

@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     new Date().toLocaleString("en-US", {
       timeZone: "America/New_York",
       hour: "numeric",
-      hour12: false,
+      hourCycle: "h23",
     }),
     10
   );
@@ -59,14 +59,17 @@ export async function GET(request: NextRequest) {
         if (recipient.type === "email") {
           await sendEmail(
             recipient.destination,
-            "Time for your daily check-in",
-            `<p>Hey! Don't forget your daily mood check-in.</p><p><a href="${checkinUrl}">Open Check-in</a></p>`
+            "Time for today's daily log",
+            `<p>Today's daily log hasn't been filled in yet. It only takes a minute.</p><p><a href="${checkinUrl}">Open the daily log</a></p>`,
+            {
+              text: `Today's daily log hasn't been filled in yet. It only takes a minute.\n\n${checkinUrl}`,
+            }
           );
           results.push({ type: "email", destination: recipient.destination, success: true });
         } else if (recipient.type === "sms") {
           await sendSms(
             recipient.destination,
-            `Time for your daily check-in! ${checkinUrl}`
+            `Time for today's daily log: ${checkinUrl}`
           );
           results.push({ type: "sms", destination: recipient.destination, success: true });
         }

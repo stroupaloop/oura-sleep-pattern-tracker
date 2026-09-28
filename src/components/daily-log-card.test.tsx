@@ -1,6 +1,10 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { DailyLogCard } from "./daily-log-card";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 const MEDS = [
   { id: 1, name: "Linzess", dosage: "290mcg", frequency: "daily", doseSchedule: '["morning"]', startDate: null, endDate: null },

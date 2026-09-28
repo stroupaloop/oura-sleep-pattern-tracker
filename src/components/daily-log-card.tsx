@@ -6,6 +6,7 @@ import { MedicationDoseGroups } from "@/components/medication-dose-groups";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AS_NEEDED_KEY } from "@/lib/medication-schedule";
 import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
+import { useDayRollover } from "@/lib/day-rollover";
 import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 import { EPISODE_STATES } from "@/lib/episode-states";
 
@@ -108,7 +109,16 @@ function parseTags(tags: string | null | undefined): string[] {
   }
 }
 
-export function DailyLogCard({
+/**
+ * Keyed by day, so when the page refreshes onto a new day the card starts
+ * over from that day's data instead of keeping yesterday's.
+ */
+export function DailyLogCard(props: DailyLogCardProps) {
+  useDayRollover(props.initialDay);
+  return <DailyLogCardForDay key={props.initialDay} {...props} />;
+}
+
+function DailyLogCardForDay({
   initialDay,
   medications,
   initialMood,
