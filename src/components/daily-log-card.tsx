@@ -3,10 +3,11 @@
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MedicationDoseGroups } from "@/components/medication-dose-groups";
-import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { AS_NEEDED_KEY } from "@/lib/medication-schedule";
 import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
+import { EPISODE_STATES } from "@/lib/episode-states";
 
 const MOODS = [
   { value: -3, label: "Very Low", color: "bg-blue-600" },
@@ -27,11 +28,6 @@ const TAGS = [
   "exercise",
   "social",
   "poor_sleep",
-];
-
-const ACTIVATION_EPISODE_OPTIONS = [
-  { value: "hypomanic", label: "Log hypomanic?" },
-  { value: "manic", label: "Log manic?" },
 ];
 
 interface Medication {
@@ -135,7 +131,6 @@ export function DailyLogCard({
     parseTags(initialMood?.tags)
   );
   const [notes, setNotes] = useState(initialMood?.notes ?? "");
-  const [showMore, setShowMore] = useState(false);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -427,94 +422,69 @@ export function DailyLogCard({
           </p>
         )}
 
-        {moodScore != null && moodScore <= -2 && (
+        <div className="space-y-3 pt-1">
+          {moodScore == null && (
+            <p className="text-xs text-muted-foreground">
+              Choose a mood before adding an episode state, tags, or notes.
+            </p>
+          )}
           <div>
-            <button
-              onClick={() => saveEpisode("depressive")}
-              disabled={loading}
-              aria-pressed={episodeState === "depressive"}
-              className={`px-3 py-1 text-xs rounded-full transition-all ${
-                episodeState === "depressive"
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-muted text-muted-foreground hover:text-foreground"
-              }`}
+            <p className="text-xs text-muted-foreground mb-1.5">Episode state</p>
+            <div
+              className="flex flex-wrap gap-1.5"
+              role="group"
+              aria-label="Optional episode-state self-report"
             >
-              Log as depressive episode?
-            </button>
-          </div>
-        )}
-
-        {moodScore != null && moodScore >= 2 && (
-          <div className="flex flex-wrap gap-2">
-            {ACTIVATION_EPISODE_OPTIONS.map((option) => (
-              <button
-                key={option.value}
-                onClick={() => saveEpisode(option.value)}
-                disabled={loading}
-                aria-pressed={episodeState === option.value}
-                className={`px-3 py-1 text-xs rounded-full transition-all ${
-                  episodeState === option.value
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <button
-          onClick={() => setShowMore(!showMore)}
-          aria-expanded={showMore}
-          aria-controls="daily-log-more-details"
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors w-full"
-        >
-          {showMore ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-          {showMore ? "Less" : "More"} (tags, notes)
-        </button>
-
-        {showMore && (
-          <div id="daily-log-more-details" className="space-y-3 pt-1">
-            {moodScore == null && (
-              <p className="text-xs text-muted-foreground">
-                Choose a mood before adding tags or notes.
-              </p>
-            )}
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">Tags</p>
-              <div className="flex flex-wrap gap-1.5">
-                {TAGS.map((tag) => (
-                  <button
-                    key={tag}
-                    onClick={() => toggleTag(tag)}
-                    disabled={loading || moodScore == null}
-                    aria-pressed={selectedTags.includes(tag)}
-                    className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
-                      selectedTags.includes(tag)
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {tag.replace("_", " ")}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1.5">Notes</p>
-              <textarea
-                placeholder="Any notes? (optional)"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                onBlur={saveNotes}
-                disabled={loading || moodScore == null}
-                className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
-                rows={4}
-              />
+              {EPISODE_STATES.map((state) => (
+                <button
+                  key={state.value}
+                  onClick={() => saveEpisode(state.value)}
+                  disabled={loading || moodScore == null}
+                  aria-pressed={episodeState === state.value}
+                  className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
+                    episodeState === state.value
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {state.label}
+                </button>
+              ))}
             </div>
           </div>
-        )}
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Tags</p>
+            <div className="flex flex-wrap gap-1.5">
+              {TAGS.map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => toggleTag(tag)}
+                  disabled={loading || moodScore == null}
+                  aria-pressed={selectedTags.includes(tag)}
+                  className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
+                    selectedTags.includes(tag)
+                      ? "bg-primary text-primary-foreground"
+                      : "bg-muted text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tag.replace("_", " ")}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground mb-1.5">Notes</p>
+            <textarea
+              placeholder="Any notes? (optional)"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              onBlur={saveNotes}
+              disabled={loading || moodScore == null}
+              className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
+              rows={4}
+            />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

@@ -18,6 +18,9 @@ import {
 } from "@/lib/medication-schedule";
 import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
+import { EPISODE_STATES } from "@/lib/episode-states";
+import type { EpisodePatternSummary } from "@/lib/episode-pattern";
+import { EpisodePatternBanner } from "@/components/episode-pattern-banner";
 
 const MOOD_OPTIONS = [
   { value: -3, label: "Very Low", color: "bg-blue-600" },
@@ -27,14 +30,6 @@ const MOOD_OPTIONS = [
   { value: 1, label: "Slightly High", color: "bg-amber-400" },
   { value: 2, label: "High", color: "bg-amber-500" },
   { value: 3, label: "Very High", color: "bg-amber-600" },
-];
-
-const EPISODE_STATES = [
-  { value: "none", label: "None" },
-  { value: "depressive", label: "Depressive" },
-  { value: "hypomanic", label: "Hypomanic" },
-  { value: "manic", label: "Manic" },
-  { value: "mixed", label: "Mixed" },
 ];
 
 const TAGS = [
@@ -123,6 +118,7 @@ interface MoodFormProps {
   existingMood: ExistingMood | null;
   medications: MedicationItem[];
   existingMedLogs: MedLog[];
+  episodePattern: EpisodePatternSummary | null;
 }
 
 function formatDisplayDate(dateStr: string): string {
@@ -161,7 +157,13 @@ function medicationsForDay(
   });
 }
 
-export function MoodForm({ initialDay, existingMood, medications, existingMedLogs }: MoodFormProps) {
+export function MoodForm({
+  initialDay,
+  existingMood,
+  medications,
+  existingMedLogs,
+  episodePattern,
+}: MoodFormProps) {
   const [selectedDay, setSelectedDay] = useState(initialDay);
   const [moodScore, setMoodScore] = useState<number | null>(existingMood?.moodScore ?? null);
   const [energy, setEnergy] = useState(existingMood?.energyScore ?? 3);
@@ -383,6 +385,12 @@ export function MoodForm({ initialDay, existingMood, medications, existingMedLog
           </span>
         )}
       </div>
+
+      {/* Held back until today's answers are in, so the model's flag cannot
+          steer the self-report. */}
+      {episodePattern && isToday && lastSavedAt && (
+        <EpisodePatternBanner {...episodePattern} />
+      )}
 
       {saved ? (
         <Card>

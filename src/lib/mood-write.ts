@@ -1,3 +1,5 @@
+import { isEpisodeState } from "@/lib/episode-states";
+
 export interface MoodFields {
   moodScore: number;
   energyScore: number | null;
@@ -95,14 +97,7 @@ export function parseMoodWrite(value: unknown): ParsedMoodWrite {
 
   if (Object.hasOwn(body, "episodeState")) {
     const state = body.episodeState;
-    if (
-      state !== null &&
-      state !== "none" &&
-      state !== "depressive" &&
-      state !== "hypomanic" &&
-      state !== "manic" &&
-      state !== "mixed"
-    ) {
+    if (state !== null && !isEpisodeState(state)) {
       return { ok: false, error: "Invalid episodeState" };
     }
     fields.episodeState = state as string | null;

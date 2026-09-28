@@ -42,6 +42,8 @@ import { SleepCompositionBar } from "@/components/charts/sleep-composition-bar";
 import { ScoreBreakdown } from "@/components/charts/score-breakdown";
 import { ResearchTooltip } from "@/components/research-tooltip";
 import { DailyLogCard } from "@/components/daily-log-card";
+import { EpisodePatternBanner } from "@/components/episode-pattern-banner";
+import { summarizeEpisodePattern } from "@/lib/episode-pattern";
 import { DataAvailabilityCard } from "@/components/confidence-indicator";
 import { computeDataAvailability } from "@/lib/analysis/confidence";
 import {
@@ -149,9 +151,9 @@ export default async function DashboardPage() {
   const currentAssessmentDays = new Set(
     currentAssessments.map((assessment) => assessment.day)
   );
-  const recentEpisodes = currentAssessments.filter(
-    (assessment) =>
-      assessment.tier !== "none" && assessment.day >= fourteenDaysAgo
+  const episodePattern = summarizeEpisodePattern(
+    currentAssessments,
+    fourteenDaysAgo
   );
 
   const todayMood = await db
@@ -201,15 +203,6 @@ export default async function DashboardPage() {
     .from(dailyAnalysis)
     .where(gte(dailyAnalysis.day, thirtyDaysAgo))
     .orderBy(desc(dailyAnalysis.day));
-
-  const highestTier = recentEpisodes.length > 0
-    ? recentEpisodes.reduce((best, ep) => {
-        const rank = { alert: 3, warning: 2, watch: 1, none: 0 };
-        const epRank = rank[ep.tier as keyof typeof rank] ?? 0;
-        const bestRank = rank[best.tier as keyof typeof rank] ?? 0;
-        return epRank > bestRank ? ep : best;
-      })
-    : null;
 
   const score = lastDailySleep[0] ?? null;
   const readiness = lastReadiness[0] ?? null;
@@ -321,48 +314,7 @@ export default async function DashboardPage() {
         initialMedLogs={todayMedLogs}
       />
 
-      {highestTier && (
-        <div
-          className={`rounded-lg p-4 ${
-            highestTier.tier === "alert"
-              ? "bg-red-500/10 border border-red-500/30 text-red-300"
-              : highestTier.tier === "warning"
-                ? "bg-amber-500/10 border border-amber-500/30 text-amber-300"
-                : "bg-muted border text-muted-foreground"
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className={`text-xs font-bold px-2 py-0.5 rounded ${
-                highestTier.tier === "alert"
-                  ? "bg-red-500/20 text-red-300"
-                  : highestTier.tier === "warning"
-                    ? "bg-amber-500/20 text-amber-300"
-                    : "bg-blue-500/20 text-blue-300"
-              }`}
-            >
-              {highestTier.tier.toUpperCase()}
-            </span>
-            <p className="font-medium">
-              {recentEpisodes.length} flagged day{recentEpisodes.length !== 1 ? "s" : ""} in the last 14 days
-            </p>
-          </div>
-          <p className="text-sm mt-1 opacity-80">
-            {highestTier.direction === "hyper"
-              ? "Higher-activation"
-              : highestTier.direction === "hypo"
-                ? "Lower-activation"
-                : "Mixed"}{" "}
-            personal-baseline pattern; this is not a mood-episode diagnosis.
-          </p>
-          <Link
-            href="/dashboard/alerts"
-            className="text-sm underline mt-2 inline-block"
-          >
-            View all alerts
-          </Link>
-        </div>
-      )}
+      {episodePattern && <EpisodePatternBanner {...episodePattern} />}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 items-start">
         <Card>
