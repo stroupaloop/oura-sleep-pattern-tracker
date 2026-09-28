@@ -15,7 +15,7 @@ import { BackfillButton, ManualSyncButton } from "./sync-buttons";
 import { DetectionConfig } from "./detection-config";
 import { BipolarTypeSelector } from "./bipolar-type-selector";
 import { MedicationSettings } from "./medication-settings";
-// import { NotificationSettings } from "./notification-settings";
+import { NotificationSettings } from "./notification-settings";
 import {
   Card,
   CardContent,
@@ -95,19 +95,18 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Notification Preferences hidden — cron not configured on Vercel free tier
       <Card>
         <CardHeader>
           <CardTitle>Notification Preferences</CardTitle>
           <CardDescription>
-            Configure nightly check-in reminders via email or SMS.
+            Daily log reminders by email or SMS, sent only if the day&apos;s
+            log is still empty.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <NotificationSettings />
         </CardContent>
       </Card>
-      */}
 
       <Card>
         <CardHeader>
