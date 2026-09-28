@@ -4,26 +4,15 @@ import { db } from "@/lib/db";
 import { dailyMood, medications, medicationLogs } from "@/lib/db/schema";
 import { getAuthorEmail, isAuthorEmail } from "@/lib/access";
 import { getTodayET } from "@/lib/date-utils";
+import { summarizeDoses } from "@/lib/dose-summary";
+import { parseMoodTags } from "@/lib/mood-tags";
 import { sendEmail } from "@/lib/notifications/email";
 import {
   DAILY_LOG_QUIET_SECONDS,
   buildDailyLogAlert,
   dailyLogAlertsEnabled,
   isLatestLogSave,
-  summarizeDoses,
 } from "@/lib/notifications/daily-log-alert";
-
-function parseTags(raw: string | null): string[] {
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed)
-      ? parsed.filter((tag): tag is string => typeof tag === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
 
 async function sendIfStillLatest(
   day: string,
@@ -75,7 +64,7 @@ async function sendIfStillLatest(
     irritabilityScore: log.irritabilityScore,
     anxietyScore: log.anxietyScore,
     sleepSubjective: log.sleepSubjective,
-    tags: parseTags(log.tags),
+    tags: parseMoodTags(log.tags),
     hasNote: Boolean(log.notes?.trim()),
     doses: summarizeDoses(meds, doseLogs, day),
     siteUrl: process.env.NEXTAUTH_URL ?? null,

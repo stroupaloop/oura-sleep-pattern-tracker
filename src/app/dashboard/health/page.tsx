@@ -7,9 +7,6 @@ import {
   dailySleep,
   dailyReadiness,
   dailyAnalysis,
-  dailyMood,
-  medications,
-  medicationLogs,
   episodeAssessments,
 } from "@/lib/db/schema";
 import { desc, sql, gte, eq } from "drizzle-orm";
@@ -42,6 +39,7 @@ import { SleepCompositionBar } from "@/components/charts/sleep-composition-bar";
 import { ScoreBreakdown } from "@/components/charts/score-breakdown";
 import { ResearchTooltip } from "@/components/research-tooltip";
 import { DailyLogCard } from "@/components/daily-log-card";
+import { loadDailyLog } from "@/lib/daily-log-data";
 import { EpisodePatternBanner } from "@/components/episode-pattern-banner";
 import { summarizeEpisodePattern } from "@/lib/episode-pattern";
 import { DataAvailabilityCard } from "@/components/confidence-indicator";
@@ -156,37 +154,7 @@ export default async function DashboardPage() {
     fourteenDaysAgo
   );
 
-  const todayMood = await db
-    .select({
-      moodScore: dailyMood.moodScore,
-      episodeState: dailyMood.episodeState,
-      tags: dailyMood.tags,
-      notes: dailyMood.notes,
-    })
-    .from(dailyMood)
-    .where(eq(dailyMood.day, today))
-    .limit(1);
-
-  const trackedMeds = await db
-    .select({
-      id: medications.id,
-      name: medications.name,
-      dosage: medications.dosage,
-      frequency: medications.frequency,
-      doseSchedule: medications.doseSchedule,
-      startDate: medications.startDate,
-      endDate: medications.endDate,
-    })
-    .from(medications);
-
-  const todayMedLogs = await db
-    .select({
-      medicationId: medicationLogs.medicationId,
-      slot: medicationLogs.slot,
-      taken: medicationLogs.taken,
-    })
-    .from(medicationLogs)
-    .where(eq(medicationLogs.day, today));
+  const dailyLog = await loadDailyLog(today);
 
   const availabilityData = await computeDataAvailability(30);
 
@@ -309,9 +277,9 @@ export default async function DashboardPage() {
 
       <DailyLogCard
         initialDay={today}
-        medications={trackedMeds}
-        initialMood={todayMood[0] ?? null}
-        initialMedLogs={todayMedLogs}
+        medications={dailyLog.medications}
+        initialMood={dailyLog.mood}
+        initialMedLogs={dailyLog.medLogs}
       />
 
       {episodePattern && <EpisodePatternBanner {...episodePattern} />}
