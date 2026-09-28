@@ -65,7 +65,7 @@ async function sendIfStillLatest(
     anxietyScore: log.anxietyScore,
     sleepSubjective: log.sleepSubjective,
     tags: parseMoodTags(log.tags),
-    hasNote: Boolean(log.notes?.trim()),
+    note: log.notes?.trim() || null,
     doses: summarizeDoses(meds, doseLogs, day),
     siteUrl: process.env.NEXTAUTH_URL ?? null,
   });

@@ -22,8 +22,7 @@ export interface DailyLogAlertInput {
   anxietyScore: number | null;
   sleepSubjective: number | null;
   tags: string[];
-  /** Whether a note exists. The note itself is never put in an email. */
-  hasNote: boolean;
+  note: string | null;
   doses: DoseSummary;
   siteUrl?: string | null;
 }
@@ -98,8 +97,8 @@ export function buildDailyLogAlert(input: DailyLogAlertInput): DailyLogAlert {
     ...(input.doses.notTaken.length > 0
       ? [["Not marked taken", input.doses.notTaken.join(", ")] as [string, string]]
       : []),
-    ["Note", input.hasNote ? "Added (open the site to read it)" : "None"],
   ];
+  const note = input.note ?? "None";
 
   const footer = input.siteUrl
     ? `<p style="margin:16px 0 0"><a href="${escapeHtml(
@@ -111,13 +110,18 @@ export function buildDailyLogAlert(input: DailyLogAlertInput): DailyLogAlert {
 <p style="margin:0 0 12px">${escapeHtml(intro)}</p>
 <table style="border-collapse:collapse">${details
     .map(([label, value]) => row(label, value))
-    .join("")}</table>${footer}
+    .join("")}</table>
+<p style="margin:12px 0 4px;color:#888">Note</p>
+<p style="margin:0;white-space:pre-wrap">${escapeHtml(note)}</p>${footer}
 </div>`;
 
   const text = [
     intro,
     "",
     ...details.map(([label, value]) => `${label}: ${value}`),
+    "",
+    "Note:",
+    note,
     ...(input.siteUrl ? ["", `Open the site: ${input.siteUrl}`] : []),
   ].join("\n");
 

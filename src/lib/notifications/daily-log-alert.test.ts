@@ -16,7 +16,7 @@ const BASE = {
   anxietyScore: null,
   sleepSubjective: null,
   tags: ["poor_sleep"],
-  hasNote: true,
+  note: "I watched the movie\nand thought of us",
   doses: { taken: ["Lamotrigine (Morning)"], notTaken: ["Lithium (Evening)"] },
 };
 
@@ -58,11 +58,20 @@ describe("buildDailyLogAlert", () => {
     expect(alert.text).toContain("Not marked taken: Lithium (Evening)");
   });
 
-  it("says a note was added without ever carrying it", () => {
-    expect(buildDailyLogAlert(BASE).text).toContain("Note: Added");
-    expect(buildDailyLogAlert({ ...BASE, hasNote: false }).text).toContain(
-      "Note: None"
+  it("carries the note in full, line breaks kept", () => {
+    const alert = buildDailyLogAlert(BASE);
+    expect(alert.text).toContain("Note:\nI watched the movie\nand thought of us");
+    expect(alert.html).toContain("white-space:pre-wrap");
+    expect(alert.html).toContain("I watched the movie\nand thought of us");
+  });
+
+  it("says so when there is no note, and escapes one that has markup", () => {
+    expect(buildDailyLogAlert({ ...BASE, note: null }).text).toContain(
+      "Note:\nNone"
     );
+    const html = buildDailyLogAlert({ ...BASE, note: "<script>x</script>" }).html;
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 
   it("names the day when the log is not today's", () => {
