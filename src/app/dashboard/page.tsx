@@ -7,6 +7,7 @@ import { isAuthorEmail } from "@/lib/access";
 import { getTodayET } from "@/lib/date-utils";
 import { loadDailyLog } from "@/lib/daily-log-data";
 import { loadThoughtOverview, loadTimeline } from "@/lib/thoughts-page-data";
+import { loadRecentReactions } from "@/lib/reactions";
 import { buildPageModel } from "@/lib/pagination";
 import { Button } from "@/components/ui/button";
 import { DailyLogCard } from "@/components/daily-log-card";
@@ -36,7 +37,11 @@ export default async function DashboardPage({
     loadDailyLog(today),
   ]);
   const page = buildPageModel(params.page, overview.total);
-  const timeline = await loadTimeline(page.limit, page.offset);
+  const viewerEmail = session?.user?.email ?? null;
+  const [timeline, recents] = await Promise.all([
+    loadTimeline(page.limit, page.offset),
+    !isAuthor && viewerEmail ? loadRecentReactions(viewerEmail) : [],
+  ]);
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 lg:grid lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-start lg:gap-8">
@@ -85,7 +90,12 @@ export default async function DashboardPage({
           {isAuthor ? (
             <EditableThoughtTimeline entries={timeline} />
           ) : (
-            <ThoughtTimeline entries={timeline} />
+            <ThoughtTimeline
+              // Which pings were automatic stays with the author.
+              entries={timeline.map((entry) => ({ ...entry, isAuto: undefined }))}
+              viewerEmail={viewerEmail}
+              recents={recents}
+            />
           )}
           <NotesPagination page={page} />
         </section>

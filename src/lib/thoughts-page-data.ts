@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { thoughts } from "@/lib/db/schema";
 import { getNowUnixSeconds, getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { loadLinkClickCounts } from "@/lib/link-clicks";
+import { loadReactionsFor } from "@/lib/reactions";
 import {
   buildGrid,
   countSince,
@@ -124,6 +125,7 @@ export async function loadTimeline(
       id: thoughts.id,
       note: thoughts.note,
       link: thoughts.link,
+      source: thoughts.source,
       createdAt: thoughts.createdAt,
     })
     .from(thoughts)
@@ -131,11 +133,16 @@ export async function loadTimeline(
     .limit(limit)
     .offset(offset);
 
-  const clicks = await loadLinkClickCounts(
-    entries.filter((entry) => entry.link).map((entry) => entry.id)
-  );
-  return entries.map((entry) => ({
+  const [clicks, reactions] = await Promise.all([
+    loadLinkClickCounts(
+      entries.filter((entry) => entry.link).map((entry) => entry.id)
+    ),
+    loadReactionsFor(entries.map((entry) => entry.id)),
+  ]);
+  return entries.map(({ source, ...entry }) => ({
     ...entry,
+    isAuto: source === "auto",
     linkClicks: clicks ? (clicks.get(entry.id) ?? 0) : undefined,
+    reactions: reactions ? (reactions.get(entry.id) ?? []) : undefined,
   }));
 }

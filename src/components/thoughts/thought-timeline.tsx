@@ -1,5 +1,7 @@
 import { Heart, Link2 } from "lucide-react";
 import { APP_TIME_ZONE } from "@/lib/date-utils";
+import type { ThoughtReaction } from "@/lib/reaction-emojis";
+import { ReactionBar } from "@/components/thoughts/reaction-bar";
 
 export interface TimelineEntry {
   id: number;
@@ -8,6 +10,10 @@ export interface TimelineEntry {
   createdAt: number;
   /** Times a reader has opened the link; shown only to authors. */
   linkClicks?: number;
+  /** Logged by the quiet-hours cron; shown only to authors. */
+  isAuto?: boolean;
+  /** Undefined when they could not be loaded. */
+  reactions?: ThoughtReaction[];
 }
 
 function formatWhen(unixSeconds: number): string {
@@ -28,7 +34,15 @@ function hostOf(link: string): string {
   }
 }
 
-export function ThoughtTimeline({ entries }: { entries: TimelineEntry[] }) {
+export function ThoughtTimeline({
+  entries,
+  viewerEmail,
+  recents = [],
+}: {
+  entries: TimelineEntry[];
+  viewerEmail?: string | null;
+  recents?: string[];
+}) {
   if (entries.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">Nothing logged yet.</p>
@@ -63,6 +77,14 @@ export function ThoughtTimeline({ entries }: { entries: TimelineEntry[] }) {
                 <Link2 className="size-3.5" />
                 {hostOf(entry.link)}
               </a>
+            )}
+            {viewerEmail && entry.reactions && (
+              <ReactionBar
+                thoughtId={entry.id}
+                reactions={entry.reactions}
+                viewerEmail={viewerEmail}
+                recents={recents}
+              />
             )}
           </li>
         );

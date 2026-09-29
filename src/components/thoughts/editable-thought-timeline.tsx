@@ -13,6 +13,7 @@ import {
   unixToEtInputValue,
 } from "@/lib/date-utils";
 import type { TimelineEntry } from "@/components/thoughts/thought-timeline";
+import { ReactionChips } from "@/components/thoughts/reaction-bar";
 
 function describeOpens(count: number): string {
   if (count === 0) return "Not opened yet";
@@ -217,6 +218,14 @@ export function EditableThoughtTimeline({
                         Thought of you
                       </span>
                     )}
+                    {entry.isAuto && (
+                      <span
+                        className="rounded border px-1 text-[10px] uppercase tracking-wide"
+                        title="Logged automatically; only you see this"
+                      >
+                        auto
+                      </span>
+                    )}
                   </div>
                   <Button
                     size="sm"
@@ -247,6 +256,7 @@ export function EditableThoughtTimeline({
                     · {describeOpens(entry.linkClicks)}
                   </span>
                 )}
+                {entry.reactions && <ReactionChips reactions={entry.reactions} />}
               </>
             )}
           </li>
