@@ -35,7 +35,7 @@ export interface PlannedThought {
   createdAt: number;
 }
 
-function hashSeed(value: string): number {
+export function hashSeed(value: string): number {
   let h = 2166136261;
   for (let i = 0; i < value.length; i++) {
     h ^= value.charCodeAt(i);
@@ -44,7 +44,7 @@ function hashSeed(value: string): number {
   return h >>> 0;
 }
 
-function mulberry32(seed: number): () => number {
+export function mulberry32(seed: number): () => number {
   let a = seed;
   return () => {
     a = (a + 0x6d2b79f5) >>> 0;
