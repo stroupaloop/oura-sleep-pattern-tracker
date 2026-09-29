@@ -127,6 +127,13 @@
       "when": 1790619470434,
       "tag": "0017_thought_link_clicks",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1790667734573,
+      "tag": "0018_thought_reactions",
+      "breakpoints": true
     }
   ]
 }

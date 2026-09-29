@@ -41,6 +41,63 @@ describe("thought links", () => {
     expect(html).toContain("Not opened yet");
   });
 
+  it("let a reader react, show their own reaction as removable, and hide which pings were automatic", () => {
+    const html = renderToStaticMarkup(
+      <ThoughtTimeline
+        entries={[
+          {
+            id: 9,
+            note: null,
+            link: null,
+            createdAt: 1790600000,
+            isAuto: true,
+            reactions: [
+              { email: "reader@example.com", emoji: "🥰" },
+              { email: "other@example.com", emoji: "😂" },
+            ],
+          },
+        ]}
+        viewerEmail="Reader@example.com"
+        recents={["❤️", "🥰", "😂", "🥺", "🙏"]}
+      />
+    );
+    expect(html).toContain('aria-label="Add a reaction"');
+    expect(html).toContain('aria-label="Remove your 🥰 reaction"');
+    expect(html).toContain('title="other@example.com"');
+    expect(html.toLowerCase()).not.toContain("auto");
+  });
+
+  it("offer no reactions when they could not be loaded or nobody is signed in", () => {
+    const withoutReactions = renderToStaticMarkup(
+      <ThoughtTimeline entries={ENTRIES} viewerEmail="reader@example.com" />
+    );
+    const signedOut = renderToStaticMarkup(
+      <ThoughtTimeline entries={[{ ...ENTRIES[0], reactions: [] }]} />
+    );
+    expect(withoutReactions).not.toContain("Add a reaction");
+    expect(signedOut).not.toContain("Add a reaction");
+  });
+
+  it("show authors the reactions and mark automatic pings", () => {
+    const html = renderToStaticMarkup(
+      <EditableThoughtTimeline
+        entries={[
+          {
+            id: 9,
+            note: null,
+            link: null,
+            createdAt: 1790600000,
+            isAuto: true,
+            reactions: [{ email: "reader@example.com", emoji: "🥰" }],
+          },
+        ]}
+      />
+    );
+    expect(html).toContain(">auto<");
+    expect(html).toContain("🥰");
+    expect(html).not.toContain("Add a reaction");
+  });
+
   it("show no count when it could not be loaded", () => {
     const html = renderToStaticMarkup(
       <EditableThoughtTimeline

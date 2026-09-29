@@ -573,6 +573,28 @@ export const thoughtLinkClicks = sqliteTable(
   ]
 );
 
+/** One emoji per reader per thought; changing it replaces the row's emoji. */
+export const thoughtReactions = sqliteTable(
+  "thought_reactions",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    thoughtId: integer("thought_id").notNull(),
+    email: text("email").notNull(),
+    emoji: text("emoji").notNull(),
+    /** 1 once the author has been emailed about this emoji. */
+    notified: integer("notified").notNull().default(0),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("thought_reactions_thought_email").on(
+      table.thoughtId,
+      table.email
+    ),
+    index("thought_reactions_email_idx").on(table.email, table.updatedAt),
+  ]
+);
+
 export const siteVisits = sqliteTable(
   "site_visits",
   {
