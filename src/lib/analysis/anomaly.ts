@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
-import { sleepPeriods, dailyAnalysis, dailyReadiness } from "@/lib/db/schema";
-import { desc, sql, and, lt, eq, inArray } from "drizzle-orm";
+import { sleepPeriods, dailyAnalysis } from "@/lib/db/schema";
+import { sql } from "drizzle-orm";
 import {
   circularMeanMinutes,
   robustCircularStandardDeviationMinutes,
@@ -12,7 +12,6 @@ import {
 } from "./baseline";
 import {
   DetectionConfigValues,
-  DEFAULT_CONFIG,
   BipolarType,
   getBipolarProfile,
 } from "./config";
@@ -387,103 +386,6 @@ export function computeDailyAnalysis(
   };
 }
 
-export async function analyzeDay(targetDay: string, config?: DetectionConfigValues) {
-  const cfg = config ?? DEFAULT_CONFIG;
-
-  const todaySleep = await db
-    .select()
-    .from(sleepPeriods)
-    .where(
-      and(
-        eq(sleepPeriods.day, targetDay),
-        eq(sleepPeriods.type, "long_sleep")
-      )
-    )
-    .limit(1);
-
-  if (todaySleep.length === 0) return null;
-
-  const metrics = extractMetrics(todaySleep[0]);
-  if (!metrics) return null;
-
-  const [todayReadiness, priorSleep] = await Promise.all([
-    db
-      .select({
-        temperatureDeviation: dailyReadiness.temperatureDeviation,
-        temperatureTrendDeviation: dailyReadiness.temperatureTrendDeviation,
-        score: dailyReadiness.score,
-      })
-      .from(dailyReadiness)
-      .where(eq(dailyReadiness.day, targetDay))
-      .limit(1),
-    db
-      .select()
-      .from(sleepPeriods)
-      .where(
-        and(
-          lt(sleepPeriods.day, targetDay),
-          sql`${sleepPeriods.type} = 'long_sleep'`
-        )
-      )
-      .orderBy(desc(sleepPeriods.day))
-      .limit(cfg.baselineDays),
-  ]);
-
-  const readiness = todayReadiness[0];
-  if (readiness) {
-    metrics.readinessScore = readiness.score ?? Number.NaN;
-    metrics.temperatureDeviation =
-      readiness.temperatureDeviation ?? Number.NaN;
-    metrics.temperatureDelta = metrics.temperatureDeviation;
-    metrics.temperatureTrendDeviation =
-      readiness.temperatureTrendDeviation ?? Number.NaN;
-  }
-
-  const priorMetrics = priorSleep
-    .map(extractMetrics)
-    .filter((m): m is DayMetrics => m !== null);
-
-  const priorDays = priorMetrics.map((metric) => metric.day);
-  if (priorDays.length > 0) {
-    const priorReadiness = await db
-      .select({
-        day: dailyReadiness.day,
-        temperatureDeviation: dailyReadiness.temperatureDeviation,
-        temperatureTrendDeviation: dailyReadiness.temperatureTrendDeviation,
-        score: dailyReadiness.score,
-      })
-      .from(dailyReadiness)
-      .where(inArray(dailyReadiness.day, priorDays));
-    const readinessByDay = new Map(
-      priorReadiness.map((row) => [row.day, row])
-    );
-    for (const priorMetric of priorMetrics) {
-      const priorDayReadiness = readinessByDay.get(priorMetric.day);
-      if (!priorDayReadiness) continue;
-      priorMetric.readinessScore =
-        priorDayReadiness.score ?? Number.NaN;
-      priorMetric.temperatureDeviation =
-        priorDayReadiness.temperatureDeviation ?? Number.NaN;
-      priorMetric.temperatureDelta = priorMetric.temperatureDeviation;
-      priorMetric.temperatureTrendDeviation =
-        priorDayReadiness.temperatureTrendDeviation ?? Number.NaN;
-    }
-  }
-
-  const result = computeDailyAnalysis(metrics, priorMetrics, cfg);
-  if (!result) return null;
-
-  await upsertDailyAnalysis(result);
-
-  return {
-    day: targetDay,
-    compositeScore: result.compositeScore,
-    isAnomaly: result.isAnomaly,
-    direction: result.direction,
-    notes: result.notes,
-  };
-}
-
 export async function upsertDailyAnalysis(result: DailyAnalysisResult) {
   const { metrics, baselines, zScores, compositeScore, isAnomaly, direction, notes } = result;
   const now = Math.floor(Date.now() / 1000);
@@ -635,24 +537,4 @@ export async function upsertDailyAnalysis(result: DailyAnalysisResult) {
         selfReportedEpisode: sql`excluded.self_reported_episode`,
       },
     });
-}
-
-export async function analyzeAllDays(config?: DetectionConfigValues) {
-  const cfg = config ?? DEFAULT_CONFIG;
-
-  const allSleep = await db
-    .select({ day: sleepPeriods.day })
-    .from(sleepPeriods)
-    .where(sql`${sleepPeriods.type} = 'long_sleep'`)
-    .orderBy(sleepPeriods.day);
-
-  const days = [...new Set(allSleep.map((s) => s.day))];
-  const results = [];
-
-  for (const day of days) {
-    const result = await analyzeDay(day, cfg);
-    if (result) results.push(result);
-  }
-
-  return results;
 }
