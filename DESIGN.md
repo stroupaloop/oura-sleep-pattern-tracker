@@ -23,6 +23,13 @@ colors:
   stage-awake: "oklch(0.88 0.04 80)"
   series-hrv: "oklch(0.78 0.1 175)"
   series-hr: "oklch(0.72 0.14 30)"
+  level-0: "oklch(0.5 0.03 268)"
+  level-1: "oklch(0.57 0.03 268)"
+  level-2: "oklch(0.64 0.025 268)"
+  level-3: "oklch(0.71 0.02 268)"
+  level-4: "oklch(0.78 0.02 268)"
+  level-5: "oklch(0.85 0.015 268)"
+  level-6: "oklch(0.92 0.01 268)"
 typography:
   headline:
     fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
@@ -134,18 +141,26 @@ Restrained night-indigo neutrals carry the surfaces; a single rose accent carrie
 
 ### State
 - **Lamp Amber** (oklch(0.83 0.12 78)): a measure past the pattern checks' daily threshold, and warning-tier patterns.
-- **Ember** (oklch(0.72 0.16 25)): alert-tier patterns and scores under 60.
+- **Ember** (oklch(0.72 0.16 25)): alert-tier patterns, scores under 60, destructive actions and form errors (`--destructive` is the same red).
 - **Dawn Blue** (oklch(0.8 0.08 245)): watch-tier patterns and informational notices (a night not here yet).
 - **Sage** (oklch(0.8 0.09 165)): no flags; scores of 70 and up.
 
 ### Data
 - **Sleep stages:** Deep (oklch(0.55 0.15 268)), Light (oklch(0.8 0.07 230)), REM (oklch(0.72 0.12 305)), Awake (oklch(0.88 0.04 80)). Awake is pale on purpose, so it never reads as Lamp Amber.
-- **Series:** HRV (oklch(0.78 0.1 175)), heart rate (oklch(0.72 0.14 30)). Baselines draw in Mist, dashed.
+- **Series:** HRV (oklch(0.78 0.1 175)), heart rate (oklch(0.72 0.14 30)). Baselines draw in Mist, dashed. Any other single series draws in Moonlight; further series in Mist dashed, then Haze dotted. No other hues.
+- **Ordinal ramp** (`--level-0` … `--level-6`, oklch 0.50 → 0.92 at hue 268): ordered scales such as mood (-3 → +3) and activity class (rest → high). Lightness carries the order, so it reads under every color vision and judges nothing: higher mood is brighter, not "better". Never set text on a level swatch; pair it with the number or words. `level-0` is 3:1 on panels and too faint on Shadow Slate.
+- **Episode markers:** shapes, not hues: depressive ▼ (level-0), hypomanic ▲ (level-5), manic ▲ (level-6), mixed ◆ outlined; always beside their words.
 
 ### Named Rules
 **The Corridor Rule.** A measure that can drift is shown against her usual range. Color appears only when it leaves that range by the detector's own threshold, and the row says so in words ("Unusual").
 
 **The One Meaning Rule.** A hue has one job. Lamp Amber is never decoration, Rose is never a warning, and stage colors never mark state.
+
+**The Direction Rule.** Higher or lower activation is said in words with an arrow (`PatternDirectionLabel`), never in a color: the tier beside it already owns the color.
+
+**The Threshold Rule.** A value turns Lamp Amber at the detector's configured daily threshold (`dailyAnomalyThreshold`, 1.5 by default), never at a hard-coded 2, so the charts and the alerts agree.
+
+**The Her-Baseline Rule.** Values are judged against her own usual range, never population norms ("General range 7–9h") or a third party's window, and an unlogged dose is not a missed one.
 
 ## Typography
 
@@ -186,7 +201,19 @@ Panels round at 14px, controls at 8px, meters and the corridor band are pills. T
 - **Corridor gauge:** -3 to +3 standard deviations; band at ±1; ticks at the detector's threshold; Moonlight dot, Lamp Amber once unusual.
 - **Pattern status:** always present. Flagged: tinted surface in the tier's color, the tier named in words. Clear: a Sage check and when the check last ran. Paused: says why.
 - **Notices:** a missing night is Dawn Blue and explains how the data arrives; a lost Oura connection is an amber banner across every dashboard page with the way to reconnect.
-- **Buttons:** shadcn variants on these tokens. Touch targets reach 40px on phones.
+- **Buttons:** shadcn variants on these tokens. Default, small and icon sizes reach 40px on phones and tighten from `sm`.
+
+### Shared modules
+Use these instead of local copies:
+- `components/page-header.tsx` `PageHeader`: every page's title, description and actions.
+- `components/ui/panel.tsx` `Panel`: a titled surface; `title` and `meta` take nodes.
+- `components/ui/callout.tsx` `Callout` and `components/ui/pill.tsx` `Pill`, by tone: `neutral`, `info` (Dawn Blue), `attention`, `alert`, `calm`.
+- `components/ui/toggle-chip.tsx` `ToggleChip`: one on/off choice among peers (tags, filters, dose slots); `aria-pressed`, rose when on.
+- `components/ui/segmented-control.tsx` `SegmentedControl`: one choice from a short fixed set (ranges, views); a radio group with arrow keys.
+- `components/ui/day-navigator.tsx` `DayNavigator`; `components/ui/empty-state.tsx` `EmptyState`; `components/ui/stat.tsx` `Stat`; `components/ui/form-message.tsx` `FormMessage`; `components/ui/native-select.tsx` `NativeSelect`; plus `Input`, `Textarea`, `Button`.
+- `components/charts/chart-theme.tsx` `CHART`, `AXIS_TICK`, `TOOLTIP_STYLE`, `legendLabel`; `components/charts/chart-tooltip.tsx` `ChartTooltipFrame`, `ChartTooltipRow` (swatch plus readable text).
+- `components/pattern-status.tsx` `PatternStatus`; `components/pattern-direction-label.tsx` `PatternDirectionLabel`.
+- `lib/design/`: `pattern-tiers` (`tierLabel`, `tierTone`, `tierColor`), `pattern-direction`, `mood-scale` (`MOOD_SCALE`, `moodColor`, `moodSwatchClass`, `formatMoodValue`), `score-bands` (`scoreBand`); `lib/episode-states` (`EPISODE_MARKERS`, `episodeLabel`); `lib/health/format` (`formatNightLabel`).
 
 ## Do's and Don'ts
 
@@ -203,3 +230,6 @@ Panels round at 14px, controls at 8px, meters and the corridor band are pills. T
 - **Don't** stand a progress ring in for a number; show the number and what it is compared with.
 - **Don't** put Haze text on Shadow Slate; it falls under 4.5:1.
 - **Don't** animate for decoration; motion only reports a state change.
+- **Don't** set colored text in a stage or series hue; use a swatch beside readable text.
+- **Don't** grade against population norms; compare with her usual range.
+- **Don't** start a heart-rate, HRV, temperature, VO₂ max or similar axis at zero; fit it to the data.

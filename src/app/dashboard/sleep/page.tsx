@@ -20,6 +20,7 @@ import {
   currentDailyPatternFields,
   filterCurrentPatternAssessments,
 } from "@/lib/analysis/provenance";
+import { PageHeader } from "@/components/page-header";
 
 export default async function SleepPage() {
   const [
@@ -145,10 +146,7 @@ export default async function SleepPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
-      <h1 className="text-2xl md:text-3xl font-bold">Sleep Details</h1>
-      <p className="text-muted-foreground">
-        5-week sleep overview
-      </p>
+      <PageHeader title="Sleep Details" description="5-week sleep overview" />
 
       <SleepCalendar
         nights={nightsRecord}

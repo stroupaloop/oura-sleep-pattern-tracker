@@ -12,6 +12,7 @@ import {
   Legend,
   ComposedChart,
 } from "recharts";
+import { legendLabel } from "./chart-theme";
 import {
   Card,
   CardContent,
@@ -21,11 +22,6 @@ import {
 } from "@/components/ui/card";
 import { computeCalendarRollingAverage } from "@/lib/dashboard-metrics";
 
-
-/** Series colors carry the swatches; the labels stay readable text. */
-function legendLabel(value: string) {
-  return <span className="text-xs text-muted-foreground">{value}</span>;
-}
 
 interface SleepData {
   day: string;

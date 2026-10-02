@@ -13,6 +13,7 @@ import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { filterCurrentPatternAssessments } from "@/lib/analysis/provenance";
 import { summarizeEpisodePattern } from "@/lib/episode-pattern";
+import { PageHeader } from "@/components/page-header";
 
 export default async function CheckinPage() {
   const today = getTodayET();
@@ -81,9 +82,7 @@ export default async function CheckinPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4 md:space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Daily Check-in</h1>
-      </div>
+      <PageHeader title="Daily Check-in" />
       <MoodForm
         initialDay={today}
         existingMood={existingMood}

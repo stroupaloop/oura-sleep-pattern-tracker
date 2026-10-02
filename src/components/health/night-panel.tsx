@@ -4,7 +4,7 @@ import { formatNightLabel } from "@/lib/health/format";
 import type { HealthDashboardData } from "@/lib/health/health-dashboard-data";
 import { ResearchTooltip } from "@/components/research-tooltip";
 import { NightWindowChart } from "./night-window-chart";
-import { Panel } from "./panel";
+import { Panel } from "@/components/ui/panel";
 
 export function NightPanel({
   data,

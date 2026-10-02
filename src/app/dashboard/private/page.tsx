@@ -41,6 +41,7 @@ import {
   resolveDatasetFreshness,
 } from "@/lib/oura/freshness";
 import { PrivateTabs } from "./private-tabs";
+import { PageHeader } from "@/components/page-header";
 
 function parseIndicators(value: string | null): string[] {
   if (!value) return [];
@@ -351,7 +352,7 @@ export default async function PrivatePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <h1 className="text-2xl md:text-3xl font-bold">Private Data</h1>
+      <PageHeader title="Private Data" />
       <PrivateTabs
         currentDay={currentDay}
         cvAgeData={cvAgeData.map((c) => ({ day: c.day, vascularAge: c.vascularAge }))}

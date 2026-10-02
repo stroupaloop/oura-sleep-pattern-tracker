@@ -4,16 +4,15 @@ import {
   OURA_LIMITATIONS,
   METRIC_LIMITATIONS,
 } from "@/lib/research/references";
+import { PageHeader } from "@/components/page-header";
 
 export default function MethodologyPage() {
   return (
     <div className="max-w-4xl mx-auto space-y-10">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Methodology</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          How personal-baseline pattern flags are calculated
-        </p>
-      </div>
+      <PageHeader
+        title="Methodology"
+        description="How personal-baseline pattern flags are calculated"
+      />
 
       {/* How It Works */}
       <section className="space-y-4">

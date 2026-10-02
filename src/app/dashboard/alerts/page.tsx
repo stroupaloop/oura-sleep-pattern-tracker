@@ -33,6 +33,7 @@ import {
   evaluateRetrospectiveAgreement,
   type RetrospectiveAgreement,
 } from "@/lib/analysis/retrospective";
+import { PageHeader } from "@/components/page-header";
 
 const tierConfig = {
   alert: {
@@ -324,22 +325,22 @@ export default async function AlertsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Pattern Alerts</h1>
-          <p className="text-muted-foreground">
+      <PageHeader
+        title="Pattern Alerts"
+        description={
+          <>
             {currentAssessments.length} current days analyzed, {episodes.length}{" "}
             in-app pattern flag
             {episodes.length !== 1 ? "s" : ""}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {profileLabel(bipolarType)} heuristic · config v{config.version} ·{" "}
-            {PATTERN_SIGNAL_MODE} · algorithm {PATTERN_ALGORITHM_VERSION}
-            {latestEvaluatedAt ? ` · updated ${latestEvaluatedAt}` : ""}
-          </p>
-        </div>
-        <AnalyzeButton />
-      </div>
+            <span className="mt-1 block text-xs">
+              {profileLabel(bipolarType)} heuristic · config v{config.version} ·{" "}
+              {PATTERN_SIGNAL_MODE} · algorithm {PATTERN_ALGORITHM_VERSION}
+              {latestEvaluatedAt ? ` · updated ${latestEvaluatedAt}` : ""}
+            </span>
+          </>
+        }
+        actions={<AnalyzeButton />}
+      />
 
       {staleAssessmentCount > 0 && (
         <Card className="border-amber-500/40">

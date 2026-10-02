@@ -26,6 +26,7 @@ import {
 import { missingOuraScopes } from "@/lib/oura/oauth";
 import { formatOuraScopeList } from "@/lib/oura/scope-labels";
 import { loadOuraConnectionHealth } from "@/lib/oura/connection-health-data";
+import { PageHeader } from "@/components/page-header";
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -62,7 +63,7 @@ export default async function SettingsPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <h1 className="text-2xl md:text-3xl font-bold">Settings</h1>
+      <PageHeader title="Settings" />
 
       <Card>
         <CardHeader>

@@ -1,22 +1,12 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { scoreBand } from "@/lib/design/score-bands";
 import type { dailyReadiness, dailySleep } from "@/lib/db/schema";
-import { Panel } from "./panel";
+import { Panel } from "@/components/ui/panel";
 
 type SleepScoreRow = typeof dailySleep.$inferSelect;
 type ReadinessRow = typeof dailyReadiness.$inferSelect;
 
-/** Oura's own bands for its scores. */
-export function scoreBand(score: number): {
-  label: string;
-  text: string;
-  fill: string;
-} {
-  if (score >= 85) return { label: "Optimal", text: "text-calm", fill: "bg-calm" };
-  if (score >= 70) return { label: "Good", text: "text-calm", fill: "bg-calm/70" };
-  if (score >= 60) return { label: "Fair", text: "text-attention", fill: "bg-attention" };
-  return { label: "Pay attention", text: "text-alert", fill: "bg-alert" };
-}
 
 function ScoreFigure({ label, score }: { label: string; score: number | null }) {
   const band = score != null ? scoreBand(score) : null;
@@ -139,3 +129,5 @@ export function ScorePanel({
     </Panel>
   );
 }
+
+export { scoreBand };

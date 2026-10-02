@@ -21,7 +21,7 @@ import { useDayRollover } from "@/lib/day-rollover";
 import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 import { EPISODE_STATES } from "@/lib/episode-states";
 import type { EpisodePatternSummary } from "@/lib/episode-pattern";
-import { EpisodePatternBanner } from "@/components/episode-pattern-banner";
+import { PatternStatus } from "@/components/pattern-status";
 
 const MOOD_OPTIONS = [
   { value: -3, label: "Very Low", color: "bg-blue-600" },
@@ -399,7 +399,11 @@ function MoodFormForDay({
       {/* Held back until today's answers are in, so the model's flag cannot
           steer the self-report. */}
       {episodePattern && isToday && lastSavedAt && (
-        <EpisodePatternBanner {...episodePattern} />
+        <PatternStatus
+          pattern={episodePattern}
+          latestCheckedDay={null}
+          paused={false}
+        />
       )}
 
       {saved ? (

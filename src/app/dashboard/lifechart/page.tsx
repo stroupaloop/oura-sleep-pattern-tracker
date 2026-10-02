@@ -19,6 +19,7 @@ import {
 } from "@/lib/life-chart";
 import { LifeChart } from "./life-chart";
 import { TimeRangeSelector } from "./time-range-selector";
+import { PageHeader } from "@/components/page-header";
 
 interface Props {
   searchParams: Promise<{ range?: string }>;
@@ -119,17 +120,15 @@ export default async function LifeChartPage({ searchParams }: Props) {
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Life Chart</h1>
-          <p className="text-muted-foreground text-sm mt-1">
-            Personal mood, sleep, and activity timeline
-          </p>
-        </div>
-        <Suspense>
-          <TimeRangeSelector />
-        </Suspense>
-      </div>
+      <PageHeader
+        title="Life Chart"
+        description="Personal mood, sleep, and activity timeline"
+        actions={
+          <Suspense>
+            <TimeRangeSelector />
+          </Suspense>
+        }
+      />
 
       {analysis.length === 0 && moods.length === 0 && episodes.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">

@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { legendLabel } from "./chart-theme";
 import {
   Card,
   CardContent,
@@ -17,11 +18,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
-
-/** Series colors carry the swatches; the labels stay readable text. */
-function legendLabel(value: string) {
-  return <span className="text-xs text-muted-foreground">{value}</span>;
-}
 
 interface CompositionData {
   day: string;

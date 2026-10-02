@@ -16,6 +16,7 @@ import {
   currentDailyPatternFields,
   filterCurrentPatternAssessments,
 } from "@/lib/analysis/provenance";
+import { PageHeader } from "@/components/page-header";
 
 export default async function InsightsPage() {
   const ninetyDaysAgo = format(
@@ -130,18 +131,20 @@ export default async function InsightsPage() {
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold">Insights</h1>
-        <p className="text-muted-foreground text-sm mt-1">
-          Deep analysis of 16+ computed metrics from the last 90 days.{" "}
-          <Link
-            href="/dashboard/methodology"
-            className="underline hover:text-foreground"
-          >
-            Learn how we calculate these metrics
-          </Link>
-        </p>
-      </div>
+      <PageHeader
+        title="Insights"
+        description={
+          <>
+            Deep analysis of 16+ computed metrics from the last 90 days.{" "}
+            <Link
+              href="/dashboard/methodology"
+              className="underline hover:text-foreground"
+            >
+              Learn how we calculate these metrics
+            </Link>
+          </>
+        }
+      />
 
       {analysis.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground">
