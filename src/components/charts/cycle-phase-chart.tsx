@@ -6,6 +6,7 @@ import {
   CartesianGrid,
   Cell,
   Legend,
+  ReferenceLine,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -19,6 +20,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Stat } from "@/components/ui/stat";
+import { moodColor } from "@/lib/design/mood-scale";
+import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
+import {
+  THERMAL_SHIFT_CHART_MARGIN,
+  THERMAL_SHIFT_LINE,
+  ThermalShiftMarker,
+} from "./cycle-temperature-chart";
 
 interface CyclePhaseDataPoint {
   day: string;
@@ -46,11 +56,8 @@ const WINDOW_ORDER: ShiftWindow[] = [
   "after_shift",
 ];
 
-const WINDOW_COLORS: Record<ShiftWindow, string> = {
-  before_shift: "#34d399",
-  shift_window: "#fbbf24",
-  after_shift: "#a78bfa",
-};
+const SLEEP_COLOR = "var(--foreground)";
+const EFFICIENCY_COLOR = "var(--muted-foreground)";
 
 function formatWindowLabel(window: string): string {
   if (window === "before_shift") return "7 days before";
@@ -252,38 +259,41 @@ function WindowTooltip({
   payload,
 }: {
   active?: boolean;
-  payload?: Array<{ payload: WindowAverage }>;
+  payload?: ReadonlyArray<{ payload?: WindowAverage }>;
 }) {
-  if (!active || !payload?.length) return null;
-  const point = payload[0].payload;
+  const point = active ? payload?.[0]?.payload : undefined;
+  if (!point) return null;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium">{formatWindowLabel(point.window)}</p>
+    <ChartTooltipFrame title={formatWindowLabel(point.window)}>
       {point.sleepHours != null && (
-        <p>
-          Sleep: {point.sleepHours.toFixed(1)}h (
-          {formatEvidence(point.counts.sleep)})
-        </p>
+        <ChartTooltipRow
+          color={SLEEP_COLOR}
+          label={`Sleep (${formatEvidence(point.counts.sleep)})`}
+          value={`${point.sleepHours.toFixed(1)}h`}
+        />
       )}
       {point.efficiency != null && (
-        <p>
-          Efficiency: {point.efficiency.toFixed(0)}% (
-          {formatEvidence(point.counts.efficiency)})
-        </p>
+        <ChartTooltipRow
+          color={EFFICIENCY_COLOR}
+          label={`Efficiency (${formatEvidence(point.counts.efficiency)})`}
+          value={`${point.efficiency.toFixed(0)}%`}
+        />
       )}
       {point.avgHrv != null && (
-        <p style={{ color: "#34d399" }}>
-          HRV: {point.avgHrv.toFixed(0)} ms (
-          {formatEvidence(point.counts.hrv)})
-        </p>
+        <ChartTooltipRow
+          color={CHART.hrv}
+          label={`HRV (${formatEvidence(point.counts.hrv)})`}
+          value={`${point.avgHrv.toFixed(0)} ms`}
+        />
       )}
       {point.moodScore != null && (
-        <p>
-          Mood: {point.moodScore.toFixed(1)} (
-          {formatEvidence(point.counts.mood)})
-        </p>
+        <ChartTooltipRow
+          color={moodColor(point.moodScore)}
+          label={`Mood (${formatEvidence(point.counts.mood)})`}
+          value={point.moodScore.toFixed(1)}
+        />
       )}
-    </div>
+    </ChartTooltipFrame>
   );
 }
 
@@ -316,7 +326,7 @@ export function CyclePhaseChart({
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+          <div className="grid grid-cols-3 gap-x-4 gap-y-2">
             {displayData.map((point) => {
               const counts = [
                 point.sleepHours != null ? point.counts.sleep : null,
@@ -335,10 +345,12 @@ export function CyclePhaseChart({
               const nightMaximum =
                 nightCounts.length > 0 ? Math.max(...nightCounts) : null;
               return (
-                <div key={point.window} className="rounded-md bg-muted/40 p-2">
-                  <p>{formatWindowLabel(point.window)}</p>
-                  <p className="font-medium text-foreground">
-                    {shiftMinimum == null ||
+                <Stat
+                  key={point.window}
+                  size="sm"
+                  label={formatWindowLabel(point.window)}
+                  value={
+                    shiftMinimum == null ||
                     shiftMaximum == null ||
                     nightMinimum == null ||
                     nightMaximum == null
@@ -351,9 +363,9 @@ export function CyclePhaseChart({
                           nightMinimum === nightMaximum
                             ? nightMinimum
                             : `${nightMinimum}–${nightMaximum}`
-                        } nights`}
-                  </p>
-                </div>
+                        } nights`
+                  }
+                />
               );
             })}
           </div>
@@ -364,52 +376,47 @@ export function CyclePhaseChart({
               Sleep &amp; Efficiency by Window
             </p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={displayData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="oklch(1 0 0 / 5%)"
-                />
+              <BarChart data={displayData} margin={THERMAL_SHIFT_CHART_MARGIN}>
+                <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="window"
-                  fontSize={11}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={AXIS_TICK}
                   tickFormatter={formatWindowLabel}
                 />
                 <YAxis
                   yAxisId="hours"
-                  fontSize={10}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={AXIS_TICK}
                   tickFormatter={(value) => `${value}h`}
                 />
                 <YAxis
                   yAxisId="pct"
                   orientation="right"
-                  fontSize={10}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={AXIS_TICK}
                   tickFormatter={(value) => `${value}%`}
                 />
                 <Tooltip content={<WindowTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend formatter={legendLabel} />
+                <ReferenceLine
+                  x="shift_window"
+                  yAxisId="hours"
+                  position="start"
+                  {...THERMAL_SHIFT_LINE}
+                  label={<ThermalShiftMarker text="Detected shift" />}
+                />
                 <Bar
                   yAxisId="hours"
                   dataKey="sleepHours"
                   name="Sleep (h)"
+                  fill={SLEEP_COLOR}
+                  fillOpacity={0.85}
                   radius={[4, 4, 0, 0]}
-                >
-                  {displayData.map((point) => (
-                    <Cell
-                      key={point.window}
-                      fill={WINDOW_COLORS[point.window]}
-                      fillOpacity={0.7}
-                    />
-                  ))}
-                </Bar>
+                />
                 <Bar
                   yAxisId="pct"
                   dataKey="efficiency"
                   name="Efficiency (%)"
-                  fill="#60a5fa"
-                  fillOpacity={0.5}
+                  fill={EFFICIENCY_COLOR}
+                  fillOpacity={0.6}
                   radius={[4, 4, 0, 0]}
                 />
               </BarChart>
@@ -423,50 +430,49 @@ export function CyclePhaseChart({
               HRV &amp; Mood by Window
             </p>
             <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={displayData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="oklch(1 0 0 / 5%)"
-                />
+              <BarChart data={displayData} margin={THERMAL_SHIFT_CHART_MARGIN}>
+                <CartesianGrid strokeDasharray="3 3" />
                 <XAxis
                   dataKey="window"
-                  fontSize={11}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={AXIS_TICK}
                   tickFormatter={formatWindowLabel}
                 />
                 <YAxis
                   yAxisId="hrv"
-                  fontSize={10}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={AXIS_TICK}
                   label={{
                     value: "HRV (ms)",
                     angle: -90,
                     position: "insideLeft",
-                    fontSize: 10,
-                    fill: "oklch(0.708 0 0)",
+                    fontSize: 11,
                   }}
                 />
                 <YAxis
                   yAxisId="mood"
                   orientation="right"
-                  fontSize={10}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={AXIS_TICK}
                   domain={[-3, 3]}
                   label={{
                     value: "Mood (-3 to +3)",
                     angle: 90,
                     position: "insideRight",
-                    fontSize: 10,
-                    fill: "oklch(0.708 0 0)",
+                    fontSize: 11,
                   }}
                 />
                 <Tooltip content={<WindowTooltip />} />
-                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Legend formatter={legendLabel} />
+                <ReferenceLine
+                  x="shift_window"
+                  yAxisId="hrv"
+                  position="start"
+                  {...THERMAL_SHIFT_LINE}
+                  label={<ThermalShiftMarker text="Detected shift" />}
+                />
                 <Bar
                   yAxisId="hrv"
                   dataKey="avgHrv"
                   name="HRV (ms)"
-                  fill="#34d399"
+                  fill={CHART.hrv}
                   fillOpacity={0.7}
                   radius={[4, 4, 0, 0]}
                 />
@@ -474,10 +480,16 @@ export function CyclePhaseChart({
                   yAxisId="mood"
                   dataKey="moodScore"
                   name="Mood (-3 to +3)"
-                  fill="#fbbf24"
-                  fillOpacity={0.6}
+                  fill={moodColor(0)}
                   radius={[4, 4, 0, 0]}
-                />
+                >
+                  {displayData.map((point) => (
+                    <Cell
+                      key={point.window}
+                      fill={moodColor(point.moodScore ?? 0)}
+                    />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>

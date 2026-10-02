@@ -15,17 +15,22 @@ export const ACTIVITY_LABELS: Record<ActivityClass, string> = {
   high: "High",
 };
 
+/**
+ * Activity classes on the ordinal ramp: brighter is more active, and a fully
+ * classified hour draws at full strength so the lightness steps read as
+ * designed. The class is always named beside the color.
+ */
 export const ACTIVITY_COLORS: Record<ActivityClass, string> = {
-  rest: "#60a5fa",
-  inactive: "#a78bfa",
-  low: "#34d399",
-  medium: "#fbbf24",
-  high: "#f87171",
+  rest: "var(--level-1)",
+  inactive: "var(--level-2)",
+  low: "var(--level-3)",
+  medium: "var(--level-5)",
+  high: "var(--level-6)",
 };
 
-export const NONWEAR_COLOR = "#6b7280";
-export const UNAVAILABLE_ACTIVITY_COLOR = "#64748b";
-export const HEART_RATE_LINE_COLOR = "#e5e7eb";
+export const NONWEAR_COLOR = "var(--muted)";
+export const UNAVAILABLE_ACTIVITY_COLOR = "var(--faint-foreground)";
+export const HEART_RATE_LINE_COLOR = "var(--series-hr)";
 
 export const OURA_ACTIVITY_CLASSES: Partial<
   Record<OuraActivityCode, ActivityClass>
@@ -76,7 +81,7 @@ export function getActivityBarPresentation(
   return {
     activityClass,
     fill: ACTIVITY_COLORS[activityClass],
-    fillOpacity: Number((0.3 + coverage * 0.5).toFixed(2)),
+    fillOpacity: Number((0.4 + coverage * 0.6).toFixed(2)),
     isNonWear: false,
   };
 }

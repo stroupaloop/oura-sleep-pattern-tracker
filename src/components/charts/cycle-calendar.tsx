@@ -13,7 +13,6 @@ import {
   startOfWeek,
   subMonths,
 } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   Card,
   CardContent,
@@ -21,6 +20,9 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { DayNavigator } from "@/components/ui/day-navigator";
+import { cn } from "@/lib/utils";
 
 interface CycleEntry {
   cycleNumber: number;
@@ -45,6 +47,15 @@ function describeEvidence(score: number): string {
   if (score >= 0.7) return "Higher";
   if (score >= 0.4) return "Moderate";
   return "Limited";
+}
+
+function ShiftMarker({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn("size-2 shrink-0 rounded-full bg-foreground", className)}
+    />
+  );
 }
 
 export function CycleCalendar({
@@ -113,54 +124,46 @@ export function CycleCalendar({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center justify-between">
-          <button
-            onClick={() => setViewDate(subMonths(viewDate, 1))}
-            disabled={!canGoBack}
-            className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-30"
-            aria-label="Previous month"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">
+        <DayNavigator
+          className="justify-between"
+          label={
+            <span className="flex items-center gap-2">
               {format(viewDate, "MMMM yyyy")}
+              {!isCurrentMonth && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setViewDate(today)}
+                >
+                  Today
+                </Button>
+              )}
             </span>
-            {!isCurrentMonth && (
-              <button
-                onClick={() => setViewDate(today)}
-                className="text-xs px-2 py-0.5 rounded-md bg-muted hover:bg-muted/80 transition-colors text-muted-foreground"
-              >
-                Today
-              </button>
-            )}
-          </div>
-          <button
-            onClick={() => setViewDate(addMonths(viewDate, 1))}
-            disabled={!canGoForward}
-            className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-30"
-            aria-label="Next month"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
+          }
+          onPrevious={() => setViewDate(subMonths(viewDate, 1))}
+          onNext={() => setViewDate(addMonths(viewDate, 1))}
+          previousDisabled={!canGoBack}
+          nextDisabled={!canGoForward}
+          previousLabel="Previous month"
+          nextLabel="Next month"
+        />
 
         {isCurrentMonth && (
-          <div className="text-sm font-medium text-center px-2 py-2 rounded-md bg-muted/50">
+          <p className="text-center text-sm font-medium">
             Latest detected thermal shift:{" "}
             {format(parseISO(latestShift.day), "MMM d")}
             {latestShift.evidenceScore != null
               ? ` · ${describeEvidence(latestShift.evidenceScore)} evidence`
               : ""}
-          </div>
+          </p>
         )}
 
-        <div className="overflow-x-auto">
-          <div className="grid grid-cols-7 gap-1 min-w-0">
+        <div className="-m-1 overflow-x-auto p-1">
+          <div className="grid min-w-0 grid-cols-7 gap-1">
             {DAY_LABELS.map((label) => (
               <div
                 key={label}
-                className="text-center text-xs text-muted-foreground font-medium py-1"
+                className="py-1 text-center text-xs font-medium text-muted-foreground"
               >
                 {label}
               </div>
@@ -177,9 +180,9 @@ export function CycleCalendar({
                 return (
                   <div
                     key={key}
-                    className="relative aspect-square rounded-md p-1 flex flex-col items-center justify-center opacity-30"
+                    className="relative flex aspect-square flex-col items-center justify-center rounded-md p-1 opacity-30"
                   >
-                    <span className="text-[10px] text-muted-foreground leading-none">
+                    <span className="text-xs leading-none text-muted-foreground tabular-nums">
                       {format(day, "d")}
                     </span>
                   </div>
@@ -189,31 +192,35 @@ export function CycleCalendar({
               return (
                 <button
                   key={key}
+                  type="button"
                   onClick={() =>
                     shift && setSelectedDay(isSelected ? null : key)
                   }
                   disabled={!shift}
+                  aria-pressed={shift ? isSelected : undefined}
                   aria-label={
                     shift
                       ? `Detected thermal shift on ${format(day, "MMMM d, yyyy")}`
                       : format(day, "MMMM d, yyyy")
                   }
-                  className={[
-                    "relative aspect-square rounded-md p-1 text-center transition-all",
-                    "flex flex-col items-center justify-center",
-                    shift ? "bg-amber-500/15 cursor-pointer hover:ring-1 hover:ring-amber-400/50" : "opacity-40",
+                  className={cn(
+                    "relative flex aspect-square flex-col items-center justify-center rounded-md p-1 text-center transition-colors",
+                    shift
+                      ? "cursor-pointer border border-dashed border-muted-foreground/70 hover:bg-accent"
+                      : "opacity-40",
                     isSelected && "ring-2 ring-primary",
-                    !isSelected && isTodayCell && "ring-1 ring-muted-foreground/50",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
+                    !isSelected && isTodayCell && "ring-1 ring-muted-foreground/50"
+                  )}
                 >
-                  <span className="text-[10px] text-muted-foreground leading-none">
+                  <span
+                    className={cn(
+                      "text-xs leading-none tabular-nums",
+                      shift ? "text-foreground" : "text-muted-foreground"
+                    )}
+                  >
                     {format(day, "d")}
                   </span>
-                  {shift && (
-                    <span className="w-2 h-2 rounded-full bg-amber-400 mt-0.5" />
-                  )}
+                  {shift && <ShiftMarker className="mt-1" />}
                 </button>
               );
             })}
@@ -221,12 +228,13 @@ export function CycleCalendar({
         </div>
 
         {selectedShift && (
-          <div className="rounded-md border p-3 space-y-1.5 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="font-medium text-amber-400">
+          <div className="space-y-1 border-t pt-3 text-sm">
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-2 font-medium">
+                <ShiftMarker />
                 Detected thermal shift
               </span>
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground tabular-nums">
                 {format(parseISO(selectedShift.day), "EEE, MMM d")}
               </span>
             </div>
@@ -240,9 +248,12 @@ export function CycleCalendar({
         )}
 
         <div className="flex justify-center text-xs text-muted-foreground">
-          <div className="flex items-center gap-1">
-            <span className="w-3 h-3 rounded-sm bg-amber-500/15 flex items-center justify-center">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+          <div className="flex items-center gap-1.5">
+            <span
+              aria-hidden="true"
+              className="flex size-3.5 items-center justify-center rounded-sm border border-dashed border-muted-foreground/70"
+            >
+              <ShiftMarker className="size-1.5" />
             </span>
             Detected thermal shift
           </div>

@@ -16,6 +16,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AXIS_TICK } from "./chart-theme";
+import { formatIsoDay } from "@/lib/date-utils";
 
 interface Vo2MaxPoint {
   day: string;
@@ -51,7 +53,7 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
       </CardHeader>
       <CardContent>
         {latest && (
-          <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-sm">
+          <div className="mb-2 flex flex-wrap gap-x-3 gap-y-1 text-sm tabular-nums">
             <span className="font-medium">
               Latest: {latest.vo2Max.toFixed(1)} mL/kg/min
             </span>
@@ -61,7 +63,9 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
                 {change.toFixed(1)}
               </span>
             )}
-            <span className="text-muted-foreground">Through {latest.day}</span>
+            <span className="text-muted-foreground">
+              Through {formatIsoDay(latest.day) ?? latest.day}
+            </span>
           </div>
         )}
         <p className="mb-4 text-xs text-muted-foreground">
@@ -73,45 +77,34 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="vo2MaxGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop
-                  offset="5%"
-                  stopColor="oklch(0.65 0.16 240)"
-                  stopOpacity={0.4}
-                />
-                <stop
-                  offset="95%"
-                  stopColor="oklch(0.65 0.16 240)"
-                  stopOpacity={0.05}
-                />
+                <stop offset="5%" stopColor="var(--foreground)" stopOpacity={0.16} />
+                <stop offset="95%" stopColor="var(--foreground)" stopOpacity={0.02} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+            <CartesianGrid strokeDasharray="3 3" />
             <XAxis
               dataKey="day"
               tickFormatter={(d) => d.slice(5)}
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              tick={AXIS_TICK}
               interval="preserveStartEnd"
             />
             <YAxis
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              // Fit the visible range; from zero it flattens.
+              domain={[
+                (min: number) => Math.max(0, Math.floor(min - 2)),
+                (max: number) => Math.ceil(max + 2),
+              ]}
+              allowDecimals={false}
+              tick={AXIS_TICK}
               tickFormatter={(v) => `${v}`}
               label={{
                 value: "mL/kg/min",
                 angle: -90,
                 position: "insideLeft",
-                fontSize: 10,
-                fill: "oklch(0.708 0 0)",
+                fontSize: 11,
               }}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: "oklch(0.205 0 0)",
-                borderColor: "oklch(1 0 0 / 10%)",
-                borderRadius: "0.5rem",
-                color: "oklch(0.985 0 0)",
-              }}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [
                 `${Number(value).toFixed(1)} mL/kg/min`,
@@ -122,7 +115,7 @@ export function Vo2MaxChart({ data, days = 90 }: Vo2MaxChartProps) {
             <Area
               type="monotone"
               dataKey="vo2Max"
-              stroke="oklch(0.65 0.16 240)"
+              stroke="var(--foreground)"
               strokeWidth={2}
               fill="url(#vo2MaxGradient)"
               connectNulls={false}

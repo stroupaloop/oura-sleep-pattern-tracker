@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useId, useState, useMemo } from "react";
 import {
   ComposedChart,
   Bar,
@@ -20,8 +20,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { DayNavigator } from "@/components/ui/day-navigator";
+import { EmptyState } from "@/components/ui/empty-state";
+import { AXIS_TICK } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 import { formatIsoDay, shiftIsoDay } from "@/lib/date-utils";
 import type { ProjectedActivityDay } from "@/lib/oura/activity";
 import {
@@ -29,7 +31,6 @@ import {
   ACTIVITY_LABELS,
   HEART_RATE_LINE_COLOR,
   NONWEAR_COLOR,
-  UNAVAILABLE_ACTIVITY_COLOR,
   getActivityBarPresentation,
   type ActivityClass,
 } from "@/lib/oura/activity-presentation";
@@ -48,6 +49,11 @@ interface WearActivityChartProps {
   hrData: HrOverlay[];
   currentDay: string;
 }
+
+const LEGEND_CLASSES: ActivityClass[] = ["rest", "inactive", "low", "medium", "high"];
+
+const NONWEAR_HATCH =
+  "repeating-linear-gradient(135deg, var(--faint-foreground) 0 1px, transparent 1px 4px)";
 
 function formatHour(h: number): string {
   if (h === 0) return "12a";
@@ -78,11 +84,61 @@ interface ChartPoint {
   barFillOpacity: number;
 }
 
+function WearActivityTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ payload?: ChartPoint }>;
+}) {
+  const d = active ? payload?.[0]?.payload : undefined;
+  if (!d) return null;
+  return (
+    <ChartTooltipFrame title={`${formatHour(d.hour)} ET`}>
+      {d.avgBpm != null ? (
+        <ChartTooltipRow
+          color={HEART_RATE_LINE_COLOR}
+          label="HR"
+          value={`${d.avgBpm} bpm`}
+        />
+      ) : (
+        <p className="text-muted-foreground">No heart-rate sample</p>
+      )}
+      {d.isNonWear && (
+        <p className="text-muted-foreground">
+          Oura code 0 dominated this hour ·{" "}
+          {formatMinutes(d.nonWearMinutes)} explicit non-wear
+        </p>
+      )}
+      {d.activityClass && (
+        <ChartTooltipRow
+          color={ACTIVITY_COLORS[d.activityClass]}
+          label={`Dominant among ${formatMinutes(d.classifiedMinutes)} classified`}
+          value={ACTIVITY_LABELS[d.activityClass]}
+        />
+      )}
+      {!d.isNonWear && !d.activityClass && (
+        <p className="text-muted-foreground">
+          {d.classifiedMinutes > 0
+            ? "Mixed or partial Oura activity classification"
+            : "No Oura activity classification"}
+        </p>
+      )}
+      {d.classifiedMinutes > 0 && (
+        <p className="text-muted-foreground">
+          {formatMinutes(d.classifiedMinutes)} of this hour classified
+        </p>
+      )}
+    </ChartTooltipFrame>
+  );
+}
+
 export function WearActivityChart({
   activityData,
   hrData,
   currentDay,
 }: WearActivityChartProps) {
+  const hatchId = `nonwear-hatch-${useId().replace(/[^\w-]/g, "")}`;
   const availableDays = useMemo(() => {
     const days = new Set<string>();
     for (const h of hrData) days.add(h.day);
@@ -188,77 +244,70 @@ export function WearActivityChart({
       ? Math.ceil((Math.max(...bpmValues) + 10) / 5) * 5
       : 120;
   const hasSelectedDayData = dayActivity != null || hrByHour.size > 0;
+  const selectedDayLabel = formatIsoDay(selectedDay) ?? selectedDay;
 
   return (
     <Card>
       <CardHeader>
         <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle>Ring Wear & Activity</CardTitle>
-          <div className="flex items-center gap-2 self-end text-sm sm:self-auto">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-h-11 min-w-11"
-              disabled={!canPrev}
-              aria-label="Previous ET calendar day"
-              onClick={() => {
-                const idx = selectableDays.indexOf(selectedDay);
-                if (idx > 0) setSelectedDay(selectableDays[idx - 1]);
-              }}
-            >
-              <ChevronLeft className="size-4" aria-hidden="true" />
-            </Button>
-            <span className="min-w-[150px] text-center text-muted-foreground tabular-nums">
-              {formatIsoDay(selectedDay) ?? selectedDay} · ET
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="min-h-11 min-w-11"
-              disabled={!canNext}
-              aria-label="Next ET calendar day"
-              onClick={() => {
-                const idx = selectableDays.indexOf(selectedDay);
-                if (idx < selectableDays.length - 1) {
-                  setSelectedDay(selectableDays[idx + 1]);
-                }
-              }}
-            >
-              <ChevronRight className="size-4" aria-hidden="true" />
-            </Button>
-          </div>
+          <DayNavigator
+            className="self-end sm:self-auto"
+            label={
+              <span className="inline-block min-w-36">
+                {selectedDayLabel} · ET
+              </span>
+            }
+            onPrevious={() => {
+              const idx = selectableDays.indexOf(selectedDay);
+              if (idx > 0) setSelectedDay(selectableDays[idx - 1]);
+            }}
+            onNext={() => {
+              const idx = selectableDays.indexOf(selectedDay);
+              if (idx < selectableDays.length - 1) {
+                setSelectedDay(selectableDays[idx + 1]);
+              }
+            }}
+            previousDisabled={!canPrev}
+            nextDisabled={!canNext}
+            previousLabel="Previous ET calendar day"
+            nextLabel="Next ET calendar day"
+          />
         </div>
         <CardDescription>
           Hourly average heart rate with Oura activity classification. Faded
           bars indicate partial hourly coverage.
         </CardDescription>
         <div className="mt-1 space-y-2 text-sm">
-          <div className="flex flex-wrap gap-x-3 gap-y-1">
-            {(
-              ["rest", "inactive", "low", "medium", "high"] as ActivityClass[]
-            ).map((activityClass) => (
-              <span key={activityClass} className="flex items-center gap-1">
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+            {LEGEND_CLASSES.map((activityClass) => (
+              <span key={activityClass} className="inline-flex items-center gap-1.5">
                 <span
-                  className="inline-block w-2.5 h-2.5 rounded-sm"
+                  aria-hidden="true"
+                  className="size-2.5 rounded-sm"
                   style={{ backgroundColor: ACTIVITY_COLORS[activityClass] }}
                 />
                 {ACTIVITY_LABELS[activityClass]}
               </span>
             ))}
-            <span className="flex items-center gap-1">
+            <span className="inline-flex items-center gap-1.5">
               <span
-                className="inline-block h-2.5 w-2.5 rounded-sm"
-                style={{ backgroundColor: UNAVAILABLE_ACTIVITY_COLOR }}
+                aria-hidden="true"
+                className="size-2.5 rounded-sm bg-faint-foreground/30 ring-1 ring-inset ring-border"
               />
               Mixed or unavailable
             </span>
-            <span className="flex items-center gap-1">
-              <span className="inline-block h-2.5 w-2.5 rounded-sm border border-dashed border-gray-500 bg-gray-500/15" />
+            <span className="inline-flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="size-2.5 rounded-sm border border-dashed border-faint-foreground bg-muted"
+                style={{ backgroundImage: NONWEAR_HATCH }}
+              />
               Mostly non-wear (Oura code 0)
             </span>
           </div>
           {classifiedMinutes > 0 ? (
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground tabular-nums">
               Oura classification coverage: {formatMinutes(classifiedMinutes)}
               {" · "}Worn: {formatMinutes(wornMinutes)}
               {totalNonWearMinutes > 0 &&
@@ -270,7 +319,7 @@ export function WearActivityChart({
             </p>
           )}
           {activitySummary && (
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground tabular-nums">
               Movement: {activitySummary.join(" · ")}
             </p>
           )}
@@ -278,128 +327,78 @@ export function WearActivityChart({
       </CardHeader>
       <CardContent>
         {!hasSelectedDayData ? (
-          <div className="flex min-h-[300px] items-center justify-center rounded-md border border-dashed border-border px-4 text-center">
-            <div className="max-w-md space-y-1">
-              <p className="text-sm font-medium">
-                No hourly heart-rate or Oura activity data for{" "}
-                {formatIsoDay(selectedDay) ?? selectedDay} ET
-              </p>
-              {canPrev && (
-                <p className="text-sm text-muted-foreground">
-                  Use the previous-day control to review historical data.
-                </p>
-              )}
-            </div>
-          </div>
+          <EmptyState
+            className="min-h-[300px] justify-center"
+            title={`No hourly heart-rate or Oura activity data for ${selectedDayLabel} ET`}
+          >
+            {canPrev
+              ? "Use the previous-day control to review historical data."
+              : null}
+          </EmptyState>
         ) : (
           <div
             role="img"
-            aria-label={`Hourly heart rate and dominant Oura activity for ${
-              formatIsoDay(selectedDay) ?? selectedDay
-            } in Eastern Time`}
+            aria-label={`Hourly heart rate and dominant Oura activity for ${selectedDayLabel} in Eastern Time`}
           >
             <ResponsiveContainer width="100%" height={300}>
               <ComposedChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
-            <XAxis
-              dataKey="label"
-              fontSize={12}
-              tick={{ fill: "oklch(0.708 0 0)" }}
-              interval={2}
-            />
-            <YAxis
-              fontSize={12}
-              tick={{ fill: "oklch(0.708 0 0)" }}
-              domain={[minBpm, maxBpm]}
-              tickFormatter={(v) => `${v}`}
-              width={40}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "oklch(0.205 0 0)",
-                borderColor: "oklch(1 0 0 / 10%)",
-                borderRadius: "0.5rem",
-                color: "oklch(0.985 0 0)",
-              }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              content={({ active, payload }: any) => {
-                if (!active || !payload?.[0]) return null;
-                const d = payload[0].payload as ChartPoint;
-                return (
-                  <div className="rounded-lg border border-white/10 bg-[oklch(0.205_0_0)] px-3 py-2 text-sm text-[oklch(0.985_0_0)]">
-                    <p className="font-medium">{formatHour(d.hour)} ET</p>
-                    {d.avgBpm != null ? (
-                      <p>HR: {d.avgBpm} bpm</p>
-                    ) : (
-                      <p className="text-gray-400">No heart-rate sample</p>
-                    )}
-                    {d.isNonWear && (
-                      <p className="text-gray-400">
-                        Oura code 0 dominated this hour ·{" "}
-                        {formatMinutes(d.nonWearMinutes)} explicit non-wear
-                      </p>
-                    )}
-                    {d.activityClass && (
-                      <p
-                        style={{
-                          color: ACTIVITY_COLORS[d.activityClass],
-                        }}
-                      >
-                        Dominant among{" "}
-                        {formatMinutes(d.classifiedMinutes)} classified:{" "}
-                        {ACTIVITY_LABELS[d.activityClass]}
-                      </p>
-                    )}
-                    {!d.isNonWear &&
-                      !d.activityClass &&
-                      (d.classifiedMinutes > 0 ? (
-                        <p className="text-gray-400">
-                          Mixed or partial Oura activity classification
-                        </p>
-                      ) : (
-                        <p className="text-gray-400">
-                          No Oura activity classification
-                        </p>
-                      ))}
-                    {d.classifiedMinutes > 0 && (
-                      <p className="text-gray-400">
-                        {formatMinutes(d.classifiedMinutes)} of this hour
-                        classified
-                      </p>
-                    )}
-                  </div>
-                );
-              }}
-            />
-            {nonWearGaps.map((gap, i) => (
-              <ReferenceArea
-                key={i}
-                x1={formatHour(gap.start)}
-                x2={formatHour(gap.end)}
-                fill={NONWEAR_COLOR}
-                fillOpacity={0.15}
-                stroke={NONWEAR_COLOR}
-                strokeOpacity={0.3}
-                strokeDasharray="4 4"
-              />
-            ))}
-            <Bar dataKey="avgBpm" radius={[2, 2, 0, 0]} maxBarSize={16}>
-              {chartData.map((point, i) => (
-                <Cell
-                  key={i}
-                  fill={point.barFill}
-                  fillOpacity={point.barFillOpacity}
+                <defs>
+                  <pattern
+                    id={hatchId}
+                    width={6}
+                    height={6}
+                    patternUnits="userSpaceOnUse"
+                    patternTransform="rotate(45)"
+                  >
+                    <rect width={6} height={6} fill={NONWEAR_COLOR} />
+                    <line
+                      x1={0}
+                      y1={0}
+                      x2={0}
+                      y2={6}
+                      stroke="var(--faint-foreground)"
+                      strokeOpacity={0.5}
+                    />
+                  </pattern>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="label" tick={AXIS_TICK} interval={2} />
+                <YAxis
+                  tick={AXIS_TICK}
+                  domain={[minBpm, maxBpm]}
+                  tickFormatter={(v) => `${v}`}
+                  width={40}
                 />
-              ))}
-            </Bar>
-            <Line
-              type="linear"
-              dataKey="avgBpm"
-              stroke={HEART_RATE_LINE_COLOR}
-              strokeWidth={2}
-              dot={false}
-              connectNulls={false}
-            />
+                <Tooltip content={<WearActivityTooltip />} />
+                {nonWearGaps.map((gap, i) => (
+                  <ReferenceArea
+                    key={i}
+                    x1={formatHour(gap.start)}
+                    x2={formatHour(gap.end)}
+                    fill={`url(#${hatchId})`}
+                    fillOpacity={1}
+                    stroke="var(--faint-foreground)"
+                    strokeOpacity={0.5}
+                    strokeDasharray="4 4"
+                  />
+                ))}
+                <Bar dataKey="avgBpm" radius={[2, 2, 0, 0]} maxBarSize={16}>
+                  {chartData.map((point, i) => (
+                    <Cell
+                      key={i}
+                      fill={point.barFill}
+                      fillOpacity={point.barFillOpacity}
+                    />
+                  ))}
+                </Bar>
+                <Line
+                  type="linear"
+                  dataKey="avgBpm"
+                  stroke={HEART_RATE_LINE_COLOR}
+                  strokeWidth={2}
+                  dot={false}
+                  connectNulls={false}
+                />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
