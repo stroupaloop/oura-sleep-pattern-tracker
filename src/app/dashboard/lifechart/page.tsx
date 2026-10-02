@@ -20,6 +20,7 @@ import {
 import { LifeChart } from "./life-chart";
 import { TimeRangeSelector } from "./time-range-selector";
 import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface Props {
   searchParams: Promise<{ range?: string }>;
@@ -131,11 +132,17 @@ export default async function LifeChartPage({ searchParams }: Props) {
       />
 
       {analysis.length === 0 && moods.length === 0 && episodes.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <p>No sleep, mood, or episode data for the selected range.</p>
-        </div>
+        <EmptyState title="No sleep, mood, or episode data for the selected range">
+          Try a longer range. Nights arrive when the Oura app syncs, and mood
+          comes from the daily log.
+        </EmptyState>
       ) : (
-        <LifeChart analysis={analysis} moods={moods} episodes={episodes} />
+        <LifeChart
+          analysis={analysis}
+          moods={moods}
+          episodes={episodes}
+          threshold={patternConfig.dailyAnomalyThreshold}
+        />
       )}
     </div>
   );
