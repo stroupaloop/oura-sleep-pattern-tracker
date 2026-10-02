@@ -5,9 +5,10 @@ import type { BipolarType } from "./config";
  * way stop counting as current until a full recompute (the 90-day backfill
  * runs one). 2026.10.1: a night is the day's overnight periods, short nights
  * typed `sleep` included; today's partial activity waits; only choppier
- * nights add within-night variability to the score.
+ * nights add within-night variability to the score. 2026.10.2: nights far
+ * from a metric's baseline center no longer widen its spread.
  */
-export const PATTERN_ALGORITHM_VERSION = "2026.10.1";
+export const PATTERN_ALGORITHM_VERSION = "2026.10.2";
 export const PATTERN_SIGNAL_MODE = "wearable-only";
 
 export interface PatternProvenance {

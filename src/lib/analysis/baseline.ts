@@ -15,6 +15,50 @@ export function standardDeviation(values: number[], mean: number): number {
   return Math.sqrt(squaredDiffs.reduce((sum, v) => sum + v, 0) / (finite.length - 1));
 }
 
+const NORMAL_IQR_IN_STANDARD_DEVIATIONS = 1.349;
+const OUTLIER_CUTOFF_STANDARD_DEVIATIONS = 3;
+const NORMAL_TRUNCATED_AT_CUTOFF_CORRECTION = 1.0136;
+
+function quantileSorted(sorted: number[], probability: number): number {
+  const position = (sorted.length - 1) * probability;
+  const lower = Math.floor(position);
+  const upper = Math.ceil(position);
+  return sorted[lower] + (position - lower) * (sorted[upper] - sorted[lower]);
+}
+
+function rootMeanSquare(deviations: number[]): number {
+  return Math.sqrt(
+    deviations.reduce((sum, deviation) => sum + deviation ** 2, 0) /
+      (deviations.length - 1)
+  );
+}
+
+// A far-off night (a recovery sleep, a 4am bedtime) would widen the whole
+// baseline and hide the next unusual night, so nights over three robust SDs
+// (IQR / 1.349) from the center are left out of the spread. Quartiles keep
+// their scale on integer metrics with many ties, where a MAD around a trimmed
+// mean collapses toward zero. The correction undoes the cut's bias.
+function inlierStandardDeviation(deviations: number[]): number {
+  if (deviations.length < 2) return Number.NaN;
+  const sorted = [...deviations].sort((a, b) => a - b);
+  const robustScale =
+    (quantileSorted(sorted, 0.75) - quantileSorted(sorted, 0.25)) /
+    NORMAL_IQR_IN_STANDARD_DEVIATIONS;
+  const inliers = deviations.filter(
+    (deviation) =>
+      Math.abs(deviation) <= OUTLIER_CUTOFF_STANDARD_DEVIATIONS * robustScale
+  );
+  if (robustScale === 0 || inliers.length < 2) return rootMeanSquare(deviations);
+  return rootMeanSquare(inliers) * NORMAL_TRUNCATED_AT_CUTOFF_CORRECTION;
+}
+
+export function robustStandardDeviation(values: number[], center: number): number {
+  if (!Number.isFinite(center)) return Number.NaN;
+  return inlierStandardDeviation(
+    values.filter(Number.isFinite).map((value) => value - center)
+  );
+}
+
 export function zScore(value: number, mean: number, std: number): number {
   if (!Number.isFinite(value) || !Number.isFinite(mean) || !Number.isFinite(std) || std === 0) {
     return 0;
@@ -61,17 +105,15 @@ export function circularDifferenceMinutes(value: number, center: number): number
   return ((value - center + 720) % 1440 + 1440) % 1440 - 720;
 }
 
-export function circularStandardDeviationMinutes(
+export function robustCircularStandardDeviationMinutes(
   values: number[],
   center = circularMeanMinutes(values)
 ): number {
-  const differences = values
-    .map((value) => circularDifferenceMinutes(value, center))
-    .filter(Number.isFinite);
-  if (differences.length < 2 || !Number.isFinite(center)) return Number.NaN;
-  return Math.sqrt(
-    differences.reduce((sum, difference) => sum + difference ** 2, 0) /
-      (differences.length - 1)
+  if (!Number.isFinite(center)) return Number.NaN;
+  return inlierStandardDeviation(
+    values
+      .map((value) => circularDifferenceMinutes(value, center))
+      .filter(Number.isFinite)
   );
 }
 

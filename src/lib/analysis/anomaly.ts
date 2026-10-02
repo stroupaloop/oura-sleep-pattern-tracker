@@ -3,10 +3,10 @@ import { sleepPeriods, dailyAnalysis, dailyReadiness } from "@/lib/db/schema";
 import { desc, sql, and, lt, eq, inArray } from "drizzle-orm";
 import {
   circularMeanMinutes,
-  circularStandardDeviationMinutes,
+  robustCircularStandardDeviationMinutes,
   circularZScore,
   trimmedMean,
-  standardDeviation,
+  robustStandardDeviation,
   zScore,
   minutesFromMidnight,
 } from "./baseline";
@@ -263,24 +263,24 @@ export function computeDailyAnalysis(
   };
 
   const stds: Record<string, number> = {
-    sleep: standardDeviation(sleepVals, baselines.sleep),
-    bedtime: circularStandardDeviationMinutes(bedtimeVals, baselines.bedtime),
-    wake: circularStandardDeviationMinutes(wakeVals, baselines.wake),
-    hrv: standardDeviation(hrvVals, baselines.hrv),
-    hr: standardDeviation(hrVals, baselines.hr),
-    latency: standardDeviation(latencyVals, baselines.latency),
-    temperature: standardDeviation(tempVals, baselines.temperature),
-    restlessness: standardDeviation(restlessVals, baselines.restlessness),
-    efficiency: standardDeviation(efficiencyVals, baselines.efficiency),
-    deepPct: standardDeviation(deepPctVals, baselines.deepPct),
-    remPct: standardDeviation(remPctVals, baselines.remPct),
-    withinNightHrvCV: standardDeviation(withinNightHrvCVVals, baselines.withinNightHrvCV),
-    withinNightHrCV: standardDeviation(withinNightHrCVVals, baselines.withinNightHrCV),
-    hypnogramFrag: standardDeviation(hypnogramFragVals, baselines.hypnogramFrag),
-    steps: standardDeviation(stepsVals, baselines.steps),
-    activeMinutes: standardDeviation(activeMinVals, baselines.activeMinutes),
-    circadianIV: standardDeviation(circadianIVVals, baselines.circadianIV),
-    circadianIS: standardDeviation(circadianISVals, baselines.circadianIS),
+    sleep: robustStandardDeviation(sleepVals, baselines.sleep),
+    bedtime: robustCircularStandardDeviationMinutes(bedtimeVals, baselines.bedtime),
+    wake: robustCircularStandardDeviationMinutes(wakeVals, baselines.wake),
+    hrv: robustStandardDeviation(hrvVals, baselines.hrv),
+    hr: robustStandardDeviation(hrVals, baselines.hr),
+    latency: robustStandardDeviation(latencyVals, baselines.latency),
+    temperature: robustStandardDeviation(tempVals, baselines.temperature),
+    restlessness: robustStandardDeviation(restlessVals, baselines.restlessness),
+    efficiency: robustStandardDeviation(efficiencyVals, baselines.efficiency),
+    deepPct: robustStandardDeviation(deepPctVals, baselines.deepPct),
+    remPct: robustStandardDeviation(remPctVals, baselines.remPct),
+    withinNightHrvCV: robustStandardDeviation(withinNightHrvCVVals, baselines.withinNightHrvCV),
+    withinNightHrCV: robustStandardDeviation(withinNightHrCVVals, baselines.withinNightHrCV),
+    hypnogramFrag: robustStandardDeviation(hypnogramFragVals, baselines.hypnogramFrag),
+    steps: robustStandardDeviation(stepsVals, baselines.steps),
+    activeMinutes: robustStandardDeviation(activeMinVals, baselines.activeMinutes),
+    circadianIV: robustStandardDeviation(circadianIVVals, baselines.circadianIV),
+    circadianIS: robustStandardDeviation(circadianISVals, baselines.circadianIS),
   };
 
   const zScores: Record<string, number> = {
