@@ -9,8 +9,10 @@ import {
   dailyMood,
   dailySpo2,
   medicationLogs,
+  dailyAnalysis,
+  episodeAssessments,
 } from "@/lib/db/schema";
-import { inArray } from "drizzle-orm";
+import { and, gte, inArray, lte } from "drizzle-orm";
 import { DetectionConfigValues, BipolarType } from "./config";
 import { getTodayET } from "@/lib/date-utils";
 import {
@@ -40,7 +42,70 @@ import { circularVariation, isNextCalendarDay } from "./baseline";
 export interface ReprocessResult {
   daysProcessed: number;
   episodes: { watch: number; warning: number; alert: number };
+  /** Older pattern checks dropped for days the current algorithm does not score. */
+  resultsRemoved: number;
   processingTimeMs: number;
+}
+
+const DELETE_BATCH_DAYS = 500;
+
+/**
+ * Leaves the range holding only what this run wrote. A day the current
+ * algorithm no longer scores, such as the first nights back after weeks
+ * without the ring, when there is no baseline yet, would otherwise keep a
+ * result computed the old way: hidden as out of date, and never updated.
+ */
+async function removeResultsNotRecomputed(
+  startDate: string | undefined,
+  endDate: string | undefined,
+  analysedDays: ReadonlySet<string>,
+  assessedDays: ReadonlySet<string>
+): Promise<number> {
+  const [analysisRows, assessmentRows] = await Promise.all([
+    db
+      .select({ day: dailyAnalysis.day })
+      .from(dailyAnalysis)
+      .where(
+        and(
+          startDate ? gte(dailyAnalysis.day, startDate) : undefined,
+          endDate ? lte(dailyAnalysis.day, endDate) : undefined
+        )
+      ),
+    db
+      .select({ day: episodeAssessments.day })
+      .from(episodeAssessments)
+      .where(
+        and(
+          startDate ? gte(episodeAssessments.day, startDate) : undefined,
+          endDate ? lte(episodeAssessments.day, endDate) : undefined
+        )
+      ),
+  ]);
+  const staleAnalysis = analysisRows
+    .map((row) => row.day)
+    .filter((day) => !analysedDays.has(day));
+  const staleAssessments = assessmentRows
+    .map((row) => row.day)
+    .filter((day) => !assessedDays.has(day));
+
+  for (let i = 0; i < staleAnalysis.length; i += DELETE_BATCH_DAYS) {
+    await db
+      .delete(dailyAnalysis)
+      .where(
+        inArray(dailyAnalysis.day, staleAnalysis.slice(i, i + DELETE_BATCH_DAYS))
+      );
+  }
+  for (let i = 0; i < staleAssessments.length; i += DELETE_BATCH_DAYS) {
+    await db
+      .delete(episodeAssessments)
+      .where(
+        inArray(
+          episodeAssessments.day,
+          staleAssessments.slice(i, i + DELETE_BATCH_DAYS)
+        )
+      );
+  }
+  return staleAssessments.length;
 }
 
 function shiftCalendarDay(day: string, offset: number): string {
@@ -235,6 +300,8 @@ export async function reprocessAll(
   }
 
   const dailyResults = new Map<string, DailyAnalysisResult>();
+  const analysedDays = new Set<string>();
+  const assessedDays = new Set<string>();
   let daysProcessed = 0;
   const episodeCounts = { watch: 0, warning: 0, alert: 0 };
 
@@ -256,6 +323,7 @@ export async function reprocessAll(
 
       if (uniqueFilteredDays.includes(day)) {
         await upsertDailyAnalysis(result);
+        analysedDays.add(day);
         daysProcessed++;
       }
     }
@@ -286,6 +354,7 @@ export async function reprocessAll(
     if (recentResults.length > 0) {
       const episode = assessEpisode(day, recentResults, allPriorResults, config, expectedDaysByWindow, bipolarType);
       await upsertEpisodeAssessment(episode);
+      assessedDays.add(day);
 
       if (episode.tier === "watch") episodeCounts.watch++;
       else if (episode.tier === "warning") episodeCounts.warning++;
@@ -293,9 +362,22 @@ export async function reprocessAll(
     }
   }
 
+  // A night synced while this ran is the next run's to score, so nothing
+  // after the last night read here is removed, and nothing at all if none was.
+  const lastNight = allSleepRows[allSleepRows.length - 1]?.day;
+  const resultsRemoved = lastNight
+    ? await removeResultsNotRecomputed(
+        startDate,
+        endDate && endDate < lastNight ? endDate : lastNight,
+        analysedDays,
+        assessedDays
+      )
+    : 0;
+
   return {
     daysProcessed,
     episodes: episodeCounts,
+    resultsRemoved,
     processingTimeMs: Math.round(performance.now() - start),
   };
 }
