@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth, isSensitiveUser } from "@/lib/auth";
-import { syncDateRange, syncSensitiveDateRange } from "@/lib/oura/sync";
-import { runCyclePredictions } from "@/lib/analysis/cycle";
-import { runHealthSignalDetection } from "@/lib/analysis/health-signals";
-import { reprocessAll } from "@/lib/analysis/reprocess";
-import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { format, subDays } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
+import { runOuraSyncPipeline } from "@/lib/oura/sync-pipeline";
 
 export async function POST() {
   const session = await auth();
@@ -24,45 +20,15 @@ export async function POST() {
   );
 
   try {
-    const result = await syncDateRange(startDate, endDate, "manual");
-
-    let sensitiveRecords = 0;
-    let cyclesDetected = 0;
-    const warnings = [...result.warnings];
-    const sensitiveResult = await syncSensitiveDateRange(
-      startDate,
-      endDate,
-      "manual"
+    return NextResponse.json(
+      await runOuraSyncPipeline({
+        startDate,
+        endDate,
+        syncType: "manual",
+        includePrivate: true,
+        recompute: "window",
+      })
     );
-    sensitiveRecords = sensitiveResult.records;
-    warnings.push(...sensitiveResult.warnings);
-
-    const cycleResult = await runCyclePredictions();
-    cyclesDetected = cycleResult.cyclesDetected;
-
-    const [config, bipolarType] = await Promise.all([
-      loadActiveConfig(),
-      loadBipolarType(),
-    ]);
-    const analysis = await reprocessAll(
-      config,
-      startDate,
-      endDate,
-      bipolarType
-    );
-    const healthSignals = (
-      await runHealthSignalDetection(cycleResult.evaluation)
-    ).signals;
-
-    return NextResponse.json({
-      ...result,
-      status: warnings.length > 0 ? "partial" : "success",
-      warnings,
-      sensitiveRecords,
-      cyclesDetected,
-      analysis,
-      healthSignals,
-    });
   } catch (error) {
     console.error("Manual sync error:", error);
     return NextResponse.json(

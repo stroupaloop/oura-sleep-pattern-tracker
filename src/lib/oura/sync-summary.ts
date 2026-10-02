@@ -11,6 +11,13 @@ const DATASET_LABELS: Record<string, string> = {
   personal_info: "Profile",
 };
 
+const STEP_LABELS: Record<string, string> = {
+  private_sync: "private data",
+  cycle_predictions: "cycle context",
+  pattern_checks: "pattern checks",
+  health_signals: "health signals",
+};
+
 interface SyncSummaryOptions {
   operation: "Sync" | "Backfill";
   includeRange?: boolean;
@@ -78,34 +85,64 @@ export function formatOuraSyncSummary(
     options.includeRange && startDate && endDate
       ? ` (${startDate} to ${endDate})`
       : "";
+  const failedSteps = [
+    ...new Set(
+      (Array.isArray(data.failedSteps) ? data.failedSteps : []).flatMap(
+        (failure) => {
+          const step = isRecord(failure) ? readString(failure.step) : null;
+          return step && STEP_LABELS[step] ? [STEP_LABELS[step]] : [];
+        }
+      )
+    ),
+  ];
+  const recomputedNights = isRecord(data.analysis)
+    ? readCount(data.analysis.daysProcessed)
+    : null;
   const isPartial =
     data.status === "partial" ||
     unavailableDatasets.length > 0 ||
-    notSharedDatasets.length > 0;
+    notSharedDatasets.length > 0 ||
+    failedSteps.length > 0;
   const coverage = isPartial ? " with partial coverage" : "";
   const records = `${formatRecordCount(
     coreRecords,
     "core"
   )} and ${formatRecordCount(privateRecords, "private")}`;
 
-  if (!isPartial) {
-    return `${options.operation} complete${range}: processed ${records}.`;
+  const sentences = [
+    `${options.operation} complete${coverage}${range}: processed ${records}.`,
+  ];
+  if (options.operation === "Backfill" && recomputedNights != null) {
+    sentences.push(
+      `Pattern checks recomputed for ${recomputedNights} ${
+        recomputedNights === 1 ? "night" : "nights"
+      }.`
+    );
   }
+  if (!isPartial) return sentences.join(" ");
 
-  const notShared =
-    notSharedDatasets.length > 0
-      ? ` Not shared by Oura: ${formatList(notSharedDatasets)}. Enable ${
-          notSharedDatasets.length === 1 ? "it" : "them"
-        } for this app in Oura, then reconnect.`
-      : "";
-  if (unavailableDatasets.length === 0 && notSharedDatasets.length > 0) {
-    return `${options.operation} complete${coverage}${range}: processed ${records}.${notShared}`;
+  const keptRows =
+    "The sync did not delete previously stored source rows for those datasets.";
+  if (unavailableDatasets.length > 0) {
+    sentences.push(
+      `Optional datasets not fully updated: ${formatList(unavailableDatasets)}. ${keptRows}`
+    );
+  } else if (notSharedDatasets.length === 0 && failedSteps.length === 0) {
+    sentences.push(`Some optional datasets were not fully updated. ${keptRows}`);
   }
-
-  const unavailable =
-    unavailableDatasets.length > 0
-      ? `Optional datasets not fully updated: ${formatList(unavailableDatasets)}.`
-      : "Some optional datasets were not fully updated.";
-
-  return `${options.operation} complete${coverage}${range}: processed ${records}. ${unavailable} The sync did not delete previously stored source rows for those datasets.${notShared}`;
+  if (notSharedDatasets.length > 0) {
+    sentences.push(
+      `Not shared by Oura: ${formatList(notSharedDatasets)}. Enable ${
+        notSharedDatasets.length === 1 ? "it" : "them"
+      } for this app in Oura, then reconnect.`
+    );
+  }
+  if (failedSteps.length > 0) {
+    sentences.push(
+      `Didn't finish: ${formatList(failedSteps)}. Running it again usually completes ${
+        failedSteps.length === 1 ? "it" : "them"
+      }.`
+    );
+  }
+  return sentences.join(" ");
 }

@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, isSensitiveUser } from "@/lib/auth";
-import { syncDateRange, syncSensitiveDateRange } from "@/lib/oura/sync";
-import {
-  runCyclePredictions,
-  type CycleComputationOutcome,
-} from "@/lib/analysis/cycle";
-import { runHealthSignalDetection } from "@/lib/analysis/health-signals";
-import { reprocessAll } from "@/lib/analysis/reprocess";
-import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { format, subDays } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
+import { loadOuraGrant } from "@/lib/oura/client";
+import { measureBackfillCoverage } from "@/lib/oura/backfill-coverage";
+import { runOuraSyncPipeline } from "@/lib/oura/sync-pipeline";
+
+// A 90-day backfill plus a full pattern-history recompute takes about a
+// minute; heart-rate writes are batched to keep it well inside this.
+export const maxDuration = 300;
 
 export async function POST(request: NextRequest) {
   const cronAuth = request.headers.get("authorization");
@@ -34,54 +33,27 @@ export async function POST(request: NextRequest) {
     subDays(new Date(`${endDate}T12:00:00`), days - 1),
     "yyyy-MM-dd"
   );
+  const includePrivate = Boolean(isCron || isSensitiveUser(userEmail));
 
   try {
-    const result = await syncDateRange(startDate, endDate, "backfill");
-
-    let sensitiveRecords = 0;
-    let cyclesDetected = 0;
-    let cycleEvaluation: CycleComputationOutcome | null = null;
-    const warnings = [...result.warnings];
-    const canProcessSensitive = Boolean(isCron || isSensitiveUser(userEmail));
-    if (canProcessSensitive) {
-      const sensitiveResult = await syncSensitiveDateRange(
-        startDate,
-        endDate,
-        "backfill"
-      );
-      sensitiveRecords = sensitiveResult.records;
-      warnings.push(...sensitiveResult.warnings);
-
-      const cycleResult = await runCyclePredictions();
-      cyclesDetected = cycleResult.cyclesDetected;
-      cycleEvaluation = cycleResult.evaluation;
-    }
-
-    const [config, bipolarType] = await Promise.all([
-      loadActiveConfig(),
-      loadBipolarType(),
-    ]);
-    const analysis = await reprocessAll(
-      config,
+    const result = await runOuraSyncPipeline({
       startDate,
       endDate,
-      bipolarType
-    );
-    const healthSignals = canProcessSensitive && cycleEvaluation
-      ? (await runHealthSignalDetection(cycleEvaluation)).signals
-      : 0;
-
-    return NextResponse.json({
-      startDate,
-      endDate,
-      ...result,
-      status: warnings.length > 0 ? "partial" : "success",
-      warnings,
-      sensitiveRecords,
-      cyclesDetected,
-      analysis,
-      healthSignals,
+      syncType: "backfill",
+      includePrivate,
+      // History follows the current algorithm, not just the backfilled days.
+      recompute: "history",
     });
+    const coverage = await loadOuraGrant()
+      .then((granted) =>
+        measureBackfillCoverage(startDate, endDate, granted, includePrivate)
+      )
+      .catch((error) => {
+        console.error("Backfill coverage error:", error);
+        return null;
+      });
+
+    return NextResponse.json({ ...result, coverage });
   } catch (error) {
     console.error("Backfill error:", error);
     return NextResponse.json(

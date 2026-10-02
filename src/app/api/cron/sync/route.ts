@@ -1,12 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { syncDateRange, syncSensitiveDateRange } from "@/lib/oura/sync";
-import { reprocessAll } from "@/lib/analysis/reprocess";
-import { runCyclePredictions } from "@/lib/analysis/cycle";
-import { runHealthSignalDetection } from "@/lib/analysis/health-signals";
-import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { format, subDays } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
 import { notifyOuraConnectionFailure } from "@/lib/notifications/oura-connection-notify";
+import { runOuraSyncPipeline } from "@/lib/oura/sync-pipeline";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -16,57 +12,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const todayStr = getTodayET();
-  const todayDate = new Date(todayStr + "T12:00:00");
-  const syncStartDate = format(subDays(todayDate, 6), "yyyy-MM-dd");
-  const analysisStartDate = syncStartDate;
-  const endDate = todayStr;
+  const endDate = getTodayET();
+  const startDate = format(
+    subDays(new Date(`${endDate}T12:00:00`), 6),
+    "yyyy-MM-dd"
+  );
 
   try {
-    const syncResult = await syncDateRange(
-      syncStartDate,
+    const result = await runOuraSyncPipeline({
+      startDate,
       endDate,
-      "cron"
-    );
-
-    const sensitiveResult = await syncSensitiveDateRange(
-      syncStartDate,
-      endDate,
-      "cron"
-    );
-
-    const cycleResult = await runCyclePredictions();
-
-    const config = await loadActiveConfig();
-    const bipolarType = await loadBipolarType();
-    const analysisResult = await reprocessAll(
-      config,
-      analysisStartDate,
-      endDate,
-      bipolarType
-    );
-
-    const healthResult = await runHealthSignalDetection(
-      cycleResult.evaluation
-    );
-    const warnings = [...syncResult.warnings, ...sensitiveResult.warnings];
-
-    return NextResponse.json({
-      success: true,
-      status: warnings.length > 0 ? "partial" : "success",
-      warnings,
-      records: syncResult.records,
-      sensitiveRecords: sensitiveResult.records,
-      analysis: {
-        startDate: analysisStartDate,
-        endDate,
-        daysProcessed: analysisResult.daysProcessed,
-        episodes: analysisResult.episodes,
-      },
-      healthSignals: healthResult.signals,
-      startDate: syncStartDate,
-      endDate,
+      syncType: "cron",
+      includePrivate: true,
+      recompute: "window",
     });
+    return NextResponse.json({ success: true, ...result });
   } catch (error) {
     console.error("Cron sync error:", error);
     await notifyOuraConnectionFailure();

@@ -3,19 +3,66 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { formatOuraSyncSummary } from "@/lib/oura/sync-summary";
+import type { BackfillCoverage } from "@/lib/oura/backfill-coverage";
+import { cn } from "@/lib/utils";
 
 interface ResultMessage {
   message: string;
   kind: "status" | "error";
 }
 
+function readCoverage(value: unknown): BackfillCoverage | null {
+  if (typeof value !== "object" || value === null) return null;
+  const coverage = value as Partial<BackfillCoverage>;
+  return Array.isArray(coverage.rows) &&
+    typeof coverage.windowDays === "number" &&
+    typeof coverage.nights === "number" &&
+    typeof coverage.checkedNights === "number"
+    ? (coverage as BackfillCoverage)
+    : null;
+}
+
+/** What the backfill left in place, dataset by dataset. */
+function CoverageList({ coverage }: { coverage: BackfillCoverage }) {
+  return (
+    <dl className="divide-y divide-border rounded-lg border text-sm">
+      {coverage.rows.map((row) => (
+        <div
+          key={row.dataset}
+          className="flex items-center justify-between gap-4 px-3 py-2"
+        >
+          <dt>{row.label}</dt>
+          <dd
+            className={cn(
+              "tabular-nums",
+              row.notShared ? "text-attention" : "text-muted-foreground"
+            )}
+          >
+            {row.notShared
+              ? "Not shared by Oura"
+              : `${row.days}/${coverage.windowDays} days`}
+          </dd>
+        </div>
+      ))}
+      <div className="flex items-center justify-between gap-4 px-3 py-2">
+        <dt>Pattern checks</dt>
+        <dd className="text-muted-foreground tabular-nums">
+          {coverage.checkedNights}/{coverage.nights} nights
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 export function BackfillButton() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<ResultMessage | null>(null);
+  const [coverage, setCoverage] = useState<BackfillCoverage | null>(null);
 
   async function handleBackfill() {
     setLoading(true);
     setResult(null);
+    setCoverage(null);
     try {
       const res = await fetch("/api/oura/backfill", {
         method: "POST",
@@ -31,6 +78,7 @@ export function BackfillButton() {
           }),
           kind: "status",
         });
+        setCoverage(readCoverage(data.coverage));
       } else {
         setResult({ message: `Error: ${data.error}`, kind: "error" });
       }
@@ -47,7 +95,7 @@ export function BackfillButton() {
   return (
     <div className="space-y-2">
       <Button onClick={handleBackfill} disabled={loading}>
-        {loading ? "Syncing last 90 days..." : "Backfill Last 90 Days"}
+        {loading ? "Backfilling, about a minute…" : "Backfill Last 90 Days"}
       </Button>
       {result && (
         <p
@@ -59,6 +107,7 @@ export function BackfillButton() {
           {result.message}
         </p>
       )}
+      {coverage && <CoverageList coverage={coverage} />}
     </div>
   );
 }

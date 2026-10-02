@@ -190,7 +190,9 @@ export default async function SettingsPage() {
           <CardHeader>
             <CardTitle>Data Sync</CardTitle>
             <CardDescription>
-              Pull sleep data from your Oura Ring.
+              Sync pulls the last 7 days from Oura. Backfill pulls the last
+              90 days, recomputes the pattern checks for every night on
+              record, and lists what arrived for each kind of data.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

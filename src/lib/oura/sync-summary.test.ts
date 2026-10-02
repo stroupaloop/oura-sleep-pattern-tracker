@@ -59,6 +59,26 @@ describe("Oura sync summary", () => {
     );
   });
 
+  it("says how much history a backfill recomputed and which steps did not finish", () => {
+    expect(
+      formatOuraSyncSummary(
+        {
+          records: 448,
+          sensitiveRecords: 66,
+          status: "partial",
+          warnings: [],
+          failedSteps: [{ step: "cycle_predictions", message: "x" }],
+          analysis: { daysProcessed: 412 },
+          startDate: "2026-07-05",
+          endDate: "2026-10-02",
+        },
+        { operation: "Backfill", includeRange: true }
+      )
+    ).toBe(
+      "Backfill complete with partial coverage (2026-07-05 to 2026-10-02): processed 448 core records and 66 private records. Pattern checks recomputed for 412 nights. Didn't finish: cycle context. Running it again usually completes it."
+    );
+  });
+
   it("includes a backfill range without implying partial coverage", () => {
     expect(
       formatOuraSyncSummary(
