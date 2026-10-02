@@ -1,0 +1,205 @@
+---
+name: Slothie's Bipolar Tracker
+description: Her nights, drawn against her usual.
+colors:
+  night-ink: "oklch(0.16 0.014 268)"
+  lamplit-slate: "oklch(0.2 0.016 268)"
+  dusk-slate: "oklch(0.225 0.018 268)"
+  shadow-slate: "oklch(0.25 0.018 268)"
+  moonlight: "oklch(0.96 0.006 268)"
+  mist: "oklch(0.74 0.022 268)"
+  haze: "oklch(0.62 0.02 268)"
+  hairline: "oklch(0.85 0.03 268 / 11%)"
+  corridor: "oklch(0.85 0.03 268 / 14%)"
+  slothie-rose: "oklch(0.76 0.12 5)"
+  rose-ink: "oklch(0.2 0.03 5)"
+  lamp-amber: "oklch(0.83 0.12 78)"
+  ember: "oklch(0.72 0.16 25)"
+  dawn-blue: "oklch(0.8 0.08 245)"
+  sage: "oklch(0.8 0.09 165)"
+  stage-deep: "oklch(0.55 0.15 268)"
+  stage-light: "oklch(0.8 0.07 230)"
+  stage-rem: "oklch(0.72 0.12 305)"
+  stage-awake: "oklch(0.88 0.04 80)"
+  series-hrv: "oklch(0.78 0.1 175)"
+  series-hr: "oklch(0.72 0.14 30)"
+typography:
+  headline:
+    fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1.5rem"
+    fontWeight: 600
+    lineHeight: 1.2
+    letterSpacing: "-0.01em"
+  metric:
+    fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "2.25rem"
+    fontWeight: 600
+    lineHeight: 1.1
+    letterSpacing: "-0.015em"
+    fontFeature: "tnum"
+  title:
+    fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "1rem"
+    fontWeight: 600
+    lineHeight: 1.4
+  body:
+    fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.875rem"
+    fontWeight: 400
+    lineHeight: 1.5
+  label:
+    fontFamily: "Atkinson Hyperlegible Next, ui-sans-serif, system-ui, sans-serif"
+    fontSize: "0.75rem"
+    fontWeight: 400
+    lineHeight: 1.33
+  data:
+    fontFamily: "Atkinson Hyperlegible Mono, ui-monospace, monospace"
+    fontSize: "0.75rem"
+    fontWeight: 400
+rounded:
+  sm: "6px"
+  md: "8px"
+  lg: "10px"
+  xl: "14px"
+  pill: "9999px"
+spacing:
+  xs: "4px"
+  sm: "8px"
+  md: "12px"
+  lg: "16px"
+  xl: "24px"
+  2xl: "32px"
+components:
+  panel:
+    backgroundColor: "{colors.lamplit-slate}"
+    textColor: "{colors.moonlight}"
+    rounded: "{rounded.xl}"
+    padding: "16px"
+  button-primary:
+    backgroundColor: "{colors.slothie-rose}"
+    textColor: "{colors.rose-ink}"
+    rounded: "{rounded.md}"
+    height: "36px"
+  button-outline:
+    backgroundColor: "{colors.night-ink}"
+    textColor: "{colors.moonlight}"
+    rounded: "{rounded.md}"
+    height: "36px"
+  pill-unusual:
+    textColor: "{colors.lamp-amber}"
+    rounded: "{rounded.pill}"
+    padding: "2px 8px"
+  gauge-corridor:
+    backgroundColor: "{colors.corridor}"
+    rounded: "{rounded.pill}"
+    height: "8px"
+---
+
+# Design System: Slothie's Bipolar Tracker
+
+## Overview
+
+**Creative North Star: "The Usual Corridor"**
+
+Every measure is drawn against her own usual range, and anything outside that corridor is the news. The interface exists so a drift in sleep or rhythm is seen the morning it happens, so it puts last night and its departure from usual first and lets everything else wait its turn.
+
+It is a dark, quiet working surface for a first look of the day on a phone: tinted night-ink neutrals, one warm rose accent for the brand and actions, and color spent only on meaning (sleep stages, data series, and the one attention color for a night that crossed the pattern checks' threshold). Type is Atkinson Hyperlegible Next, drawn for legibility, with tabular numerals wherever numbers line up. Depth comes from tonal layering, not shadows. Motion is limited to state: a sync in progress, a disclosure opening.
+
+The signature move is the **night window**: last night drawn on the clock, stage by stage, under a band showing the window she usually sleeps in. A late, short or broken night reads before any number does. The same corridor returns in every comparison row as a gauge: the band is her usual range, the ticks are where a night becomes unusual, the dot is last night.
+
+**Key Characteristics:**
+- Last night first, compared with her usual in plain words.
+- Her usual range, drawn the same way everywhere.
+- Color means something or it is not used.
+- Gaps and outages are stated in words, with the fix.
+- Calm by default; attention color only past the detector's threshold.
+
+## Colors
+
+Restrained night-indigo neutrals carry the surfaces; a single rose accent carries the brand; every other hue has exactly one job.
+
+### Primary
+- **Slothie Rose** (oklch(0.76 0.12 5)): primary buttons, selected chips and tabs, focus rings, links in research notes. The same rose as the thoughts heatmap and the alert emails.
+
+### Neutral
+- **Night Ink** (oklch(0.16 0.014 268)): the page.
+- **Lamplit Slate** (oklch(0.2 0.016 268)): panels and cards.
+- **Dusk Slate** (oklch(0.225 0.018 268)): popovers and tooltips.
+- **Shadow Slate** (oklch(0.25 0.018 268)): tracks, meters, the night bar's gaps.
+- **Moonlight** (oklch(0.96 0.006 268)): primary text and the gauge dot.
+- **Mist** (oklch(0.74 0.022 268)): secondary text, axis labels. 7.9:1 on panels.
+- **Haze** (oklch(0.62 0.02 268)): tertiary text on panels only (5.0:1); never on Shadow Slate.
+- **Hairline** (oklch(0.85 0.03 268 / 11%)): borders and dividers.
+- **Corridor** (oklch(0.85 0.03 268 / 14%)): the usual-range band.
+
+### State
+- **Lamp Amber** (oklch(0.83 0.12 78)): a measure past the pattern checks' daily threshold, and warning-tier patterns.
+- **Ember** (oklch(0.72 0.16 25)): alert-tier patterns and scores under 60.
+- **Dawn Blue** (oklch(0.8 0.08 245)): watch-tier patterns and informational notices (a night not here yet).
+- **Sage** (oklch(0.8 0.09 165)): no flags; scores of 70 and up.
+
+### Data
+- **Sleep stages:** Deep (oklch(0.55 0.15 268)), Light (oklch(0.8 0.07 230)), REM (oklch(0.72 0.12 305)), Awake (oklch(0.88 0.04 80)). Awake is pale on purpose, so it never reads as Lamp Amber.
+- **Series:** HRV (oklch(0.78 0.1 175)), heart rate (oklch(0.72 0.14 30)). Baselines draw in Mist, dashed.
+
+### Named Rules
+**The Corridor Rule.** A measure that can drift is shown against her usual range. Color appears only when it leaves that range by the detector's own threshold, and the row says so in words ("Unusual").
+
+**The One Meaning Rule.** A hue has one job. Lamp Amber is never decoration, Rose is never a warning, and stage colors never mark state.
+
+## Typography
+
+**Display and body:** Atkinson Hyperlegible Next (ui-sans-serif, system-ui fallback)
+**Data:** Atkinson Hyperlegible Mono, for dates and measurements set in columns
+
+One family carries everything; hierarchy comes from size and weight steps on a fixed rem scale, ratio about 1.2.
+
+### Hierarchy
+- **Headline** (600, 1.5rem, 1.2; 1.875rem from md): page titles.
+- **Metric** (600, 2.25rem, 1.1, tabular): the one lead number, last night's sleep. Earned because it is the first leading indicator, and always paired with its comparison and the night window.
+- **Title** (600, 1rem, 1.4): panel headings.
+- **Body** (400, 0.875rem, 1.5): comparisons, explanations, notices.
+- **Label** (400, 0.75rem, 1.33): metadata, axis ticks, night labels.
+
+### Named Rules
+**The Tabular Rule.** Any number that sits beside another number uses tabular figures.
+
+## Layout
+
+Phone first. A single column with a 16px gutter stacks in the order of a morning glance: last night, the pattern check, the comparison with usual, the daily log, Oura's scores, sleep stages, thirty-day trends, data coverage. From `lg` the same items split into a main column and a 24rem rail (pattern check, log, scores, coverage), matching the Thoughts home.
+
+Spacing is an 8px rhythm: 24px between panels (32px on desktop), 16px inside panels, 4 to 8px within a group. Headings sit closer to what they introduce than to what precedes them.
+
+## Elevation & Depth
+
+Flat and tonal. Panels lift from the page by surface lightness and a hairline border, never by shadow; popovers sit one step lighter. Nothing glows.
+
+## Shapes
+
+Panels round at 14px, controls at 8px, meters and the corridor band are pills. The night bar rounds at 8px so a night reads as one object.
+
+## Components
+
+- **Panel:** Lamplit Slate, hairline border, 14px radius, 16px padding (20px from md). A title, optional night label at the right, optional one-line description. Panels never nest.
+- **Night window:** clock-time axis on the hour, usual window as a Corridor band above, the night as a stage-colored bar, hour gridlines in Hairline. Screen readers get the times in text.
+- **Signal row:** label and value on the first line; the comparison in words and the corridor gauge on the second. Unusual rows add a Lamp Amber pill and comparison text.
+- **Corridor gauge:** -3 to +3 standard deviations; band at ±1; ticks at the detector's threshold; Moonlight dot, Lamp Amber once unusual.
+- **Pattern status:** always present. Flagged: tinted surface in the tier's color, the tier named in words. Clear: a Sage check and when the check last ran. Paused: says why.
+- **Notices:** a missing night is Dawn Blue and explains how the data arrives; a lost Oura connection is an amber banner across every dashboard page with the way to reconnect.
+- **Buttons:** shadcn variants on these tokens. Touch targets reach 40px on phones.
+
+## Do's and Don'ts
+
+### Do:
+- **Do** compare with her usual in words: "1h 59m less than usual", "35m later than usual".
+- **Do** name both sides of a night: "Sep 30 → Oct 1". Oura dates nights by the morning they end.
+- **Do** say what is missing, why, and what fixes it, in place of the missing thing.
+- **Do** theme the browser's own surfaces: selection, caret, scrollbars, focus rings, tabular numerals.
+
+### Don't:
+- **Don't** use diagnostic language on the dashboard; it shows patterns against a personal baseline.
+- **Don't** let a gap render as zero, an empty chart, or a normal-looking night.
+- **Don't** nest panels, add eyebrow labels above headings, use side-stripe borders, gradient text or glow.
+- **Don't** stand a progress ring in for a number; show the number and what it is compared with.
+- **Don't** put Haze text on Shadow Slate; it falls under 4.5:1.
+- **Don't** animate for decoration; motion only reports a state change.

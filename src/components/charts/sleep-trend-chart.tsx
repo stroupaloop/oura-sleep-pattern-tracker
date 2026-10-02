@@ -21,6 +21,12 @@ import {
 } from "@/components/ui/card";
 import { computeCalendarRollingAverage } from "@/lib/dashboard-metrics";
 
+
+/** Series colors carry the swatches; the labels stay readable text. */
+function legendLabel(value: string) {
+  return <span className="text-xs text-muted-foreground">{value}</span>;
+}
+
 interface SleepData {
   day: string;
   hours: number;
@@ -45,6 +51,7 @@ interface AnalysisPoint {
 interface SleepTrendChartProps {
   data: SleepData[];
   analysisData?: AnalysisPoint[];
+  windowDays?: number;
 }
 
 interface MergedHrvPoint {
@@ -129,7 +136,7 @@ function HrvTooltipContent({
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-foreground">{p.day}</p>
-      <p style={{ color: "#34d399" }}>HRV: {p.hrv?.toFixed(0) ?? "--"} ms</p>
+      <p style={{ color: "var(--series-hrv)" }}>HRV: {p.hrv?.toFixed(0) ?? "--"} ms</p>
       {p.hrvAvg != null && (
         <p className="text-muted-foreground">7-day avg: {p.hrvAvg.toFixed(0)} ms</p>
       )}
@@ -137,7 +144,7 @@ function HrvTooltipContent({
         <p className="text-muted-foreground">Baseline: {p.baselineHrv.toFixed(0)} ms</p>
       )}
       {p.isDeviation && (
-        <p className="text-red-400 text-xs mt-1">
+        <p className="text-attention text-xs mt-1">
           At least 2 standard deviations from baseline
         </p>
       )}
@@ -165,7 +172,7 @@ function HrTooltipContent({
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-foreground">{p.day}</p>
-      <p style={{ color: "#f87171" }}>HR: {p.hr?.toFixed(0) ?? "--"} bpm</p>
+      <p style={{ color: "var(--series-hr)" }}>HR: {p.hr?.toFixed(0) ?? "--"} bpm</p>
       {p.hrAvg != null && (
         <p className="text-muted-foreground">7-day avg: {p.hrAvg.toFixed(0)} bpm</p>
       )}
@@ -173,7 +180,7 @@ function HrTooltipContent({
         <p className="text-muted-foreground">Baseline: {p.baselineHr.toFixed(0)} bpm</p>
       )}
       {p.isDeviation && (
-        <p className="text-red-400 text-xs mt-1">
+        <p className="text-attention text-xs mt-1">
           At least 2 standard deviations from baseline
         </p>
       )}
@@ -190,13 +197,17 @@ function AnomalyDot(props: any) {
       cx={cx}
       cy={cy}
       r={4}
-      fill="#ef4444"
+      fill="var(--attention)"
       stroke="none"
     />
   );
 }
 
-export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
+export function SleepTrendChart({
+  data,
+  analysisData,
+  windowDays = 30,
+}: SleepTrendChartProps) {
   const hrvData = mergeHrvData(data, analysisData);
   const hrData = mergeHrData(data, analysisData);
   const hasHrvBaseline =
@@ -209,31 +220,33 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
       <Card>
         <CardHeader>
           <CardTitle>Sleep Duration</CardTitle>
-          <CardDescription>Total hours by sleep stage (last 30 nights)</CardDescription>
+          <CardDescription>
+            Hours in each stage, last {windowDays} days
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis
                 dataKey="day"
                 tickFormatter={(d) => d.slice(5)}
                 fontSize={11}
-                tick={{ fill: "oklch(0.708 0 0)" }}
+                tick={{ fill: "var(--muted-foreground)" }}
                 interval="preserveStartEnd"
               />
               <YAxis
                 domain={[0, "auto"]}
                 tickFormatter={(v) => `${v}h`}
                 fontSize={11}
-                tick={{ fill: "oklch(0.708 0 0)" }}
+                tick={{ fill: "var(--muted-foreground)" }}
               />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "oklch(0.205 0 0)",
-                  borderColor: "oklch(1 0 0 / 10%)",
+                  backgroundColor: "var(--popover)",
+                  borderColor: "var(--border)",
                   borderRadius: "0.5rem",
-                  color: "oklch(0.985 0 0)",
+                  color: "var(--popover-foreground)",
                 }}
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 formatter={(value: any, name: any) => [
@@ -242,13 +255,13 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                 ]}
                 labelFormatter={(label) => `Date: ${label}`}
               />
-              <Legend />
+              <Legend formatter={legendLabel} />
               <Area
                 type="monotone"
                 dataKey="deep"
                 stackId="1"
-                stroke="#3b82f6"
-                fill="#3b82f6"
+                stroke="var(--stage-deep)"
+                fill="var(--stage-deep)"
                 fillOpacity={0.6}
                 name="Deep"
               />
@@ -256,8 +269,8 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                 type="monotone"
                 dataKey="rem"
                 stackId="1"
-                stroke="#a78bfa"
-                fill="#a78bfa"
+                stroke="var(--stage-rem)"
+                fill="var(--stage-rem)"
                 fillOpacity={0.6}
                 name="REM"
               />
@@ -265,8 +278,8 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                 type="monotone"
                 dataKey="light"
                 stackId="1"
-                stroke="#67e8f9"
-                fill="#67e8f9"
+                stroke="var(--stage-light)"
+                fill="var(--stage-light)"
                 fillOpacity={0.4}
                 name="Light"
               />
@@ -284,32 +297,38 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={hrvData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
                   dataKey="day"
                   tickFormatter={(d) => d.slice(5)}
                   fontSize={11}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={{ fill: "var(--muted-foreground)" }}
                   interval="preserveStartEnd"
                 />
                 <YAxis
+                  // Fit the night-to-night range; from zero it flattens.
+                  domain={[
+                    (min: number) => Math.max(0, Math.floor(min - 4)),
+                    (max: number) => Math.ceil(max + 4),
+                  ]}
+                  allowDecimals={false}
                   fontSize={11}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={{ fill: "var(--muted-foreground)" }}
                 />
                 <Tooltip content={<HrvTooltipContent />} />
                 <Line
                   type="monotone"
                   dataKey="hrv"
-                  stroke="#34d399"
+                  stroke="var(--series-hrv)"
                   strokeWidth={2}
                   dot={<AnomalyDot />}
-                  activeDot={{ r: 4, fill: "#34d399" }}
+                  activeDot={{ r: 4, fill: "var(--series-hrv)" }}
                   name="HRV"
                 />
                 <Line
                   type="monotone"
                   dataKey="hrvAvg"
-                  stroke="#34d399"
+                  stroke="var(--series-hrv)"
                   strokeWidth={1.5}
                   strokeDasharray="4 3"
                   strokeOpacity={0.5}
@@ -321,7 +340,7 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                   <Line
                     type="monotone"
                     dataKey="baselineHrv"
-                    stroke="oklch(0.708 0 0)"
+                    stroke="var(--muted-foreground)"
                     strokeWidth={1}
                     strokeDasharray="2 2"
                     strokeOpacity={0.4}
@@ -337,38 +356,44 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
 
         <Card>
           <CardHeader>
-            <CardTitle>Resting Heart Rate</CardTitle>
-            <CardDescription>Average HR during sleep (bpm)</CardDescription>
+            <CardTitle>Sleeping Heart Rate</CardTitle>
+            <CardDescription>Average heart rate during sleep (bpm)</CardDescription>
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={220}>
               <ComposedChart data={hrData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
                   dataKey="day"
                   tickFormatter={(d) => d.slice(5)}
                   fontSize={11}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={{ fill: "var(--muted-foreground)" }}
                   interval="preserveStartEnd"
                 />
                 <YAxis
+                  // Fit the night-to-night range; from zero it flattens.
+                  domain={[
+                    (min: number) => Math.max(0, Math.floor(min - 4)),
+                    (max: number) => Math.ceil(max + 4),
+                  ]}
+                  allowDecimals={false}
                   fontSize={11}
-                  tick={{ fill: "oklch(0.708 0 0)" }}
+                  tick={{ fill: "var(--muted-foreground)" }}
                 />
                 <Tooltip content={<HrTooltipContent />} />
                 <Line
                   type="monotone"
                   dataKey="hr"
-                  stroke="#f87171"
+                  stroke="var(--series-hr)"
                   strokeWidth={2}
                   dot={<AnomalyDot />}
-                  activeDot={{ r: 4, fill: "#f87171" }}
+                  activeDot={{ r: 4, fill: "var(--series-hr)" }}
                   name="Heart Rate"
                 />
                 <Line
                   type="monotone"
                   dataKey="hrAvg"
-                  stroke="#f87171"
+                  stroke="var(--series-hr)"
                   strokeWidth={1.5}
                   strokeDasharray="4 3"
                   strokeOpacity={0.5}
@@ -380,7 +405,7 @@ export function SleepTrendChart({ data, analysisData }: SleepTrendChartProps) {
                   <Line
                     type="monotone"
                     dataKey="baselineHr"
-                    stroke="oklch(0.708 0 0)"
+                    stroke="var(--muted-foreground)"
                     strokeWidth={1}
                     strokeDasharray="2 2"
                     strokeOpacity={0.4}

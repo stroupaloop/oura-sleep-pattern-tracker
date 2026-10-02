@@ -7,8 +7,20 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-atkinson-mono), ui-monospace, monospace;
+  --color-attention: var(--attention);
+  --color-alert: var(--alert);
+  --color-watch: var(--watch);
+  --color-calm: var(--calm);
+  --color-stage-deep: var(--stage-deep);
+  --color-stage-light: var(--stage-light);
+  --color-stage-rem: var(--stage-rem);
+  --color-stage-awake: var(--stage-awake);
+  --color-series-hrv: var(--series-hrv);
+  --color-series-hr: var(--series-hr);
+  --color-corridor: var(--corridor);
+  --color-faint-foreground: var(--faint-foreground);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -92,25 +104,42 @@
   --thought-5: oklch(0.80 0.16 15);
 }
 
+/* "Night Ink": the app forces dark mode. Neutrals lean toward a night
+   indigo; rose is the brand's one accent; state and data hues each carry
+   one meaning. Contrast is checked in DESIGN.md. */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.16 0.014 268);
+  --foreground: oklch(0.96 0.006 268);
+  --card: oklch(0.2 0.016 268);
+  --card-foreground: oklch(0.96 0.006 268);
+  --popover: oklch(0.225 0.018 268);
+  --popover-foreground: oklch(0.96 0.006 268);
+  --primary: oklch(0.76 0.12 5);
+  --primary-foreground: oklch(0.2 0.03 5);
+  --secondary: oklch(0.27 0.02 268);
+  --secondary-foreground: oklch(0.96 0.006 268);
+  --muted: oklch(0.25 0.018 268);
+  --muted-foreground: oklch(0.74 0.022 268);
+  --faint-foreground: oklch(0.62 0.02 268);
+  --accent: oklch(0.27 0.02 268);
+  --accent-foreground: oklch(0.96 0.006 268);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: oklch(0.85 0.03 268 / 11%);
+  --input: oklch(0.85 0.03 268 / 16%);
+  --ring: oklch(0.76 0.12 5);
+
+  --attention: oklch(0.83 0.12 78);
+  --alert: oklch(0.72 0.16 25);
+  --watch: oklch(0.8 0.08 245);
+  --calm: oklch(0.8 0.09 165);
+  --corridor: oklch(0.85 0.03 268 / 14%);
+
+  --stage-deep: oklch(0.55 0.15 268);
+  --stage-light: oklch(0.8 0.07 230);
+  --stage-rem: oklch(0.72 0.12 305);
+  --stage-awake: oklch(0.88 0.04 80);
+  --series-hrv: oklch(0.78 0.1 175);
+  --series-hr: oklch(0.72 0.14 30);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -130,29 +159,46 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    color-scheme: dark;
+    scrollbar-color: var(--muted) transparent;
+  }
   body {
     @apply bg-background text-foreground;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 34%, transparent);
+    color: var(--foreground);
+  }
+  input,
+  textarea {
+    caret-color: var(--primary);
+  }
+  a {
+    text-underline-offset: 3px;
   }
 }
 
 .recharts-cartesian-grid line {
-  stroke: oklch(1 0 0 / 8%);
+  stroke: var(--border);
 }
 
 .recharts-text {
-  fill: oklch(0.708 0 0);
+  fill: var(--muted-foreground);
+  font-variant-numeric: tabular-nums;
 }
 
 .recharts-default-tooltip {
-  background-color: oklch(0.205 0 0) !important;
-  border-color: oklch(1 0 0 / 10%) !important;
+  background-color: var(--popover) !important;
+  border-color: var(--border) !important;
   border-radius: 0.5rem !important;
 }
 
 .recharts-tooltip-label {
-  color: oklch(0.985 0 0) !important;
+  color: var(--popover-foreground) !important;
 }
 
 .recharts-tooltip-item {
-  color: oklch(0.85 0 0) !important;
+  color: var(--muted-foreground) !important;
 }

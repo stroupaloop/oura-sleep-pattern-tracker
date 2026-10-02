@@ -6,7 +6,7 @@ import {
   medications,
   sleepPeriods,
 } from "@/lib/db/schema";
-import { and, eq, gte, isNotNull, lte } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, lte } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import {
@@ -16,6 +16,10 @@ import {
 } from "@/lib/date-utils";
 import { projectActivityToCalendarDays } from "@/lib/oura/activity";
 import { getOuraSleepDayForTimestamp } from "@/lib/oura/sleep-day";
+import {
+  NIGHT_SLEEP_TYPES,
+  selectNightSleepByDay,
+} from "@/lib/oura/main-sleep";
 
 export interface DayAvailability {
   measuredDays: number;
@@ -73,6 +77,21 @@ export function summarizeEtSleepAvailability(
   );
 }
 
+/** Days the ring was worn; Oura classifies non-wear time too, as code 0. */
+export function summarizeWornActivityAvailability(
+  days: Array<{ day: string; classifiedMinutes: number; nonWearMinutes: number }>,
+  startDate: string,
+  endDate: string
+): DayAvailability {
+  return summarizeDays(
+    days.map((day) =>
+      day.classifiedMinutes - day.nonWearMinutes > 0 ? day.day : null
+    ),
+    startDate,
+    endDate
+  );
+}
+
 export async function computeDataAvailability(
   windowDays = 30
 ): Promise<DataAvailability> {
@@ -97,18 +116,22 @@ export async function computeDataAvailability(
   ] = await Promise.all([
     db
       .select({
+        day: sleepPeriods.day,
+        type: sleepPeriods.type,
+        bedtimeStart: sleepPeriods.bedtimeStart,
         bedtimeEnd: sleepPeriods.bedtimeEnd,
+        totalSleepDuration: sleepPeriods.totalSleepDuration,
       })
       .from(sleepPeriods)
       .where(
         and(
           gte(sleepPeriods.day, sourceStartDate),
           lte(sleepPeriods.day, sourceEndDate),
-          eq(sleepPeriods.type, "long_sleep"),
-          isNotNull(sleepPeriods.totalSleepDuration),
-          isNotNull(sleepPeriods.bedtimeEnd)
+          inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES]),
+          isNotNull(sleepPeriods.totalSleepDuration)
         )
-      ),
+      )
+      .then((rows) => [...selectNightSleepByDay(rows).values()]),
     db
       .select({
         day: dailyActivity.day,
@@ -159,11 +182,8 @@ export async function computeDataAvailability(
     startDate,
     today
   );
-  const activityAvailability = summarizeDays(
-    projectActivityToCalendarDays(
-      activityRows,
-      APP_TIME_ZONE
-    ).map((day) => (day.classifiedMinutes > 0 ? day.day : null)),
+  const activityAvailability = summarizeWornActivityAvailability(
+    projectActivityToCalendarDays(activityRows, APP_TIME_ZONE),
     startDate,
     today
   );

@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { summarizeEtSleepAvailability } from "./confidence";
+import {
+  summarizeEtSleepAvailability,
+  summarizeWornActivityAvailability,
+} from "./confidence";
 
 describe("ET data availability", () => {
   it("counts long sleep by ET sleep day rather than Oura source day", () => {
@@ -34,5 +37,21 @@ describe("ET data availability", () => {
       measuredDays: 0,
       latestDay: null,
     });
+  });
+});
+
+describe("summarizeWornActivityAvailability", () => {
+  it("does not count a day the ring spent off the finger", () => {
+    expect(
+      summarizeWornActivityAvailability(
+        [
+          { day: "2026-09-28", classifiedMinutes: 1200, nonWearMinutes: 1200 },
+          { day: "2026-09-29", classifiedMinutes: 1440, nonWearMinutes: 300 },
+          { day: "2026-09-30", classifiedMinutes: 0, nonWearMinutes: 0 },
+        ],
+        "2026-09-01",
+        "2026-09-30"
+      )
+    ).toEqual({ measuredDays: 1, latestDay: "2026-09-29" });
   });
 });

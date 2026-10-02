@@ -60,7 +60,7 @@ export function BedtimeTrendChart({
         <CardHeader>
           <CardTitle>Sleep Timing</CardTitle>
           <CardDescription>
-            Oura-detected bedtime in ET (last {days} days)
+            Oura-detected bedtime in ET (last {days} recorded nights)
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -107,8 +107,8 @@ export function BedtimeTrendChart({
         <CardTitle>Sleep Timing</CardTitle>
         <CardDescription>
           {hasAnyOptimal
-            ? `Oura-detected bedtime vs. optimal window in ET (last ${days} days)`
-            : `Oura-detected bedtime in ET (last ${days} days — optimal window not available for display)`}
+            ? `Oura-detected bedtime vs. optimal window in ET (last ${days} recorded nights)`
+            : `Oura-detected bedtime in ET (last ${days} recorded nights — optimal window not available for display)`}
         </CardDescription>
       </CardHeader>
       <CardContent>

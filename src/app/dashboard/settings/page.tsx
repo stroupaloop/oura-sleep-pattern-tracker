@@ -24,27 +24,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { missingOuraScopes } from "@/lib/oura/oauth";
-import type { OuraScope } from "@/lib/oura/contracts";
+import { formatOuraScopeList } from "@/lib/oura/scope-labels";
 import { loadOuraConnectionHealth } from "@/lib/oura/connection-health-data";
-
-const SCOPE_LABELS: Record<OuraScope, string> = {
-  email: "email address",
-  personal: "profile",
-  daily: "sleep, readiness, activity and stress",
-  heartrate: "heart rate",
-  workout: "workouts",
-  tag: "tags",
-  session: "sessions",
-  spo2: "blood oxygen",
-  stress: "resilience",
-  heart_health: "VO₂ max and cardiovascular age",
-};
-
-function formatScopeList(scopes: OuraScope[]): string {
-  const labels = scopes.map((scope) => SCOPE_LABELS[scope]);
-  if (labels.length <= 1) return labels[0] ?? "";
-  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
-}
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -176,7 +157,7 @@ export default async function SettingsPage() {
               )}
               {isMissingData && (
                 <p className="text-sm text-muted-foreground">
-                  Oura isn&apos;t sharing {formatScopeList(missingScopes)}. If
+                  Oura isn&apos;t sharing {formatOuraScopeList(missingScopes)}. If
                   those boxes weren&apos;t offered when you connected, allow
                   them for this app at cloud.ouraring.com under OAuth
                   applications first. Then reconnect and leave every box

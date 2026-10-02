@@ -1,5 +1,6 @@
 "use client";
 
+import { formatDuration } from "@/lib/dashboard-metrics";
 import { useState } from "react";
 import {
   Card,
@@ -37,13 +38,6 @@ export interface AnalysisData {
   efficiencyZScore: number;
   isAnomaly: boolean;
   anomalyDirection: string | null;
-}
-
-function formatDuration(seconds: number | null): string {
-  if (seconds == null) return "--";
-  const hours = Math.floor(seconds / 3600);
-  const mins = Math.floor((seconds % 3600) / 60);
-  return `${hours}h ${mins}m`;
 }
 
 function formatTime(iso: string): string {
