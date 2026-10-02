@@ -1,24 +1,24 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MedicationDoseGroups } from "@/components/medication-dose-groups";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { DayNavigator } from "@/components/ui/day-navigator";
+import { FormMessage } from "@/components/ui/form-message";
+import { Panel } from "@/components/ui/panel";
+import { Textarea } from "@/components/ui/textarea";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { AS_NEEDED_KEY } from "@/lib/medication-schedule";
 import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { useDayRollover } from "@/lib/day-rollover";
 import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 import { EPISODE_STATES } from "@/lib/episode-states";
-
-const MOODS = [
-  { value: -3, label: "Very Low", color: "bg-blue-600" },
-  { value: -2, label: "Low", color: "bg-blue-500" },
-  { value: -1, label: "Slightly Low", color: "bg-blue-400" },
-  { value: 0, label: "Neutral", color: "bg-green-500" },
-  { value: 1, label: "Slightly High", color: "bg-amber-400" },
-  { value: 2, label: "High", color: "bg-amber-500" },
-  { value: 3, label: "Very High", color: "bg-amber-600" },
-];
+import {
+  MOOD_SCALE,
+  formatMoodValue,
+  moodLabel,
+  moodSwatchClass,
+} from "@/lib/design/mood-scale";
+import { cn } from "@/lib/utils";
 
 const TAGS = [
   "travel",
@@ -107,6 +107,29 @@ function parseTags(tags: string | null | undefined): string[] {
   } catch {
     return [];
   }
+}
+
+function DayLabel({
+  day,
+  max,
+  onChange,
+}: {
+  day: string;
+  max: string;
+  onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <label className="relative flex min-h-10 cursor-pointer items-center rounded-md px-3 transition-colors hover:bg-accent/50 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50 sm:min-h-9">
+      {formatDisplayDate(day)}
+      <input
+        type="date"
+        value={day}
+        max={max}
+        onChange={onChange}
+        className="absolute inset-0 cursor-pointer opacity-0"
+      />
+    </label>
+  );
 }
 
 /**
@@ -325,86 +348,70 @@ function DailyLogCardForDay({
   const todayStr = getTodayET();
   const isToday = selectedDay === todayStr;
   const dayMeds = medsForDay(medications, selectedDay);
-  const selectedMood = MOODS.find((m) => m.value === moodScore);
 
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CardTitle className="text-base">Daily Log</CardTitle>
-            {lastSavedAt && (
-              <span className="text-xs text-muted-foreground" role="status">
-                Saved {lastSavedAt}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-1 text-sm">
-            <button
-              onClick={() => navigateDay(-1)}
-              className="p-1 rounded hover:bg-muted transition-colors"
-              aria-label="Previous day"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </button>
-            <label className="relative cursor-pointer">
-              <span className="px-2 py-0.5 rounded hover:bg-muted transition-colors text-sm font-medium">
-                {formatDisplayDate(selectedDay)}
-              </span>
-              <input
-                type="date"
-                value={selectedDay}
-                max={todayStr}
-                onChange={handleDateInput}
-                className="absolute inset-0 opacity-0 cursor-pointer"
-              />
-            </label>
-            <button
-              onClick={() => navigateDay(1)}
-              disabled={isToday}
-              className="p-1 rounded hover:bg-muted transition-colors disabled:opacity-30"
-              aria-label="Next day"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <Panel
+      id="daily-log"
+      title="Daily Log"
+      meta={
+        <FormMessage className="text-xs">
+          {lastSavedAt && `Saved ${lastSavedAt}`}
+        </FormMessage>
+      }
+    >
+      <div className="space-y-4">
+        <DayNavigator
+          className="-mx-2 justify-between"
+          label={
+            <DayLabel
+              day={selectedDay}
+              max={todayStr}
+              onChange={handleDateInput}
+            />
+          }
+          onPrevious={() => navigateDay(-1)}
+          onNext={() => navigateDay(1)}
+          nextDisabled={isToday}
+        />
+
         <div>
-          <p className="text-xs text-muted-foreground mb-1.5">
+          <p className="mb-1.5 text-xs text-muted-foreground">
             Mood
-            {dense && selectedMood && (
-              <span className="text-foreground"> · {selectedMood.label}</span>
+            {moodScore != null && (
+              <span className="text-foreground"> · {moodLabel(moodScore)}</span>
             )}
           </p>
           <div
-            className="flex items-start gap-1.5"
+            className="grid grid-cols-7 gap-1 sm:gap-1.5"
             role="group"
             aria-label="Personal mood score"
           >
-            {MOODS.map((m) => {
-              const isSelected = moodScore === m.value;
+            {MOOD_SCALE.map((mood) => {
+              const isSelected = moodScore === mood.value;
               return (
-                <div key={m.value} className="flex flex-col items-center gap-0.5">
+                <div key={mood.value} className="flex min-w-0 flex-col gap-1">
                   <button
-                    onClick={() => saveMood(m.value)}
+                    type="button"
+                    onClick={() => saveMood(mood.value)}
                     disabled={loading}
-                    aria-label={`${m.value > 0 ? "+" : ""}${m.value}: ${m.label}`}
+                    aria-label={`${formatMoodValue(mood.value)}: ${mood.label}`}
                     aria-pressed={isSelected}
-                    className={`${dense ? "w-8 h-8" : "w-9 h-9"} rounded-md text-xs font-bold transition-all ${m.color} ${
+                    className={cn(
+                      "flex h-10 w-full items-center justify-center rounded-md border text-sm font-medium tabular-nums transition-colors",
+                      "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                      "disabled:cursor-not-allowed disabled:opacity-50",
+                      dense && "sm:h-9",
                       isSelected
-                        ? "opacity-100 ring-2 ring-white ring-offset-1 ring-offset-background scale-110"
-                        : "opacity-50 hover:opacity-80"
-                    }`}
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+                    )}
                   >
-                    {m.value > 0 ? `+${m.value}` : m.value}
+                    {formatMoodValue(mood.value)}
                   </button>
-                  {isSelected && !dense && (
-                    <span className="text-[10px] text-muted-foreground whitespace-nowrap">
-                      {m.label}
-                    </span>
-                  )}
+                  <span
+                    aria-hidden="true"
+                    className={cn("h-[3px] rounded-full", moodSwatchClass(mood.value))}
+                  />
                 </div>
               );
             })}
@@ -413,7 +420,7 @@ function DailyLogCardForDay({
 
         {dayMeds.length > 0 && (
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Medications</p>
+            <p className="mb-1.5 text-xs text-muted-foreground">Medications</p>
             <MedicationDoseGroups
               medications={dayMeds}
               checks={medStates}
@@ -425,7 +432,7 @@ function DailyLogCardForDay({
               }
             />
             {unclassifiedLegacyCount > 0 && (
-              <p className="mt-2 text-xs text-amber-300">
+              <p className="mt-2 text-xs text-muted-foreground">
                 {unclassifiedLegacyCount} legacy medication{" "}
                 {unclassifiedLegacyCount === 1 ? "record has" : "records have"}{" "}
                 an unknown dose-slot classification.{" "}
@@ -436,78 +443,70 @@ function DailyLogCardForDay({
           </div>
         )}
 
-        {saveError && (
-          <p className="text-xs text-red-400" role="alert">
-            {saveError}
-          </p>
-        )}
+        <FormMessage kind="error">{saveError}</FormMessage>
 
-        <div className={dense ? "space-y-3" : "space-y-4 pt-1"}>
+        <div className={dense ? "space-y-3" : "space-y-4"}>
           {moodScore == null && (
             <p className="text-xs text-muted-foreground">
               Choose a mood before adding an episode state, notes, or tags.
             </p>
           )}
           <div>
-            <p className="text-sm text-muted-foreground mb-2">Episode state</p>
+            <p className="mb-1.5 text-xs text-muted-foreground">Episode state</p>
             <div
               className="flex flex-wrap gap-2"
               role="group"
               aria-label="Optional episode-state self-report"
             >
               {EPISODE_STATES.map((state) => (
-                <button
+                <ToggleChip
                   key={state.value}
+                  pressed={episodeState === state.value}
                   onClick={() => saveEpisode(state.value)}
                   disabled={loading || moodScore == null}
-                  aria-pressed={episodeState === state.value}
-                  className={`${dense ? "px-3 py-1" : "px-3.5 py-1.5"} text-sm font-medium rounded-full transition-colors ${
-                    episodeState === state.value
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
                 >
                   {state.label}
-                </button>
+                </ToggleChip>
               ))}
             </div>
           </div>
           {/* Notes sit between the two rows of chips so episode state and
               tags do not read as one list. */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Notes</p>
-            <textarea
+            <label
+              htmlFor="daily-log-notes"
+              className="mb-1.5 block text-xs text-muted-foreground"
+            >
+              Notes
+            </label>
+            <Textarea
+              id="daily-log-notes"
               placeholder="Any notes? (optional)"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               onBlur={saveNotes}
               disabled={loading || moodScore == null}
-              className="w-full rounded-md border bg-transparent px-2 py-1.5 text-sm placeholder:text-muted-foreground"
               rows={dense ? 3 : 4}
+              className={dense ? "min-h-20" : "min-h-24"}
             />
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Tags</p>
-            <div className="flex flex-wrap gap-1.5">
+            <p className="mb-1.5 text-xs text-muted-foreground">Tags</p>
+            <div className="flex flex-wrap gap-2">
               {TAGS.map((tag) => (
-                <button
+                <ToggleChip
                   key={tag}
+                  pressed={selectedTags.includes(tag)}
                   onClick={() => toggleTag(tag)}
                   disabled={loading || moodScore == null}
-                  aria-pressed={selectedTags.includes(tag)}
-                  className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
-                    selectedTags.includes(tag)
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
                 >
                   {tag.replace("_", " ")}
-                </button>
+                </ToggleChip>
               ))}
             </div>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </Panel>
   );
 }

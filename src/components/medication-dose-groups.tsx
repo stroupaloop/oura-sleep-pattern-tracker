@@ -1,7 +1,7 @@
 "use client";
 
+import { cn } from "@/lib/utils";
 import {
-  AS_NEEDED_KEY,
   buildMedicationDoseGroups,
   type DoseEntry,
   type MedicationDoseSource,
@@ -19,22 +19,7 @@ interface MedicationDoseGroupsProps {
   onCheckedChange: (dose: DoseEntry, checked: boolean) => void;
 }
 
-function groupPillClass(key: string): string {
-  switch (key) {
-    case "morning":
-      return "bg-amber-500/10 text-amber-400 border-amber-500/20";
-    case "afternoon":
-      return "bg-orange-500/10 text-orange-400 border-orange-500/20";
-    case "evening":
-      return "bg-indigo-500/10 text-indigo-300 border-indigo-500/20";
-    case "night":
-      return "bg-slate-500/20 text-slate-300 border-slate-500/30";
-    case AS_NEEDED_KEY:
-      return "bg-zinc-500/20 text-zinc-300 border-zinc-500/30";
-    default:
-      return "bg-muted text-muted-foreground border-border";
-  }
-}
+const CHECKBOX_CLASS = "size-4 shrink-0 accent-primary";
 
 export function MedicationDoseGroups({
   medications,
@@ -45,24 +30,23 @@ export function MedicationDoseGroups({
   onCheckedChange,
 }: MedicationDoseGroupsProps) {
   const groups = buildMedicationDoseGroups(medications);
-  const rowPadding = compact ? "py-0.5" : "py-1";
 
   if (groups.length === 0) return null;
 
   if (layout === "inline") {
     return (
-      <div className="space-y-1.5">
+      <div>
         {groups.map((group) => (
-          <div key={group.key} className="flex min-w-0 items-baseline gap-3">
-            <span className="w-16 shrink-0 text-xs text-muted-foreground">
+          <div key={group.key} className="flex min-w-0 items-start gap-3">
+            <span className="flex min-h-10 w-16 shrink-0 items-center text-xs text-muted-foreground sm:min-h-8">
               {group.label}
             </span>
-            <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-1">
+            <div className="flex min-w-0 flex-wrap gap-x-4">
               {group.doses.map((dose) => (
                 <label
                   key={`${dose.medId}-${dose.slotKey}`}
                   title={dose.dosage ?? undefined}
-                  className="inline-flex cursor-pointer items-center gap-1.5 text-sm"
+                  className="inline-flex min-h-10 cursor-pointer items-center gap-2 text-sm sm:min-h-8"
                 >
                   <input
                     type="checkbox"
@@ -71,7 +55,7 @@ export function MedicationDoseGroups({
                       onCheckedChange(dose, event.target.checked)
                     }
                     disabled={disabled}
-                    className="h-3.5 w-3.5 shrink-0 rounded border-muted-foreground"
+                    className={CHECKBOX_CLASS}
                   />
                   {dose.medName}
                 </label>
@@ -86,28 +70,27 @@ export function MedicationDoseGroups({
   return (
     <div className="space-y-3">
       {groups.map((group) => (
-        <section key={group.key} className="min-w-0 space-y-1.5">
-          <div className="flex items-center gap-2 border-b border-border/60 pb-1">
-            <span
-              className={`rounded border px-1.5 py-0.5 text-[10px] font-semibold ${groupPillClass(group.key)}`}
-            >
-              {group.label}
-            </span>
-          </div>
-          <div className="space-y-0.5">
+        <section key={group.key} className="min-w-0">
+          <h3 className="border-b pb-1 text-xs font-medium text-muted-foreground">
+            {group.label}
+          </h3>
+          <div>
             {group.doses.map((dose) => {
               const checked = checks[dose.medId]?.[dose.slotKey] ?? false;
               return (
                 <label
                   key={`${dose.medId}-${dose.slotKey}`}
-                  className={`flex min-w-0 cursor-pointer items-center gap-2 text-sm ${rowPadding}`}
+                  className={cn(
+                    "flex min-h-10 min-w-0 cursor-pointer items-center gap-3 text-sm",
+                    compact ? "sm:min-h-8" : "sm:min-h-9"
+                  )}
                 >
                   <input
                     type="checkbox"
                     checked={checked}
                     onChange={(event) => onCheckedChange(dose, event.target.checked)}
                     disabled={disabled}
-                    className="h-4 w-4 shrink-0 rounded border-muted-foreground"
+                    className={CHECKBOX_CLASS}
                   />
                   <span className="min-w-0 truncate">
                     <span>{dose.medName}</span>

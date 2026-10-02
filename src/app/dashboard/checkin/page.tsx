@@ -81,7 +81,7 @@ export default async function CheckinPage() {
   );
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4 md:space-y-6">
+    <div className="mx-auto max-w-2xl space-y-6">
       <PageHeader title="Daily Check-in" />
       <MoodForm
         initialDay={today}

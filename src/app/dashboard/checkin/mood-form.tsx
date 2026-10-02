@@ -1,16 +1,15 @@
 "use client";
 
 import { useState, useCallback } from "react";
+import { ChevronDown, CircleCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Callout } from "@/components/ui/callout";
+import { DayNavigator } from "@/components/ui/day-navigator";
+import { FormMessage } from "@/components/ui/form-message";
+import { Panel } from "@/components/ui/panel";
+import { Textarea } from "@/components/ui/textarea";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { MedicationDoseGroups } from "@/components/medication-dose-groups";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   AS_NEEDED_KEY,
   doseSlotLabel,
@@ -20,18 +19,15 @@ import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { useDayRollover } from "@/lib/day-rollover";
 import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 import { EPISODE_STATES } from "@/lib/episode-states";
+import {
+  MOOD_SCALE,
+  formatMoodValue,
+  moodLabel,
+  moodSwatchClass,
+} from "@/lib/design/mood-scale";
 import type { EpisodePatternSummary } from "@/lib/episode-pattern";
 import { PatternStatus } from "@/components/pattern-status";
-
-const MOOD_OPTIONS = [
-  { value: -3, label: "Very Low", color: "bg-blue-600" },
-  { value: -2, label: "Low", color: "bg-blue-500" },
-  { value: -1, label: "Slightly Low", color: "bg-blue-400" },
-  { value: 0, label: "Neutral", color: "bg-green-500" },
-  { value: 1, label: "Slightly High", color: "bg-amber-400" },
-  { value: 2, label: "High", color: "bg-amber-500" },
-  { value: 3, label: "Very High", color: "bg-amber-600" },
-];
+import { cn } from "@/lib/utils";
 
 const TAGS = [
   "travel",
@@ -122,6 +118,12 @@ interface MoodFormProps {
   episodePattern: EpisodePatternSummary | null;
 }
 
+function formatShortDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+}
+
 function formatDisplayDate(dateStr: string): string {
   const todayStr = getTodayET();
   const yesterdayStr = shiftIsoDay(todayStr, -1);
@@ -129,9 +131,30 @@ function formatDisplayDate(dateStr: string): string {
   if (dateStr === todayStr) return "Today";
   if (dateStr === yesterdayStr) return "Yesterday";
 
-  const [y, m, d] = dateStr.split("-").map(Number);
-  const date = new Date(y, m - 1, d);
-  return date.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+  return formatShortDate(dateStr);
+}
+
+function DayLabel({
+  day,
+  max,
+  onChange,
+}: {
+  day: string;
+  max: string;
+  onChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+}) {
+  return (
+    <label className="relative flex min-h-10 cursor-pointer items-center rounded-md px-3 transition-colors hover:bg-accent/50 has-[:focus-visible]:ring-[3px] has-[:focus-visible]:ring-ring/50 sm:min-h-9">
+      {formatDisplayDate(day)}
+      <input
+        type="date"
+        value={day}
+        max={max}
+        onChange={onChange}
+        className="absolute inset-0 cursor-pointer opacity-0"
+      />
+    </label>
+  );
 }
 
 function shiftDay(dateStr: string, delta: number): string {
@@ -358,42 +381,23 @@ function MoodFormForDay({
   const dayMedications = medicationsForDay(medications, selectedDay);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <div className="flex flex-col items-center gap-1">
-        <div className="flex items-center gap-2">
-        <button
-          onClick={() => navigateDay(-1)}
-          className="p-1.5 rounded hover:bg-muted transition-colors"
-          aria-label="Previous day"
-        >
-          <ChevronLeft className="w-5 h-5" />
-        </button>
-        <label className="relative cursor-pointer">
-          <span className="px-3 py-1 rounded hover:bg-muted transition-colors text-sm font-medium">
-            {formatDisplayDate(selectedDay)}
-          </span>
-          <input
-            type="date"
-            value={selectedDay}
-            max={todayStr}
-            onChange={handleDateInput}
-            className="absolute inset-0 opacity-0 cursor-pointer"
-          />
-        </label>
-        <button
-          onClick={() => navigateDay(1)}
-          disabled={isToday}
-          className="p-1.5 rounded hover:bg-muted transition-colors disabled:opacity-30"
-          aria-label="Next day"
-        >
-          <ChevronRight className="w-5 h-5" />
-        </button>
-        </div>
-        {lastSavedAt && (
-          <span className="text-xs text-muted-foreground">
-            Saved {lastSavedAt}
-          </span>
-        )}
+        <DayNavigator
+          label={
+            <DayLabel
+              day={selectedDay}
+              max={todayStr}
+              onChange={handleDateInput}
+            />
+          }
+          onPrevious={() => navigateDay(-1)}
+          onNext={() => navigateDay(1)}
+          nextDisabled={isToday}
+        />
+        <FormMessage className="text-xs">
+          {lastSavedAt && `Saved ${lastSavedAt}`}
+        </FormMessage>
       </div>
 
       {/* Held back until today's answers are in, so the model's flag cannot
@@ -407,227 +411,214 @@ function MoodFormForDay({
       )}
 
       {saved ? (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <p className="text-lg font-medium text-green-400">Check-in saved!</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Your mood data has been recorded for {selectedDay}.
-            </p>
-            <button
-              onClick={() => setSaved(false)}
-              className="text-sm text-primary mt-3 underline"
-            >
-              Edit
-            </button>
-          </CardContent>
-        </Card>
+        <Callout
+          tone="neutral"
+          icon={CircleCheck}
+          title="Check-in saved!"
+          role="status"
+        >
+          <p>
+            Your mood data has been recorded for {formatShortDate(selectedDay)}.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setSaved(false)}
+            className="mt-3 text-foreground"
+          >
+            Edit
+          </Button>
+        </Callout>
       ) : (
         <>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {isToday ? "How are you feeling today?" : `How were you feeling on ${formatDisplayDate(selectedDay)}?`}
-              </CardTitle>
-              <CardDescription>
-                Tap your mood level on your personal scale from -3 to +3
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div
-                className="flex gap-2 justify-center flex-wrap"
-                role="group"
-                aria-label="Personal mood score"
-              >
-                {MOOD_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    onClick={() => setMoodScore(opt.value)}
-                    disabled={loadingDay}
-                    aria-label={`${opt.value > 0 ? "+" : ""}${opt.value}: ${opt.label}`}
-                    aria-pressed={moodScore === opt.value}
-                    className={`w-12 h-12 rounded-lg text-sm font-bold transition-all ${opt.color} ${
-                      moodScore === opt.value
-                        ? "ring-2 ring-white scale-110"
-                        : "opacity-60 hover:opacity-80"
-                    }`}
-                  >
-                    {opt.value > 0 ? `+${opt.value}` : opt.value}
-                  </button>
-                ))}
-              </div>
-              {moodScore !== null && (
-                <p className="text-center text-sm text-muted-foreground mt-2">
-                  {MOOD_OPTIONS.find((o) => o.value === moodScore)?.label}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          <Panel
+            id="checkin-mood"
+            title={
+              isToday
+                ? "How are you feeling today?"
+                : `How were you feeling on ${formatDisplayDate(selectedDay)}?`
+            }
+            description={`Tap your mood level on your personal scale from ${formatMoodValue(-3)} to ${formatMoodValue(3)}`}
+          >
+            <div
+              className="mx-auto grid max-w-sm grid-cols-7 gap-1 sm:gap-1.5"
+              role="group"
+              aria-label="Personal mood score"
+            >
+              {MOOD_SCALE.map((mood) => {
+                const isSelected = moodScore === mood.value;
+                return (
+                  <div key={mood.value} className="flex min-w-0 flex-col gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setMoodScore(mood.value)}
+                      disabled={loadingDay}
+                      aria-label={`${formatMoodValue(mood.value)}: ${mood.label}`}
+                      aria-pressed={isSelected}
+                      className={cn(
+                        "flex h-12 w-full items-center justify-center rounded-md border text-sm font-medium tabular-nums transition-colors",
+                        "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                        "disabled:cursor-not-allowed disabled:opacity-50",
+                        isSelected
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
+                      )}
+                    >
+                      {formatMoodValue(mood.value)}
+                    </button>
+                    <span
+                      aria-hidden="true"
+                      className={cn("h-[3px] rounded-full", moodSwatchClass(mood.value))}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+            {moodScore !== null && (
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                {moodLabel(moodScore)}
+              </p>
+            )}
+          </Panel>
 
           {moodScore !== null && (
             <>
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Episode State</CardTitle>
-                  <CardDescription>
-                    Optional self-report used as retrospective context, not as
-                    an input to the wearable pattern score.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div
-                    className="flex gap-2 flex-wrap"
-                    role="group"
-                    aria-label="Optional episode-state self-report"
-                  >
-                    {EPISODE_STATES.map((ep) => (
-                      <button
-                        key={ep.value}
-                        onClick={() => setEpisodeState(episodeState === ep.value ? null : ep.value)}
-                        aria-pressed={episodeState === ep.value}
-                        className={`px-3 py-1.5 text-sm rounded-full transition-colors ${
-                          episodeState === ep.value
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {ep.label}
-                      </button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <button
-                onClick={() => setShowOptional(!showOptional)}
-                aria-expanded={showOptional}
-                aria-controls="optional-check-in-details"
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+              <Panel
+                id="checkin-episode"
+                title="Episode State"
+                description="Optional self-report used as retrospective context, not as an input to the wearable pattern score."
               >
-                {showOptional ? "Hide" : "Show"} optional details (energy, irritability, anxiety, sleep quality)
-              </button>
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="group"
+                  aria-label="Optional episode-state self-report"
+                >
+                  {EPISODE_STATES.map((ep) => (
+                    <ToggleChip
+                      key={ep.value}
+                      pressed={episodeState === ep.value}
+                      onClick={() => setEpisodeState(episodeState === ep.value ? null : ep.value)}
+                    >
+                      {ep.label}
+                    </ToggleChip>
+                  ))}
+                </div>
+              </Panel>
 
-              {showOptional && (
-                <Card id="optional-check-in-details">
-                  <CardContent className="pt-6 space-y-4">
-                    {[
-                      { label: "Energy", value: energy, set: setEnergy },
-                      { label: "Irritability", value: irritability, set: setIrritability },
-                      { label: "Anxiety", value: anxiety, set: setAnxiety },
-                      { label: "Sleep Quality", value: sleepSubjective, set: setSleepSubjective },
-                    ].map(({ label, value, set }) => (
-                      <div key={label} className="flex items-center gap-3">
-                        <span className="text-sm w-24 shrink-0">{label}</span>
-                        <input
-                          type="range"
-                          min={1}
-                          max={5}
-                          value={value}
-                          aria-label={label}
-                          onChange={(e) => set(Number(e.target.value))}
-                          className="flex-1"
-                        />
-                        <span className="text-sm w-6 text-right">{value}/5</span>
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              )}
-
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Notes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <textarea
-                    aria-label="Notes"
-                    placeholder="Any notes? (optional)"
-                    value={notes}
-                    onChange={(e) => setNotes(e.target.value)}
-                    className="w-full rounded-md border bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground"
-                    rows={4}
+              <details
+                open={showOptional}
+                onToggle={(event) => setShowOptional(event.currentTarget.open)}
+                className="group rounded-xl border bg-card"
+              >
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm text-muted-foreground transition-colors hover:text-foreground md:px-5 [&::-webkit-details-marker]:hidden">
+                  <span>
+                    {showOptional ? "Hide" : "Show"} optional details (energy,
+                    irritability, anxiety, sleep quality)
+                  </span>
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="size-4 shrink-0 transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
                   />
-                </CardContent>
-              </Card>
+                </summary>
+                <div className="space-y-4 border-t px-4 py-4 md:px-5">
+                  {[
+                    { label: "Energy", value: energy, set: setEnergy },
+                    { label: "Irritability", value: irritability, set: setIrritability },
+                    { label: "Anxiety", value: anxiety, set: setAnxiety },
+                    { label: "Sleep Quality", value: sleepSubjective, set: setSleepSubjective },
+                  ].map(({ label, value, set }) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <span className="w-24 shrink-0 text-sm">{label}</span>
+                      <input
+                        type="range"
+                        min={1}
+                        max={5}
+                        value={value}
+                        aria-label={label}
+                        onChange={(e) => set(Number(e.target.value))}
+                        className="h-10 min-w-0 flex-1 accent-primary sm:h-8"
+                      />
+                      <span className="w-8 text-right text-sm tabular-nums">{value}/5</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
 
-              <Card>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base">Tags</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex flex-wrap gap-2">
-                    {TAGS.map((tag) => (
-                      <button
-                        key={tag}
-                        onClick={() =>
-                          setSelectedTags((prev) =>
-                            prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
-                          )
-                        }
-                        aria-pressed={selectedTags.includes(tag)}
-                        className={`px-3 py-1 text-xs rounded-full transition-colors ${
-                          selectedTags.includes(tag)
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {tag.replace("_", " ")}
-                      </button>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+              <Panel id="checkin-notes" title="Notes">
+                <Textarea
+                  aria-label="Notes"
+                  placeholder="Any notes? (optional)"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  rows={4}
+                  className="min-h-24"
+                />
+              </Panel>
+
+              <Panel id="checkin-tags" title="Tags">
+                <div className="flex flex-wrap gap-2">
+                  {TAGS.map((tag) => (
+                    <ToggleChip
+                      key={tag}
+                      pressed={selectedTags.includes(tag)}
+                      onClick={() =>
+                        setSelectedTags((prev) =>
+                          prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
+                        )
+                      }
+                    >
+                      {tag.replace("_", " ")}
+                    </ToggleChip>
+                  ))}
+                </div>
+              </Panel>
 
               {dayMedications.length > 0 && (
-                <Card>
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">Medications</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <MedicationDoseGroups
-                      medications={dayMedications}
-                      checks={medChecks}
-                      disabled={saving || loadingDay}
-                      onCheckedChange={(dose, checked) => {
-                        setMedChecks((prev) => ({
-                          ...prev,
-                          [dose.medId]: {
-                            ...(prev[dose.medId] ?? {}),
-                            [dose.slotKey]: checked,
-                          },
-                        }));
-                        setMedTouched((prev) => ({
-                          ...prev,
-                          [dose.medId]: {
-                            ...(prev[dose.medId] ?? {}),
-                            [dose.slotKey]: true,
-                          },
-                        }));
-                      }}
-                    />
-                    {unclassifiedLegacyCount > 0 && (
-                      <p className="mt-3 text-xs text-amber-300">
-                        {unclassifiedLegacyCount} legacy medication{" "}
-                        {unclassifiedLegacyCount === 1
-                          ? "record has"
-                          : "records have"}{" "}
-                        an unknown dose-slot classification.{" "}
-                        {unclassifiedLegacyCount === 1 ? "It is" : "They are"}{" "}
-                        retained in reports but not editable here.
-                      </p>
-                    )}
-                  </CardContent>
-                </Card>
+                <Panel id="checkin-medications" title="Medications">
+                  <MedicationDoseGroups
+                    medications={dayMedications}
+                    checks={medChecks}
+                    disabled={saving || loadingDay}
+                    onCheckedChange={(dose, checked) => {
+                      setMedChecks((prev) => ({
+                        ...prev,
+                        [dose.medId]: {
+                          ...(prev[dose.medId] ?? {}),
+                          [dose.slotKey]: checked,
+                        },
+                      }));
+                      setMedTouched((prev) => ({
+                        ...prev,
+                        [dose.medId]: {
+                          ...(prev[dose.medId] ?? {}),
+                          [dose.slotKey]: true,
+                        },
+                      }));
+                    }}
+                  />
+                  {unclassifiedLegacyCount > 0 && (
+                    <p className="mt-3 text-xs text-muted-foreground">
+                      {unclassifiedLegacyCount} legacy medication{" "}
+                      {unclassifiedLegacyCount === 1
+                        ? "record has"
+                        : "records have"}{" "}
+                      an unknown dose-slot classification.{" "}
+                      {unclassifiedLegacyCount === 1 ? "It is" : "They are"}{" "}
+                      retained in reports but not editable here.
+                    </p>
+                  )}
+                </Panel>
               )}
 
-              {error && (
-                <p className="text-sm text-red-400 text-center" role="alert">
+              <div className="space-y-3">
+                <FormMessage kind="error" className="text-center">
                   {error}
-                </p>
-              )}
-
-              <Button onClick={handleSubmit} disabled={saving || loadingDay} className="w-full">
-                {saving ? "Saving..." : "Save Check-in"}
-              </Button>
+                </FormMessage>
+                <Button onClick={handleSubmit} disabled={saving || loadingDay} className="w-full">
+                  {saving ? "Saving..." : "Save Check-in"}
+                </Button>
+              </div>
             </>
           )}
         </>
