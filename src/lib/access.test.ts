@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  getAdminEmails,
   getAllowedEmails,
   getAuthorEmail,
   getAuthorEmails,
   getPrimarySensitiveEmail,
+  isAdminEmail,
   isAuthorEmail,
   isPrimarySensitiveEmail,
   isSensitiveEmail,
@@ -13,6 +15,7 @@ const originalSensitiveEmails = process.env.SENSITIVE_EMAILS;
 const originalAllowedEmails = process.env.ALLOWED_EMAILS;
 const originalAuthorEmail = process.env.THOUGHTS_AUTHOR_EMAIL;
 const originalAuthorEmails = process.env.THOUGHTS_AUTHOR_EMAILS;
+const originalAdminEmails = process.env.ADMIN_EMAILS;
 
 function restore(name: string, value: string | undefined) {
   if (value === undefined) {
@@ -27,6 +30,7 @@ afterEach(() => {
   restore("ALLOWED_EMAILS", originalAllowedEmails);
   restore("THOUGHTS_AUTHOR_EMAIL", originalAuthorEmail);
   restore("THOUGHTS_AUTHOR_EMAILS", originalAuthorEmails);
+  restore("ADMIN_EMAILS", originalAdminEmails);
 });
 
 describe("sensitive email ownership", () => {
@@ -170,5 +174,35 @@ describe("multiple authors", () => {
   it("getAuthorEmail returns the first for alert routing", () => {
     process.env.THOUGHTS_AUTHOR_EMAILS = "a@example.com,b@example.com";
     expect(getAuthorEmail()).toBe("a@example.com");
+  });
+});
+
+describe("admins", () => {
+  it("allows every address in ADMIN_EMAILS and no one else", () => {
+    process.env.ADMIN_EMAILS = '"Boss@example.com, second@example.com"';
+    process.env.THOUGHTS_AUTHOR_EMAILS = "author@example.com";
+    expect(getAdminEmails()).toEqual(["boss@example.com", "second@example.com"]);
+    expect(isAdminEmail("BOSS@example.com")).toBe(true);
+    expect(isAdminEmail("second@example.com")).toBe(true);
+    expect(isAdminEmail("author@example.com")).toBe(false);
+  });
+
+  it("falls back to the first author only, not every author or viewer", () => {
+    delete process.env.ADMIN_EMAILS;
+    process.env.THOUGHTS_AUTHOR_EMAILS = "first@example.com,second@example.com";
+    process.env.ALLOWED_EMAILS = "first@example.com,her@example.com";
+    expect(getAdminEmails()).toEqual(["first@example.com"]);
+    expect(isAdminEmail("second@example.com")).toBe(false);
+    expect(isAdminEmail("her@example.com")).toBe(false);
+  });
+
+  it("grants no one when nothing is configured", () => {
+    delete process.env.ADMIN_EMAILS;
+    delete process.env.THOUGHTS_AUTHOR_EMAILS;
+    delete process.env.THOUGHTS_AUTHOR_EMAIL;
+    delete process.env.ALLOWED_EMAILS;
+    expect(getAdminEmails()).toEqual([]);
+    expect(isAdminEmail(null)).toBe(false);
+    expect(isAdminEmail("anyone@example.com")).toBe(false);
   });
 });

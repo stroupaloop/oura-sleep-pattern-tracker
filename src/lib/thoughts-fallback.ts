@@ -89,3 +89,16 @@ export function fallbackPingDue(
   if (!isWakingTime(createdAt, options)) return null;
   return { createdAt, slot: `fallback:${lastActivity}` };
 }
+
+/**
+ * Where the quiet stretch starts. Switching the ping back on counts as
+ * activity, so it waits a fresh 6-12 hours rather than firing on the next
+ * tick for a stretch that ran out while it was off.
+ */
+export function fallbackClockStart(
+  lastActivity: number | null,
+  enabledSince: number | null
+): number | null {
+  if (lastActivity === null) return null;
+  return enabledSince === null ? lastActivity : Math.max(lastActivity, enabledSince);
+}

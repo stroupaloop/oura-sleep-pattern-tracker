@@ -71,3 +71,20 @@ export function isAuthorEmail(email: string | null | undefined): boolean {
   if (!email) return false;
   return getAuthorEmails().includes(email.toLowerCase());
 }
+
+/**
+ * Who sees and changes site-wide switches. ADMIN_EMAILS takes a
+ * comma-separated list; unset, it is the first author alone, the same person
+ * every alert goes to.
+ */
+export function getAdminEmails(): string[] {
+  const explicit = parseEmailList(process.env.ADMIN_EMAILS);
+  if (explicit.length > 0) return explicit;
+  const author = getAuthorEmail();
+  return author ? [author] : [];
+}
+
+export function isAdminEmail(email: string | null | undefined): boolean {
+  if (!email) return false;
+  return getAdminEmails().includes(email.toLowerCase());
+}
