@@ -59,8 +59,8 @@ typography:
     fontSize: "0.75rem"
     fontWeight: 400
     lineHeight: 1.33
-  data:
-    fontFamily: "Atkinson Hyperlegible Mono, ui-monospace, monospace"
+  code:
+    fontFamily: "ui-monospace, SF Mono, Menlo, monospace"
     fontSize: "0.75rem"
     fontWeight: 400
 rounded:
@@ -165,7 +165,7 @@ Restrained night-indigo neutrals carry the surfaces; a single rose accent carrie
 ## Typography
 
 **Display and body:** Atkinson Hyperlegible Next (ui-sans-serif, system-ui fallback)
-**Data:** Atkinson Hyperlegible Mono, for dates and measurements set in columns
+**Code:** the system monospace, only for references and codes (an error digest); numbers use the sans's tabular figures
 
 One family carries everything; hierarchy comes from size and weight steps on a fixed rem scale, ratio about 1.2.
 

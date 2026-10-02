@@ -1,21 +1,18 @@
 import type { Metadata } from "next";
-import {
-  Atkinson_Hyperlegible_Mono,
-  Atkinson_Hyperlegible_Next,
-} from "next/font/google";
+import { Atkinson_Hyperlegible_Next } from "next/font/google";
 import "./globals.css";
 
 // Drawn for low-vision legibility: distinct numerals for a first-thing-in-
 // the-morning read on a phone.
+// Next.js has no metrics to size-match a fallback for this face, so it is
+// preloaded and falls back to the system sans while it arrives.
 const atkinson = Atkinson_Hyperlegible_Next({
   variable: "--font-atkinson",
   subsets: ["latin"],
+  fallback: ["ui-sans-serif", "system-ui", "sans-serif"],
+  adjustFontFallback: false,
 });
 
-const atkinsonMono = Atkinson_Hyperlegible_Mono({
-  variable: "--font-atkinson-mono",
-  subsets: ["latin"],
-});
 
 export const metadata: Metadata = {
   title: "Slothie's Bipolar Tracker",
@@ -31,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={`${atkinson.variable} ${atkinsonMono.variable} antialiased`}
+        className={`${atkinson.variable} antialiased`}
       >
         {children}
       </body>

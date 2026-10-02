@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-atkinson-mono), ui-monospace, monospace;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --color-attention: var(--attention);
   --color-alert: var(--alert);
   --color-watch: var(--watch);
