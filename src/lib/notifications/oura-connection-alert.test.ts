@@ -12,13 +12,20 @@ const LAST_STORED = 1788383000;
 
 function failing(
   consecutiveFailures: number,
-  needsReconnect: boolean
+  needsReconnect: boolean,
+  times: {
+    since?: number;
+    last?: number;
+    previous?: number | null;
+  } = {}
 ): OuraConnectionHealth {
   return {
     state: "failing",
     lastSyncedAt: LAST_STORED,
-    failingSince: FAILED_AT,
+    failingSince: times.since ?? FAILED_AT,
     consecutiveFailures,
+    lastFailureAt: times.last ?? FAILED_AT,
+    previousFailureAt: times.previous ?? null,
     needsReconnect,
     lastError: needsReconnect
       ? "Oura request failed for token_refresh with HTTP 400 (invalid_grant)"
@@ -39,19 +46,40 @@ describe("ouraConnectionAlertsEnabled", () => {
   });
 });
 
+const at = (iso: string) => Date.parse(iso) / 1000;
+// 10am, 11am ET on Sep 3; 6am, 10am, 11am ET on Sep 4; 6am ET on Sep 5.
+const SEP3_10AM = at("2026-09-03T14:00:00Z");
+const SEP3_11AM = at("2026-09-03T15:00:00Z");
+const SEP4_6AM = at("2026-09-04T10:00:00Z");
+const SEP4_10AM = at("2026-09-04T14:00:00Z");
+const SEP4_11AM = at("2026-09-04T15:00:00Z");
+const SEP5_6AM = at("2026-09-05T10:00:00Z");
+
 describe("shouldSendOuraConnectionAlert", () => {
-  it("reports a rejected connection on its first failure, then daily", () => {
-    const sends = [1, 2, 3, 4, 5, 6, 9].filter((count) =>
-      shouldSendOuraConnectionAlert(failing(count, true))
-    );
-    expect(sends).toEqual([1, 5, 9]);
+  it("reports a rejected connection at once, then on each new ET day", () => {
+    const attempt = (last: number, previous: number | null) =>
+      shouldSendOuraConnectionAlert(
+        failing(2, true, { since: SEP3_10AM, last, previous })
+      );
+
+    expect(attempt(SEP3_10AM, null)).toBe(true);
+    expect(attempt(SEP3_11AM, SEP3_10AM)).toBe(false);
+    expect(attempt(SEP4_6AM, SEP3_11AM)).toBe(true);
+    expect(attempt(SEP4_10AM, SEP4_6AM)).toBe(false);
   });
 
-  it("waits a day before reporting other failures, then repeats daily", () => {
-    const sends = [1, 2, 3, 4, 5, 8, 12].filter((count) =>
-      shouldSendOuraConnectionAlert(failing(count, false))
-    );
-    expect(sends).toEqual([4, 8, 12]);
+  it("reports other failures once they have lasted a day, then daily", () => {
+    const attempt = (last: number, previous: number | null) =>
+      shouldSendOuraConnectionAlert(
+        failing(2, false, { since: SEP3_10AM, last, previous })
+      );
+
+    expect(attempt(SEP3_10AM, null)).toBe(false);
+    expect(attempt(SEP3_11AM, SEP3_10AM)).toBe(false);
+    expect(attempt(SEP4_6AM, SEP3_11AM)).toBe(false);
+    expect(attempt(SEP4_10AM, SEP4_6AM)).toBe(true);
+    expect(attempt(SEP4_11AM, SEP4_10AM)).toBe(false);
+    expect(attempt(SEP5_6AM, SEP4_11AM)).toBe(true);
   });
 
   it("stays quiet while syncing works", () => {

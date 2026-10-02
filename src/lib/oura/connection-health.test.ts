@@ -36,6 +36,8 @@ describe("assessOuraConnection", () => {
       lastSyncedAt: 2000,
       failingSince: 3000,
       consecutiveFailures: 3,
+      lastFailureAt: 5000,
+      previousFailureAt: 4000,
       needsReconnect: true,
       lastError: REFRESH_FAILURE,
     });

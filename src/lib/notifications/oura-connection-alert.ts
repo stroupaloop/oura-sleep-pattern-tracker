@@ -22,19 +22,35 @@ export function ouraConnectionAlertsEnabled(env: {
   });
 }
 
+const DAY_SECONDS = 24 * 60 * 60;
+
+function etDay(seconds: number): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+  }).format(new Date(seconds * 1000));
+}
+
 /**
- * The scheduled sync runs four times a day. A rejected connection is reported
- * on its first failure, anything else after a day of failures, and both again
- * once a day while they last.
+ * A rejected connection is reported on its first failure, anything else once
+ * it has failed for a day, and both again on the first failure of each later
+ * ET day while they last. Judged from attempt times, so it holds however
+ * often the sync is scheduled.
  */
 export function shouldSendOuraConnectionAlert(
   health: OuraConnectionHealth
 ): boolean {
-  if (health.state !== "failing") return false;
-  const failures = health.consecutiveFailures;
-  return health.needsReconnect
-    ? failures % 4 === 1
-    : failures >= 4 && failures % 4 === 0;
+  const { lastFailureAt, previousFailureAt, failingSince } = health;
+  if (health.state !== "failing" || lastFailureAt == null) return false;
+
+  const firstOfDay =
+    previousFailureAt == null || etDay(previousFailureAt) !== etDay(lastFailureAt);
+  if (health.needsReconnect) return firstOfDay;
+
+  const since = failingSince ?? lastFailureAt;
+  if (lastFailureAt - since < DAY_SECONDS) return false;
+  const justReachedADay =
+    previousFailureAt != null && previousFailureAt - since < DAY_SECONDS;
+  return justReachedADay || firstOfDay;
 }
 
 function formatEt(seconds: number): string {

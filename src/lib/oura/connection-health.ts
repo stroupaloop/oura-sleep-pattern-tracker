@@ -8,6 +8,10 @@ export interface OuraConnectionHealth {
   /** When the current run of failed core syncs began, as far as the rows reach. */
   failingSince: number | null;
   consecutiveFailures: number;
+  /** When the newest failed attempt ran. */
+  lastFailureAt: number | null;
+  /** When the failed attempt before it ran, if it was part of the same run. */
+  previousFailureAt: number | null;
   /** Oura rejected the connection itself, which only a reconnect fixes. */
   needsReconnect: boolean;
   /** The error the newest failed attempt recorded. */
@@ -36,6 +40,8 @@ export function assessOuraConnection(
       lastSyncedAt: lastSuccessAt,
       failingSince: null,
       consecutiveFailures: 0,
+      lastFailureAt: null,
+      previousFailureAt: null,
       needsReconnect: false,
       lastError: null,
     };
@@ -60,6 +66,8 @@ export function assessOuraConnection(
     failingSince:
       consecutiveFailures > 0 ? core[consecutiveFailures - 1].createdAt : null,
     consecutiveFailures,
+    lastFailureAt: consecutiveFailures > 0 ? core[0].createdAt : null,
+    previousFailureAt: consecutiveFailures > 1 ? core[1].createdAt : null,
     needsReconnect: lastError != null && RECONNECT_ERROR.test(lastError),
     lastError,
   };
