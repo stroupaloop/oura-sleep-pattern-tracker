@@ -10,18 +10,68 @@ interface HypnogramChartProps {
 }
 
 const STAGES = [
-  { key: 4, label: "Awake", color: "#f97316", y: 0 },
-  { key: 3, label: "REM", color: "#a78bfa", y: 1 },
-  { key: 2, label: "Light", color: "#67e8f9", y: 2 },
-  { key: 1, label: "Deep", color: "#3b82f6", y: 3 },
+  { key: 4, label: "Awake", color: "var(--stage-awake)", y: 0 },
+  { key: 3, label: "REM", color: "var(--stage-rem)", y: 1 },
+  { key: 2, label: "Light", color: "var(--stage-light)", y: 2 },
+  { key: 1, label: "Deep", color: "var(--stage-deep)", y: 3 },
 ] as const;
 
 const stageMap: Record<string, { label: string; value: number; color: string }> = {
-  "1": { label: "Deep", value: 1, color: "#3b82f6" },
-  "2": { label: "Light", value: 2, color: "#67e8f9" },
-  "3": { label: "REM", value: 3, color: "#a78bfa" },
-  "4": { label: "Awake", value: 4, color: "#f97316" },
+  "1": { label: "Deep", value: 1, color: "var(--stage-deep)" },
+  "2": { label: "Light", value: 2, color: "var(--stage-light)" },
+  "3": { label: "REM", value: 3, color: "var(--stage-rem)" },
+  "4": { label: "Awake", value: 4, color: "var(--stage-awake)" },
 };
+
+const LABEL_COLUMN_PX = 48;
+const HEART_RATE_COLUMN_PX = 32;
+
+/**
+ * The 5-minute sample under a pointer `x` pixels into the chart, or null off
+ * the bars. Bar `i` spans [i, i + 1) / count of the plot, which sits between
+ * the stage labels and, when shown, the heart-rate axis.
+ */
+export function hypnogramIndexAt(
+  x: number,
+  width: number,
+  count: number,
+  hasHeartRateAxis: boolean
+): number | null {
+  const plotWidth =
+    width - LABEL_COLUMN_PX - (hasHeartRateAxis ? HEART_RATE_COLUMN_PX : 0);
+  if (plotWidth <= 0 || count <= 0) return null;
+  const index = Math.floor(((x - LABEL_COLUMN_PX) / plotWidth) * count);
+  return index >= 0 && index < count ? index : null;
+}
+
+/** Where sample `index` starts, as a share of the plot. */
+export function hypnogramOffset(index: number, count: number): number {
+  return count > 0 ? index / count : 0;
+}
+
+/**
+ * Ticks on the whole ET hours the night crosses, every other hour past seven
+ * hours, so the labels stay short enough not to collide on a phone.
+ */
+export function hourTicks(
+  data: ReadonlyArray<Pick<DataPoint, "clock">>
+): Array<{ share: number; label: string }> {
+  const totalMinutes = data.length * 5;
+  const step = totalMinutes > 7 * 60 ? 2 : 1;
+  const ticks: Array<{ share: number; label: string }> = [];
+  data.forEach((point, index) => {
+    const previous = data[index - 1]?.clock;
+    if (!point.clock || !previous || previous.hour === point.clock.hour) return;
+    if (point.clock.hour % step !== 0) return;
+    const minutes = index * 5 - point.clock.minute;
+    const hour12 = point.clock.hour % 12 === 0 ? 12 : point.clock.hour % 12;
+    ticks.push({
+      share: minutes / totalMinutes,
+      label: `${hour12} ${point.clock.hour < 12 ? "AM" : "PM"}`,
+    });
+  });
+  return ticks;
+}
 
 const stageRow: Record<number, number> = { 4: 0, 3: 1, 2: 2, 1: 3 };
 
@@ -31,9 +81,18 @@ const ET_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   minute: "2-digit",
 });
 
+const ET_HOUR_MINUTE_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  timeZone: APP_TIME_ZONE,
+  hour: "numeric",
+  minute: "numeric",
+  hourCycle: "h23",
+});
+
 interface DataPoint {
   minuteOffset: number;
   time: string;
+  /** ET hour and minute the sample starts at, or null without a start time. */
+  clock: { hour: number; minute: number } | null;
   stage: number;
   stageLabel: string;
   hr: number | null;
@@ -95,7 +154,7 @@ function parseHypnogram(
     : Number.NaN;
 
   return Array.from(hypnogram).map((char, i) => {
-    const info = stageMap[char] ?? { label: "Unknown", value: 2, color: "#525252" };
+    const info = stageMap[char] ?? { label: "Unknown", value: 2, color: "var(--muted-foreground)" };
     const phaseTimestamp = bedtimeTimestamp + i * 5 * 60 * 1000;
     const rawHeartRateIndex =
       heartRateSeries && Number.isFinite(phaseTimestamp) && Number.isFinite(heartRateTimestamp)
@@ -109,12 +168,20 @@ function parseHypnogram(
       Math.abs(rawHeartRateIndex - heartRateIndex) < 0.001 &&
       heartRateIndex >= 0 &&
       heartRateIndex < heartRateSeries.items.length;
+    const clockParts = Number.isFinite(phaseTimestamp)
+      ? ET_HOUR_MINUTE_FORMATTER.formatToParts(new Date(phaseTimestamp))
+      : null;
+    const clockPart = (type: "hour" | "minute") =>
+      Number(clockParts?.find((part) => part.type === type)?.value);
     return {
       minuteOffset: i * 5,
       time:
         Number.isFinite(phaseTimestamp)
           ? ET_TIME_FORMATTER.format(new Date(phaseTimestamp))
           : "--",
+      clock: clockParts
+        ? { hour: clockPart("hour"), minute: clockPart("minute") }
+        : null,
       stage: info.value,
       stageLabel: info.label,
       hr: isAligned
@@ -148,20 +215,17 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
   const rowGap = 2;
   const chartHeight = STAGES.length * rowHeight + (STAGES.length - 1) * rowGap;
 
-  const tickInterval = Math.max(1, Math.floor(data.length / 6));
-  const timeTicks = data.filter((_, i) => i % tickInterval === 0 || i === data.length - 1);
+  const timeTicks = hourTicks(data);
 
   function handleMouseMove(e: React.MouseEvent<HTMLDivElement>) {
     const rect = containerRef.current?.getBoundingClientRect();
     if (!rect) return;
     const x = e.clientX - rect.left;
-    const labelWidth = 48;
-    const chartWidth = rect.width - labelWidth;
-    const idx = Math.round(((x - labelWidth) / chartWidth) * (data.length - 1));
-    if (idx >= 0 && idx < data.length) {
+    const index = hypnogramIndexAt(x, rect.width, data.length, hasAlignedHeartRate);
+    if (index != null) {
       setTooltip({
         left: Math.max(0, Math.min(x, rect.width - 140)),
-        point: data[idx],
+        point: data[index],
       });
     }
   }
@@ -228,7 +292,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
                   segment = [];
                   return;
                 }
-                const x = (index / (data.length - 1)) * 100;
+                const x = hypnogramOffset(index + 0.5, data.length) * 100;
                 const y = ((point.hr - hrMin) / hrRange) * 100;
                 segment.push({ x, y: 100 - y });
               });
@@ -250,7 +314,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
                         )
                         .join(" ")}
                       fill="none"
-                      stroke="#ef4444"
+                      stroke="var(--series-hr)"
                       strokeWidth="2"
                       strokeOpacity="0.7"
                       vectorEffect="non-scaling-stroke"
@@ -263,24 +327,32 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
             {tooltip && (
               <div
                 className="absolute top-0 bottom-0 w-px bg-foreground/30 pointer-events-none"
-                style={{ left: `${(data.indexOf(tooltip.point) / data.length) * 100}%` }}
+                style={{
+                  left: `${hypnogramOffset(data.indexOf(tooltip.point) + 0.5, data.length) * 100}%`,
+                }}
               />
             )}
           </div>
 
           {hasAlignedHeartRate && (
-            <div className="flex flex-col justify-between shrink-0 w-8 pl-1 text-[9px] text-muted-foreground">
+            <div className="flex flex-col justify-between shrink-0 w-8 pl-1 text-[11px] text-muted-foreground tabular-nums">
               <span>{Math.round(hrMax)}</span>
-              <span className="text-[8px]">bpm</span>
+              <span>bpm</span>
               <span>{Math.round(hrMin)}</span>
             </div>
           )}
         </div>
 
-        <div className="flex pl-12 pr-8 mt-1">
-          <div className="flex-1 flex justify-between text-[10px] text-muted-foreground">
-            {timeTicks.map((t) => (
-              <span key={t.minuteOffset}>{t.time}</span>
+        <div className={`flex pl-12 mt-1 ${hasAlignedHeartRate ? "pr-8" : ""}`}>
+          <div className="relative h-4 flex-1 text-[11px] text-muted-foreground tabular-nums">
+            {timeTicks.map(({ share, label }) => (
+              <span
+                key={label}
+                className={`absolute whitespace-nowrap ${share > 0.92 ? "-translate-x-full" : share > 0.04 ? "-translate-x-1/2" : ""}`}
+                style={{ left: `${share * 100}%` }}
+              >
+                {label}
+              </span>
             ))}
           </div>
         </div>
@@ -302,7 +374,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
         )}
       </div>
 
-      <div className="flex items-center gap-3 justify-center text-[10px] text-muted-foreground mt-2">
+      <div className="flex flex-wrap items-center gap-3 justify-center text-xs text-muted-foreground mt-2">
         {STAGES.map((s) => (
           <div key={s.key} className="flex items-center gap-1">
             <span
@@ -314,7 +386,7 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
         ))}
         {hasAlignedHeartRate && (
           <div className="flex items-center gap-1">
-            <span className="w-3 h-0.5 rounded bg-red-500/50" />
+            <span className="w-3 h-0.5 rounded bg-series-hr" />
             Heart rate
           </div>
         )}

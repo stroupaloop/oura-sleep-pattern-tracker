@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CircleHelp } from "lucide-react";
 import {
   getReferencesForMetric,
   type ResearchReference,
@@ -23,7 +24,7 @@ function ReferenceCard({
         href={reference.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-xs text-blue-400 hover:text-blue-300"
+        className="text-xs text-primary underline decoration-primary/40 hover:decoration-primary"
       >
         View study &rarr;
       </a>
@@ -40,11 +41,13 @@ export function ResearchTooltip({ metric }: { metric: string }) {
   return (
     <span className="relative inline-block">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
-        className="text-xs text-blue-400 hover:text-blue-300 ml-1 cursor-pointer"
+        className="ml-1 inline-flex size-6 cursor-pointer items-center justify-center rounded-full align-middle text-muted-foreground transition-colors hover:text-foreground"
         aria-label="View research"
+        aria-expanded={open}
       >
-        [?]
+        <CircleHelp aria-hidden="true" className="size-3.5" />
       </button>
       {open && (
         <>

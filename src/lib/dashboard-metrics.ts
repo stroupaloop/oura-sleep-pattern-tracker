@@ -46,10 +46,10 @@ export function formatDuration(seconds: number | null): string {
 
 export function formatDurationDelta(seconds: number): string {
   if (!Number.isFinite(seconds)) return "--";
-  if (seconds === 0) return "0m";
+  const roundedMinutes = Math.round(Math.abs(seconds) / 60);
+  if (roundedMinutes === 0) return "0m";
 
   const sign = seconds > 0 ? "+" : "-";
-  const roundedMinutes = Math.round(Math.abs(seconds) / 60);
   const hours = Math.floor(roundedMinutes / 60);
   const minutes = roundedMinutes % 60;
   const duration = hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;

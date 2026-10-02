@@ -38,16 +38,16 @@ export function OuraConnectionBanner({
   return (
     <div
       role="status"
-      className="flex flex-col gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-3 text-amber-100 sm:flex-row sm:items-center sm:justify-between md:px-6"
+      className="flex flex-col gap-3 border-b border-attention/30 bg-attention/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between md:px-6"
     >
       <div className="flex min-w-0 gap-2.5">
         <TriangleAlert
-          className="mt-0.5 size-4 shrink-0 text-amber-300"
+          className="mt-0.5 size-4 shrink-0 text-attention"
           aria-hidden="true"
         />
         <div className="min-w-0 space-y-0.5">
-          <p className="text-sm font-medium text-amber-50">{title}</p>
-          <p className="text-sm text-amber-100/80">
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="text-sm text-muted-foreground">
             {detail}
             {!canReconnect &&
               " The private-data owner can reconnect it in Settings."}

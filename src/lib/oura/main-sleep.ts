@@ -135,6 +135,27 @@ export function selectNightSleepByDay<T extends NightSleepPeriod>(
   periods: readonly T[],
   timeZone = APP_TIME_ZONE
 ): Map<string, T> {
+  const nights = new Map<string, T>();
+  for (const [day, group] of selectNightGroupsByDay(periods, timeZone)) {
+    nights.set(day, group.night);
+  }
+  return nights;
+}
+
+export interface NightGroup<T extends NightSleepPeriod> {
+  /** The periods combined, as `combineNightPeriods` returns them. */
+  night: T;
+  /** The periods that make up the night, in bedtime order, each with its own series. */
+  periods: T[];
+  /** The longest of them, whose hypnogram and heart-rate series describe most of the night. */
+  main: T;
+}
+
+/** Like `selectNightSleepByDay`, keeping the periods each night was made from. */
+export function selectNightGroupsByDay<T extends NightSleepPeriod>(
+  periods: readonly T[],
+  timeZone = APP_TIME_ZONE
+): Map<string, NightGroup<T>> {
   const byDay = new Map<string, { overnight: T[]; daytime: T[] }>();
   for (const period of periods) {
     if (period.type !== "long_sleep" && period.type !== "sleep") continue;
@@ -150,14 +171,18 @@ export function selectNightSleepByDay<T extends NightSleepPeriod>(
     byDay.set(period.day, groups);
   }
 
-  const nights = new Map<string, T>();
+  const nights = new Map<string, NightGroup<T>>();
   for (const [day, groups] of byDay) {
-    nights.set(
-      day,
-      groups.overnight.length > 0
-        ? combineNightPeriods(groups.overnight)
-        : longest(groups.daytime)
-    );
+    const members =
+      groups.overnight.length > 0 ? groups.overnight : [longest(groups.daytime)];
+    nights.set(day, {
+      night: combineNightPeriods(members),
+      periods: [...members].sort(
+        (left, right) =>
+          Date.parse(left.bedtimeStart) - Date.parse(right.bedtimeStart)
+      ),
+      main: longest(members),
+    });
   }
   return nights;
 }

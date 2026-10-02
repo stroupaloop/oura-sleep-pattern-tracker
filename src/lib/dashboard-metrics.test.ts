@@ -23,6 +23,8 @@ describe("dashboard metric presentation", () => {
     expect(formatDurationDelta(-1_800)).toBe("-30m");
     expect(formatDurationDelta(4_500)).toBe("+1h 15m");
     expect(formatDurationDelta(0)).toBe("0m");
+    expect(formatDurationDelta(20)).toBe("0m");
+    expect(formatDurationDelta(-29)).toBe("0m");
   });
 
   it("summarizes finite app-aligned samples without replacing gaps", () => {

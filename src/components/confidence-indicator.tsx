@@ -1,11 +1,9 @@
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import Link from "next/link";
+import { CircleSlash } from "lucide-react";
 import type { DataAvailability } from "@/lib/analysis/confidence";
+import type { OuraScope } from "@/lib/oura/contracts";
+import { formatOuraScopeList } from "@/lib/oura/scope-labels";
+import { Panel } from "@/components/health/panel";
 
 interface AvailabilityRowProps {
   label: string;
@@ -29,10 +27,10 @@ function AvailabilityRow({
   latestLabel,
 }: AvailabilityRowProps) {
   return (
-    <div className="grid gap-x-4 gap-y-0.5 border-b pb-2 last:border-b-0 last:pb-0 sm:grid-cols-[1fr_auto]">
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-4 gap-y-0.5 py-2.5 first:pt-0 last:pb-0">
       <dt className="text-sm font-medium">{label}</dt>
-      <dd className="text-sm sm:text-right">{value}</dd>
-      <dd className="text-xs text-muted-foreground sm:col-span-2">
+      <dd className="text-right text-sm tabular-nums">{value}</dd>
+      <dd className="col-span-2 text-xs text-muted-foreground">
         {latestDay ? `${latestLabel}: ${formatDay(latestDay)}` : "No values in this window"}
       </dd>
     </div>
@@ -51,47 +49,73 @@ function medicationLoggingValue(
   return "Not configured";
 }
 
-export function DataAvailabilityCard({ data }: { data: DataAvailability }) {
+export function DataAvailabilityCard({
+  data,
+  missingScopes = [],
+  className,
+}: {
+  data: DataAvailability;
+  /** Oura data the connection was not granted, named so the gap is visible. */
+  missingScopes?: OuraScope[];
+  className?: string;
+}) {
   return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="text-base">Recent Data Availability</CardTitle>
-        <CardDescription>
-          Recorded values in the last {data.windowDays} ET calendar days
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        <dl className="space-y-2">
-          <AvailabilityRow
-            label="Sleep"
-            value={`${data.sleep.measuredDays}/${data.windowDays} measured ${data.sleep.measuredDays === 1 ? "night" : "nights"}`}
-            latestDay={data.sleep.latestDay}
-            latestLabel="Latest ET sleep day"
+    <Panel
+      id="data-coverage"
+      title="Data coverage"
+      description={`Recorded values in the last ${data.windowDays} ET calendar days`}
+      className={className}
+    >
+      <dl className="divide-y divide-border">
+        <AvailabilityRow
+          label="Sleep"
+          value={`${data.sleep.measuredDays}/${data.windowDays} measured ${data.sleep.measuredDays === 1 ? "night" : "nights"}`}
+          latestDay={data.sleep.latestDay}
+          latestLabel="Latest ET sleep day"
+        />
+        <AvailabilityRow
+          label="Activity classification"
+          value={`${data.activity.measuredDays}/${data.windowDays} measured ${data.activity.measuredDays === 1 ? "day" : "days"}`}
+          latestDay={data.activity.latestDay}
+          latestLabel="Latest ET day with classified activity"
+        />
+        <AvailabilityRow
+          label="Mood check-ins"
+          value={`${data.mood.measuredDays}/${data.windowDays} ${data.mood.measuredDays === 1 ? "day" : "days"} logged`}
+          latestDay={data.mood.latestDay}
+          latestLabel="Latest check-in"
+        />
+        <AvailabilityRow
+          label="Medication logging"
+          value={medicationLoggingValue(data.medicationLogging)}
+          latestDay={data.medicationLogging.latestDay}
+          latestLabel="Latest medication log"
+        />
+      </dl>
+      {missingScopes.length > 0 && (
+        <div className="mt-4 flex gap-2.5 border-t pt-4">
+          <CircleSlash
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0 text-attention"
           />
-          <AvailabilityRow
-            label="Activity classification"
-            value={`${data.activity.measuredDays}/${data.windowDays} measured ${data.activity.measuredDays === 1 ? "day" : "days"}`}
-            latestDay={data.activity.latestDay}
-            latestLabel="Latest ET day with classified activity"
-          />
-          <AvailabilityRow
-            label="Mood check-ins"
-            value={`${data.mood.measuredDays}/${data.windowDays} ${data.mood.measuredDays === 1 ? "day" : "days"} logged`}
-            latestDay={data.mood.latestDay}
-            latestLabel="Latest check-in"
-          />
-          <AvailabilityRow
-            label="Medication logging"
-            value={medicationLoggingValue(data.medicationLogging)}
-            latestDay={data.medicationLogging.latestDay}
-            latestLabel="Latest medication log"
-          />
-        </dl>
-        <p className="text-xs text-muted-foreground">
-          Source-specific presence counts; a measured day may be partial. This
-          is not an accuracy, adherence, or ring-wear score.
-        </p>
-      </CardContent>
-    </Card>
+          <p className="text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">
+              Not shared by Oura:
+            </span>{" "}
+            {formatOuraScopeList(missingScopes)}.{" "}
+            <Link
+              href="/dashboard/settings#oura"
+              className="underline decoration-border hover:text-foreground"
+            >
+              How to turn them on
+            </Link>
+          </p>
+        </div>
+      )}
+      <p className="mt-4 text-xs text-muted-foreground">
+        Source-specific presence counts; a measured day may be partial. This
+        is not an accuracy, adherence, or ring-wear score.
+      </p>
+    </Panel>
   );
 }

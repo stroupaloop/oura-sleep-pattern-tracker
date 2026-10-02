@@ -2,10 +2,6 @@ import { APP_TIME_ZONE, shiftIsoDay } from "../date-utils";
 
 const SLEEP_DAY_BOUNDARY_MINUTES = 18 * 60;
 
-interface SleepPeriodWithEnd {
-  bedtimeEnd: string | null;
-}
-
 function getLocalDayAndClockMinutes(
   timestamp: string,
   timeZone: string
@@ -60,32 +56,4 @@ export function getOuraSleepDayForTimestamp(
   return local.clockMinutes >= SLEEP_DAY_BOUNDARY_MINUTES
     ? shiftIsoDay(local.day, 1)
     : local.day;
-}
-
-export function selectSleepForSleepDay<T extends SleepPeriodWithEnd>(
-  records: T[],
-  targetSleepDay: string,
-  timeZone = APP_TIME_ZONE
-): T | null {
-  if (shiftIsoDay(targetSleepDay, 0) == null) return null;
-
-  let selected: T | null = null;
-  let selectedEnd = Number.NEGATIVE_INFINITY;
-
-  for (const record of records) {
-    if (
-      !record.bedtimeEnd ||
-      getOuraSleepDayForTimestamp(record.bedtimeEnd, timeZone) !==
-        targetSleepDay
-    ) {
-      continue;
-    }
-    const bedtimeEnd = Date.parse(record.bedtimeEnd);
-    if (Number.isFinite(bedtimeEnd) && bedtimeEnd > selectedEnd) {
-      selected = record;
-      selectedEnd = bedtimeEnd;
-    }
-  }
-
-  return selected;
 }

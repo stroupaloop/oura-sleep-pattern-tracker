@@ -17,6 +17,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 
+
+/** Series colors carry the swatches; the labels stay readable text. */
+function legendLabel(value: string) {
+  return <span className="text-xs text-muted-foreground">{value}</span>;
+}
+
 interface CompositionData {
   day: string;
   deep: number | null;
@@ -29,10 +35,12 @@ interface CompositionData {
   awakeMin: number | null;
 }
 
-function formatMins(mins: number | null): string {
-  if (mins == null) return "--";
-  const h = Math.floor(mins / 60);
-  const m = Math.round(mins % 60);
+export function formatMins(mins: number | null): string {
+  if (mins == null || !Number.isFinite(mins)) return "--";
+  // Round once, so 119.5 minutes reads "2h 0m", never "1h 60m".
+  const total = Math.round(mins);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
@@ -62,16 +70,16 @@ function CustomTooltip({
   return (
     <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
       <p className="font-medium text-foreground mb-1">{label}</p>
-      <p style={{ color: "#3b82f6" }}>
+      <p style={{ color: "var(--stage-deep)" }}>
         Deep: {formatStage(d.deep, d.deepMin)}
       </p>
-      <p style={{ color: "#a78bfa" }}>
+      <p style={{ color: "var(--stage-rem)" }}>
         REM: {formatStage(d.rem, d.remMin)}
       </p>
-      <p style={{ color: "#67e8f9" }}>
+      <p style={{ color: "var(--stage-light)" }}>
         Light: {formatStage(d.light, d.lightMin)}
       </p>
-      <p style={{ color: "#f97316" }}>
+      <p style={{ color: "var(--stage-awake)" }}>
         Awake: {formatStage(d.awake, d.awakeMin)}
       </p>
     </div>
@@ -82,9 +90,10 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Time-in-Bed Composition</CardTitle>
+        <CardTitle>Time in Bed by Stage</CardTitle>
         <CardDescription>
-          Sleep stages plus awake time as a share of time in bed (last {data.length} nights)
+          Each night&apos;s stages and awake time as a share of time in bed,
+          last {data.length} nights
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -99,7 +108,7 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
               domain={[0, 100]}
               tickFormatter={(v: number) => `${v}%`}
               fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              tick={{ fill: "var(--muted-foreground)" }}
             />
             <YAxis
               dataKey="day"
@@ -107,14 +116,14 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
               tickFormatter={(d: string) => d.slice(5)}
               fontSize={11}
               width={50}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              tick={{ fill: "var(--muted-foreground)" }}
             />
             <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Bar dataKey="deep" stackId="a" fill="#3b82f6" name="Deep" />
-            <Bar dataKey="rem" stackId="a" fill="#a78bfa" name="REM" />
-            <Bar dataKey="light" stackId="a" fill="#67e8f9" name="Light" />
-            <Bar dataKey="awake" stackId="a" fill="#f97316" name="Awake" radius={[0, 4, 4, 0]} />
+            <Legend formatter={legendLabel} />
+            <Bar dataKey="deep" stackId="a" fill="var(--stage-deep)" name="Deep" />
+            <Bar dataKey="rem" stackId="a" fill="var(--stage-rem)" name="REM" />
+            <Bar dataKey="light" stackId="a" fill="var(--stage-light)" name="Light" />
+            <Bar dataKey="awake" stackId="a" fill="var(--stage-awake)" name="Awake" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </CardContent>
