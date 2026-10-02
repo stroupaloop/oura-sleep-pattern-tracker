@@ -131,6 +131,35 @@ describe("compact chart context", () => {
     expect(vo2Max).toContain("no population range is applied");
   });
 
+  it("offers nights from its first day while the evening before still shows", () => {
+    const html = renderToStaticMarkup(
+      createElement(HourlyHrChart, {
+        data: [
+          {
+            day: "2026-07-30",
+            hour: 22,
+            avgBpm: 64,
+            minBpm: 58,
+            maxBpm: 70,
+            source: "rest",
+          },
+          {
+            day: "2026-07-31",
+            hour: 15,
+            avgBpm: 80,
+            minBpm: 72,
+            maxBpm: 90,
+            source: "awake",
+          },
+        ],
+        firstDay: "2026-07-31",
+      })
+    );
+
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*aria-label="Previous night"/);
+    expect(html).not.toContain("No hourly heart-rate samples");
+  });
+
   it("describes hourly markers as personal-pattern comparisons", () => {
     const html = renderToStaticMarkup(
       createElement(HourlyHrChart, {
@@ -144,10 +173,13 @@ describe("compact chart context", () => {
             source: null,
           },
         ],
+        firstDay: "2026-05-03",
       })
     );
 
-    expect(html).toContain("prior average for the same local hour");
+    expect(html).toContain(
+      "average for the same local hour over the two weeks before"
+    );
     expect(html).toContain("not clinical alerts");
     expect(html).toContain("No hourly heart-rate samples");
   });

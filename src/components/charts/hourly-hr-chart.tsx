@@ -33,6 +33,9 @@ import { formatNightLabel } from "@/lib/health/format";
 
 interface HourlyHrChartProps {
   data: HourlyHrPoint[];
+  /** The earliest day offered. Earlier data only completes that first
+   * night and the same-hour baselines. */
+  firstDay: string;
 }
 
 type ViewMode = "night" | "day";
@@ -123,11 +126,13 @@ function HourlyHrTooltip({
   );
 }
 
-export function HourlyHrChart({ data }: HourlyHrChartProps) {
+export function HourlyHrChart({ data, firstDay }: HourlyHrChartProps) {
   const availableDays = useMemo(() => {
-    const days = new Set(data.map((d) => d.day));
+    const days = new Set(
+      data.map((d) => d.day).filter((day) => day >= firstDay)
+    );
     return [...days].sort();
-  }, [data]);
+  }, [data, firstDay]);
 
   const [selectedDay, setSelectedDay] = useState(() =>
     availableDays.length > 0 ? availableDays[availableDays.length - 1] : ""
@@ -230,9 +235,9 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
           )}
         </div>
         <CardDescription>
-          Hourly average and observed min–max band (bpm). Markers compare with
-          your prior average for the same local hour; they are not clinical
-          alerts.
+          Hourly average and observed min–max band (bpm). Markers compare
+          each hour with your average for the same local hour over the two
+          weeks before; they are not clinical alerts.
         </CardDescription>
       </CardHeader>
       <CardContent>

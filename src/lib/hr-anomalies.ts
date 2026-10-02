@@ -19,6 +19,20 @@ export interface HrAnomaly {
   baseline: number;
 }
 
+/**
+ * Each hour is compared with the same hour over the two weeks before its
+ * day, however much history the page loaded.
+ */
+export const HR_ANOMALY_BASELINE_DAYS = 14;
+
+function baselinePoints(
+  day: string,
+  allHourlyData: HourlyHrPoint[]
+): HourlyHrPoint[] {
+  const start = shiftIsoDay(day, -HR_ANOMALY_BASELINE_DAYS) ?? day;
+  return allHourlyData.filter((point) => point.day >= start && point.day < day);
+}
+
 function buildHourlyStats(points: HourlyHrPoint[]) {
   const baselineByHour = new Map<number, number[]>();
   for (const point of points) {
@@ -62,7 +76,7 @@ export function detectHrAnomalies(
   allHourlyData: HourlyHrPoint[]
 ): HrAnomaly[] {
   const todayData = allHourlyData.filter((d) => d.day === selectedDay);
-  const priorData = allHourlyData.filter((d) => d.day < selectedDay);
+  const priorData = baselinePoints(selectedDay, allHourlyData);
 
   if (todayData.length === 0) return [];
 
@@ -113,9 +127,7 @@ export function detectHrAnomalies(
   for (const point of restHours) {
     let dayStats = streakStatsByDay.get(point.day);
     if (!dayStats) {
-      dayStats = buildHourlyStats(
-        allHourlyData.filter((candidate) => candidate.day < point.day)
-      );
+      dayStats = buildHourlyStats(baselinePoints(point.day, allHourlyData));
       streakStatsByDay.set(point.day, dayStats);
     }
 

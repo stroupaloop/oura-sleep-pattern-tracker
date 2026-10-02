@@ -95,6 +95,8 @@ interface PrivateTabsProps {
   }[];
   wearActivityData: WearActivityDay[];
   wearActivityHrData: { day: string; hour: number; avgBpm: number | null; source: string | null }[];
+  /** The earliest day the hourly heart-rate views offer. */
+  hourlyFirstDay: string;
   sourceFreshness: {
     sleep: DatasetFreshness;
     cardiovascularAge: DatasetFreshness;
@@ -326,15 +328,19 @@ function HeartRateTab({
   hourlyHrData,
   wearActivityData,
   wearActivityHrData,
+  hourlyFirstDay,
 }: PrivateTabsProps) {
   return (
     <div className="space-y-6 md:space-y-8">
-      {hourlyHrData.length > 0 && <HourlyHrChart data={hourlyHrData} />}
+      {hourlyHrData.length > 0 && (
+        <HourlyHrChart data={hourlyHrData} firstDay={hourlyFirstDay} />
+      )}
 
       <WearActivityChart
         activityData={wearActivityData}
         hrData={wearActivityHrData}
         currentDay={currentDay}
+        firstDay={hourlyFirstDay}
       />
 
       {hrData.length > 0 && <RestingHrChart data={hrData} />}

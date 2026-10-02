@@ -100,3 +100,29 @@ describe("detectHrAnomalies elevated resting streaks", () => {
     ).toMatchObject({ day: "2026-01-10", hour: 0 });
   });
 });
+
+describe("detectHrAnomalies baseline window", () => {
+  function day(offset: number): string {
+    const date = new Date(Date.UTC(2026, 2, 1 + offset));
+    return date.toISOString().slice(0, 10);
+  }
+
+  it("compares an hour with the two weeks before, not older history", () => {
+    // Three weeks back the hour ran higher; the last two weeks sat near 60.
+    const older = [0, 1, 2, 3, 4, 5].map((offset) => point(day(offset), 9, 70, "awake"));
+    const recent = Array.from({ length: 14 }, (_, index) =>
+      point(day(6 + index), 9, index % 2 === 0 ? 59 : 61, "awake")
+    );
+    const selected = day(20);
+
+    const anomalies = detectHrAnomalies(selected, [
+      ...older,
+      ...recent,
+      point(selected, 9, 66, "awake"),
+    ]);
+
+    expect(anomalies).toMatchObject([
+      { day: selected, hour: 9, type: "spike", baseline: 60 },
+    ]);
+  });
+});
