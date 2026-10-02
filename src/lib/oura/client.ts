@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { refreshAccessToken, resolveOuraScope } from "./oauth";
 import {
   OuraRequestError,
+  describeOuraError,
   parseGrantedOuraScopes,
   parseOuraCollectionResponse,
 } from "./contracts";
@@ -11,6 +12,8 @@ import {
 const BASE_URL = "https://api.ouraring.com";
 const REFRESH_RECOVERY_DELAYS_MS = [0, 100, 250, 500, 1000, 1500];
 const PERSIST_RETRY_DELAYS_MS = [0, 100, 250, 500, 1000];
+const EXPIRY_MARGIN_SECONDS = 300;
+const RENEW_WITHIN_SECONDS = 7 * 24 * 60 * 60;
 
 type StoredOuraToken = typeof oauthTokens.$inferSelect;
 type RefreshedOuraToken = Awaited<ReturnType<typeof refreshAccessToken>>;
@@ -163,11 +166,35 @@ async function getAccessToken(): Promise<string> {
   const token = await loadToken();
   const now = Math.floor(Date.now() / 1000);
 
-  if (token.expiresAt > now + 300) {
+  if (token.expiresAt > now + EXPIRY_MARGIN_SECONDS) {
     return token.accessToken;
   }
 
   return refreshAccessTokenOnce(token);
+}
+
+export type OuraTokenRenewal = "not_due" | "expired" | "renewed" | "failed";
+
+/**
+ * Oura's access tokens last 30 days and its refresh tokens are single-use,
+ * with no documented lifetime of their own. Renewing in the token's last
+ * week means a refresh token never sits a full month unused, and a renewal
+ * that fails still leaves days of a working token, so syncs carry on and
+ * the next one tries again. An expired token is left to the request that
+ * needs it, which reports a failure. Never throws.
+ */
+export async function renewOuraTokenIfDue(): Promise<OuraTokenRenewal> {
+  try {
+    const token = await loadToken();
+    const now = Math.floor(Date.now() / 1000);
+    if (token.expiresAt > now + RENEW_WITHIN_SECONDS) return "not_due";
+    if (token.expiresAt <= now + EXPIRY_MARGIN_SECONDS) return "expired";
+    await refreshAccessTokenOnce(token);
+    return "renewed";
+  } catch (error) {
+    console.error(`Oura token renewal failed: ${describeOuraError(error)}`);
+    return "failed";
+  }
 }
 
 async function recoverAccessToken(rejectedAccessToken: string): Promise<string> {

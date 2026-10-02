@@ -563,3 +563,58 @@ describe("Oura authenticated client", () => {
     expect(mocks.token.refreshToken).toBe("latest-refresh");
   });
 });
+
+describe("renewOuraTokenIfDue", () => {
+  const DAY = 24 * 60 * 60;
+  const nowSeconds = () => Math.floor(Date.now() / 1000);
+
+  it("leaves a token with more than a week left alone", async () => {
+    mocks.token.expiresAt = nowSeconds() + 10 * DAY;
+    const { renewOuraTokenIfDue } = await import("./client");
+
+    await expect(renewOuraTokenIfDue()).resolves.toBe("not_due");
+    expect(mocks.refreshAccessToken).not.toHaveBeenCalled();
+  });
+
+  it("renews a token in its last week and stores the new pair", async () => {
+    mocks.token.expiresAt = nowSeconds() + 3 * DAY;
+    const { renewOuraTokenIfDue } = await import("./client");
+
+    await expect(renewOuraTokenIfDue()).resolves.toBe("renewed");
+    expect(mocks.refreshAccessToken).toHaveBeenCalledWith("old-refresh");
+    expect(mocks.token).toMatchObject({
+      accessToken: "new-access",
+      refreshToken: "new-refresh",
+    });
+  });
+
+  it("keeps syncing on the current token when renewal fails", async () => {
+    mocks.token.expiresAt = nowSeconds() + 3 * DAY;
+    mocks.refreshAccessToken.mockRejectedValue(
+      new OuraRequestError(400, "token_refresh", "invalid_grant")
+    );
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    mocks.fetch.mockResolvedValue(jsonResponse({ id: "synthetic" }));
+    const { ouraFetchSingle, renewOuraTokenIfDue } = await import("./client");
+
+    await expect(renewOuraTokenIfDue()).resolves.toBe("failed");
+    await expect(
+      ouraFetchSingle("v2/usercollection/personal_info")
+    ).resolves.toEqual({ id: "synthetic" });
+
+    expect(authorization(mocks.fetch.mock.calls[0][1])).toBe("Bearer old-access");
+    expect(mocks.refreshAccessToken).toHaveBeenCalledTimes(1);
+    expect(mocks.token.refreshToken).toBe("old-refresh");
+    expect(String(errors.mock.calls[0][0])).toContain("invalid_grant");
+    expect(String(errors.mock.calls[0][0])).not.toContain("old-refresh");
+    errors.mockRestore();
+  });
+
+  it("leaves an expired token to the request that needs it", async () => {
+    mocks.token.expiresAt = 0;
+    const { renewOuraTokenIfDue } = await import("./client");
+
+    await expect(renewOuraTokenIfDue()).resolves.toBe("expired");
+    expect(mocks.refreshAccessToken).not.toHaveBeenCalled();
+  });
+});
