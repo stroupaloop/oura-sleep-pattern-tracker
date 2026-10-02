@@ -13,8 +13,6 @@ import {
   enhancedTags,
   restModePeriods,
   dailyCardiovascularAge,
-  dailyHeartrate,
-  hourlyHeartrate,
   vo2Max,
   sleepTime,
   personalInfo,
@@ -57,6 +55,7 @@ import {
   splitHeartRateDays,
 } from "./heartrate";
 import { encodeSleepTimeOffset } from "./sleep-time";
+import { upsertHeartRateBuckets } from "./heartrate-store";
 import { shiftIsoDay } from "@/lib/date-utils";
 
 /**
@@ -514,39 +513,7 @@ export async function syncDateRange(
       const writeResult = await runOptionalOuraTask("heartrate", async () => {
         if (hrSamples.length === 0) return 0;
         const buckets = aggregateHeartRateSamples(hrSamples);
-
-        for (const bucket of buckets.daily) {
-          await db
-            .insert(dailyHeartrate)
-            .values({ ...bucket, createdAt: now })
-            .onConflictDoUpdate({
-              target: dailyHeartrate.day,
-              set: {
-                avgBpm: sql`excluded.avg_bpm`,
-                minBpm: sql`excluded.min_bpm`,
-                maxBpm: sql`excluded.max_bpm`,
-                restingBpm: sql`excluded.resting_bpm`,
-                awakeBpm: sql`excluded.awake_bpm`,
-                sampleCount: sql`excluded.sample_count`,
-              },
-            });
-        }
-
-        for (const bucket of buckets.hourly) {
-          await db
-            .insert(hourlyHeartrate)
-            .values({ ...bucket, createdAt: now })
-            .onConflictDoUpdate({
-              target: [hourlyHeartrate.day, hourlyHeartrate.hour],
-              set: {
-                avgBpm: sql`excluded.avg_bpm`,
-                minBpm: sql`excluded.min_bpm`,
-                maxBpm: sql`excluded.max_bpm`,
-                sampleCount: sql`excluded.sample_count`,
-                source: sql`excluded.source`,
-              },
-            });
-        }
+        await upsertHeartRateBuckets(buckets, now);
         return buckets.daily.length;
       });
       if (writeResult.warning) warnings.push(writeResult.warning);

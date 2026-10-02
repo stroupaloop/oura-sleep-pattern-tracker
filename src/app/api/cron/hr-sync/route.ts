@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { hourlyHeartrate, dailyHeartrate, syncLog } from "@/lib/db/schema";
+import { syncLog } from "@/lib/db/schema";
 import { loadOuraGrant, ouraFetch } from "@/lib/oura/client";
 import type { OuraHeartrateSample } from "@/lib/oura/types";
-import { sql } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
 import {
   aggregateHeartRateSamples,
   getHeartRateQueryRange,
 } from "@/lib/oura/heartrate";
+import { upsertHeartRateBuckets } from "@/lib/oura/heartrate-store";
 import {
   formatOuraSyncWarnings,
   isOuraDatasetGranted,
@@ -58,38 +58,7 @@ export async function GET(request: NextRequest) {
     }
 
     const buckets = aggregateHeartRateSamples(hrSamples);
-    for (const bucket of buckets.daily) {
-      await db
-        .insert(dailyHeartrate)
-        .values({ ...bucket, createdAt: now })
-        .onConflictDoUpdate({
-          target: dailyHeartrate.day,
-          set: {
-            avgBpm: sql`excluded.avg_bpm`,
-            minBpm: sql`excluded.min_bpm`,
-            maxBpm: sql`excluded.max_bpm`,
-            restingBpm: sql`excluded.resting_bpm`,
-            awakeBpm: sql`excluded.awake_bpm`,
-            sampleCount: sql`excluded.sample_count`,
-          },
-        });
-    }
-
-    for (const bucket of buckets.hourly) {
-      await db
-        .insert(hourlyHeartrate)
-        .values({ ...bucket, createdAt: now })
-        .onConflictDoUpdate({
-          target: [hourlyHeartrate.day, hourlyHeartrate.hour],
-          set: {
-            avgBpm: sql`excluded.avg_bpm`,
-            minBpm: sql`excluded.min_bpm`,
-            maxBpm: sql`excluded.max_bpm`,
-            sampleCount: sql`excluded.sample_count`,
-            source: sql`excluded.source`,
-          },
-        });
-    }
+    await upsertHeartRateBuckets(buckets, now);
 
     await db.insert(syncLog).values({
       syncType: "cron-hr",

@@ -295,9 +295,11 @@ describe("Oura daily sync requests", () => {
         Date.parse(window.end_datetime) - Date.parse(window.start_datetime);
       expect(span).toBeLessThan(30 * 86_400_000);
     }
-    expect(
-      mocks.inserts.filter(({ table }) => table === dailyHeartrate)
-    ).toHaveLength(7);
+    const dailyWrites = mocks.inserts.filter(
+      ({ table }) => table === dailyHeartrate
+    );
+    expect(dailyWrites).toHaveLength(1);
+    expect(dailyWrites[0].values).toHaveLength(7);
   });
 
   it("stores a sleep period Oura left untyped instead of failing the sync", async () => {
