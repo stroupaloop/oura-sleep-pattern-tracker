@@ -26,12 +26,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
-      <body
-        className={`${atkinson.variable} antialiased`}
-      >
-        {children}
-      </body>
+    // The font variable belongs on <html>: Tailwind sets the page font there,
+    // and on <body> the variable is out of its reach, leaving the system sans.
+    <html lang="en" className={`${atkinson.variable} dark`}>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
