@@ -19,15 +19,10 @@ import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { useDayRollover } from "@/lib/day-rollover";
 import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 import { EPISODE_STATES } from "@/lib/episode-states";
-import {
-  MOOD_SCALE,
-  formatMoodValue,
-  moodLabel,
-  moodSwatchClass,
-} from "@/lib/design/mood-scale";
+import { formatMoodValue, moodLabel } from "@/lib/design/mood-scale";
+import { MoodScalePicker } from "@/components/mood-scale-picker";
 import type { EpisodePatternSummary } from "@/lib/episode-pattern";
 import { PatternStatus } from "@/components/pattern-status";
-import { cn } from "@/lib/utils";
 
 const TAGS = [
   "travel",
@@ -437,44 +432,19 @@ function MoodFormForDay({
             title={
               isToday
                 ? "How are you feeling today?"
-                : `How were you feeling on ${formatDisplayDate(selectedDay)}?`
+                : formatDisplayDate(selectedDay) === "Yesterday"
+                  ? "How were you feeling yesterday?"
+                  : `How were you feeling on ${formatDisplayDate(selectedDay)}?`
             }
             description={`Tap your mood level on your personal scale from ${formatMoodValue(-3)} to ${formatMoodValue(3)}`}
           >
-            <div
-              className="mx-auto grid max-w-sm grid-cols-7 gap-1 sm:gap-1.5"
-              role="group"
-              aria-label="Personal mood score"
-            >
-              {MOOD_SCALE.map((mood) => {
-                const isSelected = moodScore === mood.value;
-                return (
-                  <div key={mood.value} className="flex min-w-0 flex-col gap-1">
-                    <button
-                      type="button"
-                      onClick={() => setMoodScore(mood.value)}
-                      disabled={loadingDay}
-                      aria-label={`${formatMoodValue(mood.value)}: ${mood.label}`}
-                      aria-pressed={isSelected}
-                      className={cn(
-                        "flex h-12 w-full items-center justify-center rounded-md border text-sm font-medium tabular-nums transition-colors",
-                        "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                        "disabled:cursor-not-allowed disabled:opacity-50",
-                        isSelected
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border bg-muted text-muted-foreground hover:bg-accent hover:text-foreground"
-                      )}
-                    >
-                      {formatMoodValue(mood.value)}
-                    </button>
-                    <span
-                      aria-hidden="true"
-                      className={cn("h-[3px] rounded-full", moodSwatchClass(mood.value))}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+            <MoodScalePicker
+              value={moodScore}
+              onSelect={setMoodScore}
+              disabled={loadingDay}
+              size="lg"
+              className="mx-auto max-w-sm"
+            />
             {moodScore !== null && (
               <p className="mt-2 text-center text-sm text-muted-foreground">
                 {moodLabel(moodScore)}
