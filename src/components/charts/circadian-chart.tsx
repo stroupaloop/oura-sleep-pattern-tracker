@@ -20,6 +20,9 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ResearchTooltip } from "@/components/research-tooltip";
+import { tierColor, tierLabel } from "@/lib/design/pattern-tiers";
+import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
 interface CircadianPoint {
   day: string;
@@ -35,27 +38,54 @@ interface CircadianChartProps {
   limitations?: string;
 }
 
+/** None of these is HRV or heart rate, so they stay neutral: Moonlight, Mist dashed, Haze dotted. */
+const SERIES = {
+  is: { color: "var(--foreground)", dash: undefined },
+  iv: { color: CHART.axis, dash: "6 4" },
+  ra: { color: "var(--faint-foreground)", dash: "2 3" },
+} as const;
+
 function CircadianTooltipContent({
   active,
   payload,
 }: {
   active?: boolean;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  payload?: any[];
+  payload?: ReadonlyArray<{ payload: CircadianPoint }>;
   label?: string;
 }) {
   if (!active || !payload?.length) return null;
-  const p = payload[0].payload as CircadianPoint;
+  const p = payload[0].payload;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground">{p.day}</p>
-      {p.is != null && <p style={{ color: "#34d399" }}>IS (Stability): {p.is.toFixed(3)}</p>}
-      {p.iv != null && <p style={{ color: "#f59e0b" }}>IV (Variability): {p.iv.toFixed(3)}</p>}
-      {p.ra != null && <p style={{ color: "#a78bfa" }}>RA (Amplitude): {p.ra.toFixed(3)}</p>}
-      {p.isEpisode && (
-        <p className="text-red-400 text-xs mt-1">Pattern flag: {p.episodeTier}</p>
+    <ChartTooltipFrame title={p.day}>
+      {p.is != null && (
+        <ChartTooltipRow
+          color={SERIES.is.color}
+          label="IS (Stability)"
+          value={p.is.toFixed(3)}
+        />
       )}
-    </div>
+      {p.iv != null && (
+        <ChartTooltipRow
+          color={SERIES.iv.color}
+          label="IV (Variability)"
+          value={p.iv.toFixed(3)}
+        />
+      )}
+      {p.ra != null && (
+        <ChartTooltipRow
+          color={SERIES.ra.color}
+          label="RA (Amplitude)"
+          value={p.ra.toFixed(3)}
+        />
+      )}
+      {p.isEpisode && (
+        <ChartTooltipRow
+          color={tierColor(p.episodeTier)}
+          label="Pattern flag"
+          value={tierLabel(p.episodeTier)}
+        />
+      )}
+    </ChartTooltipFrame>
   );
 }
 
@@ -94,11 +124,11 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
-          <span className="font-medium text-blue-300">Direction:</span>{" "}
+        <p className="mb-4 max-w-prose text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">Direction:</span>{" "}
           IS ↑ more stable · IV ↑ more fragmented · RA ↑ stronger day/rest
           contrast. Compare sustained changes with your own history.
-        </div>
+        </p>
         {!hasCircadianData ? (
           <div className="flex min-h-56 items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
             No eligible circadian metric is available yet. IS needs 3
@@ -108,72 +138,69 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
         ) : (
           <ResponsiveContainer width="100%" height={280}>
             <LineChart data={data}>
-            <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+            <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
             <XAxis
               dataKey="day"
               tickFormatter={(d) => d.slice(5)}
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              tick={AXIS_TICK}
               interval="preserveStartEnd"
             />
             <YAxis
               yAxisId="bounded"
               domain={[0, 1]}
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              tick={AXIS_TICK}
               label={{
                 value: "IS / RA",
                 angle: -90,
                 position: "insideLeft",
-                fontSize: 10,
-                fill: "oklch(0.708 0 0)",
+                fontSize: AXIS_TICK.fontSize,
+                fill: CHART.axis,
               }}
             />
             <YAxis
               yAxisId="iv"
               orientation="right"
               domain={[0, "auto"]}
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              tick={AXIS_TICK}
               label={{
                 value: "IV",
                 angle: 90,
                 position: "insideRight",
-                fontSize: 10,
-                fill: "oklch(0.708 0 0)",
+                fontSize: AXIS_TICK.fontSize,
+                fill: CHART.axis,
               }}
             />
             <Tooltip content={<CircadianTooltipContent />} />
-            <Legend />
+            <Legend formatter={legendLabel} />
             {episodeRanges.map((r, i) => (
               <ReferenceArea
                 key={i}
                 yAxisId="bounded"
                 x1={r.start}
                 x2={r.end}
-                fill={r.tier === "alert" ? "#ef4444" : r.tier === "warning" ? "#f59e0b" : "#3b82f6"}
+                fill={tierColor(r.tier)}
                 fillOpacity={0.1}
               />
             ))}
             <ReferenceLine
               yAxisId="iv"
               y={2}
-              stroke="#f59e0b"
+              stroke={SERIES.iv.color}
               strokeDasharray="3 3"
-              strokeOpacity={0.35}
+              strokeOpacity={0.5}
               ifOverflow="extendDomain"
               label={{
                 value: "IV 2.0 reference",
                 position: "insideTopRight",
-                fill: "oklch(0.708 0 0)",
-                fontSize: 10,
+                fill: CHART.axis,
+                fontSize: AXIS_TICK.fontSize,
               }}
             />
             <Line
               yAxisId="bounded"
               type="monotone"
               dataKey="is"
-              stroke="#34d399"
+              stroke={SERIES.is.color}
               strokeWidth={2}
               dot={false}
               name="IS (Stability)"
@@ -183,7 +210,8 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               yAxisId="iv"
               type="monotone"
               dataKey="iv"
-              stroke="#f59e0b"
+              stroke={SERIES.iv.color}
+              strokeDasharray={SERIES.iv.dash}
               strokeWidth={2}
               dot={false}
               name="IV (Variability)"
@@ -193,7 +221,8 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               yAxisId="bounded"
               type="monotone"
               dataKey="ra"
-              stroke="#a78bfa"
+              stroke={SERIES.ra.color}
+              strokeDasharray={SERIES.ra.dash}
               strokeWidth={2}
               dot={false}
               name="RA (Amplitude)"

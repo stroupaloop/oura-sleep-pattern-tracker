@@ -17,6 +17,7 @@ import {
   filterCurrentPatternAssessments,
 } from "@/lib/analysis/provenance";
 import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function InsightsPage() {
   const ninetyDaysAgo = format(
@@ -147,9 +148,9 @@ export default async function InsightsPage() {
       />
 
       {analysis.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
-          <p>No analysis data yet. Sync your Oura data and run analysis to see insights.</p>
-        </div>
+        <EmptyState title="No analysis data yet.">
+          Sync your Oura data and run analysis to see insights.
+        </EmptyState>
       ) : (
         <InsightsTabs
           analysis={analysis}

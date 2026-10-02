@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { type KeyboardEvent, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { CircadianChart } from "@/components/charts/circadian-chart";
 import { ActivityRecoveryChart } from "@/components/charts/activity-recovery-chart";
 import { VariabilityChart } from "@/components/charts/variability-chart";
@@ -17,6 +18,18 @@ const TABS = [
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
+
+function tabIndexForKey(
+  key: string,
+  currentIndex: number,
+  tabCount: number
+): number | null {
+  if (key === "ArrowRight") return (currentIndex + 1) % tabCount;
+  if (key === "ArrowLeft") return (currentIndex - 1 + tabCount) % tabCount;
+  if (key === "Home") return 0;
+  if (key === "End") return tabCount - 1;
+  return null;
+}
 
 interface AnalysisRow {
   day: string;
@@ -81,6 +94,19 @@ interface InsightsTabsProps {
 
 export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("circadian");
+  const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
+
+  function handleTabKeyDown(
+    event: KeyboardEvent<HTMLButtonElement>,
+    currentIndex: number
+  ) {
+    const nextIndex = tabIndexForKey(event.key, currentIndex, TABS.length);
+    if (nextIndex == null) return;
+
+    event.preventDefault();
+    setActiveTab(TABS[nextIndex].id);
+    tabRefs.current[nextIndex]?.focus();
+  }
 
   const episodeMap = new Map(episodes.map((e) => [e.day, e]));
 
@@ -260,53 +286,74 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
   return (
     <div className="space-y-4">
       <div
-        className="flex flex-wrap gap-2"
-        role="group"
+        role="tablist"
         aria-label="Insight sections"
+        aria-orientation="horizontal"
+        className="flex gap-2 overflow-x-auto pb-2"
       >
-        {TABS.map((tab) => (
-          <button
+        {TABS.map((tab, index) => (
+          <Button
             key={tab.id}
+            ref={(element) => {
+              tabRefs.current[index] = element;
+            }}
+            id={`insights-tab-${tab.id}`}
+            role="tab"
+            aria-controls={`insights-panel-${tab.id}`}
+            aria-selected={activeTab === tab.id}
+            tabIndex={activeTab === tab.id ? 0 : -1}
+            variant={activeTab === tab.id ? "default" : "outline"}
+            size="sm"
+            className="min-h-11"
             onClick={() => setActiveTab(tab.id)}
-            aria-pressed={activeTab === tab.id}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              activeTab === tab.id
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:text-foreground"
-            }`}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
           >
             {tab.label}
-          </button>
+          </Button>
         ))}
       </div>
 
-      {activeTab === "circadian" && (
-        <CircadianChart
-          data={circadianData}
-          limitations="Circadian metrics require continuous ring wear for accuracy. IS computed from 3-day activity windows."
-        />
-      )}
-      {activeTab === "activity" && (
-        <ActivityRecoveryChart
-          data={activityData}
-          limitations="Activity data may be incomplete on days with low ring wear time."
-        />
-      )}
-      {activeTab === "variability" && (
-        <VariabilityChart
-          data={variabilityData}
-          limitations="Rolling variability uses up to 7 consecutive calendar days and requires enough measured values. Higher values mean less regularity."
-        />
-      )}
-      {activeTab === "within-night" && (
-        <WithinNightChart
-          data={withinNightData}
-          limitations="CV requires 5-minute HR/HRV series; sleep-stage changes require a long-sleep hypnogram."
-        />
-      )}
-      {activeTab === "correlations" && (
-        <CorrelationView pairs={correlationPairs} />
-      )}
+      {TABS.map((tab) => {
+        const isActive = activeTab === tab.id;
+        return (
+          <div
+            key={tab.id}
+            id={`insights-panel-${tab.id}`}
+            role="tabpanel"
+            aria-labelledby={`insights-tab-${tab.id}`}
+            tabIndex={isActive ? 0 : -1}
+            hidden={!isActive}
+          >
+            {isActive && tab.id === "circadian" && (
+              <CircadianChart
+                data={circadianData}
+                limitations="Circadian metrics require continuous ring wear for accuracy. IS computed from 3-day activity windows."
+              />
+            )}
+            {isActive && tab.id === "activity" && (
+              <ActivityRecoveryChart
+                data={activityData}
+                limitations="Activity data may be incomplete on days with low ring wear time."
+              />
+            )}
+            {isActive && tab.id === "variability" && (
+              <VariabilityChart
+                data={variabilityData}
+                limitations="Rolling variability uses up to 7 consecutive calendar days and requires enough measured values. Higher values mean less regularity."
+              />
+            )}
+            {isActive && tab.id === "within-night" && (
+              <WithinNightChart
+                data={withinNightData}
+                limitations="CV requires 5-minute HR/HRV series; sleep-stage changes require a long-sleep hypnogram."
+              />
+            )}
+            {isActive && tab.id === "correlations" && (
+              <CorrelationView pairs={correlationPairs} />
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

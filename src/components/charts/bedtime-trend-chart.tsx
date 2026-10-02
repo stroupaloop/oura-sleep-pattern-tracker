@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { cn } from "@/lib/utils";
+import { formatMinutes } from "@/lib/health/signals";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -8,6 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface BedtimePoint {
   day: string;
@@ -30,22 +34,14 @@ function formatMinutesAsTime(minutes: number): string {
   return `${h12}:${m.toString().padStart(2, "0")} ${ampm}`;
 }
 
-function getDotColor(actual: number, optStart: number, optEnd: number): string {
-  if (actual >= optStart && actual <= optEnd) return "bg-green-400";
-  const diff = actual < optStart
-    ? optStart - actual
-    : actual - optEnd;
-  if (diff <= 30) return "bg-amber-400";
-  return "bg-red-400";
-}
-
-function getDotLabel(actual: number, optStart: number, optEnd: number): string {
-  if (actual >= optStart && actual <= optEnd) return "Within Oura window";
-  const diff = actual < optStart
-    ? optStart - actual
-    : actual - optEnd;
-  if (diff <= 30) return "Within 30m of Oura window";
-  return "More than 30m outside Oura window";
+/**
+ * Where the bedtime fell against Oura's suggested window, in words. The window
+ * is Oura's suggestion, not her usual, so it is described and never graded.
+ */
+function describeWindow(actual: number, start: number, end: number): string {
+  if (actual >= start && actual <= end) return "Inside Oura's suggested window";
+  const gap = actual < start ? start - actual : actual - end;
+  return `Outside Oura's suggested window by ${formatMinutes(gap)}`;
 }
 
 export function BedtimeTrendChart({
@@ -64,27 +60,26 @@ export function BedtimeTrendChart({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md border border-dashed border-border px-4 py-8 text-center">
-            <p className="text-sm font-medium">
-              No Oura-detected bedtime is available for this range.
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              If recent sleep is missing, open Oura to finish the ring sync,
-              then sync this app again.
-            </p>
-            <Link
-              href="/dashboard/settings"
-              className="mt-3 inline-block text-sm font-medium underline underline-offset-4"
-            >
-              Review sync settings
-            </Link>
-          </div>
+          <EmptyState
+            title="No Oura-detected bedtime is available for this range."
+            action={
+              <Button asChild variant="outline" size="sm">
+                <Link href="/dashboard/settings">Review sync settings</Link>
+              </Button>
+            }
+          >
+            If recent sleep is missing, open Oura to finish the ring sync, then
+            sync this app again.
+          </EmptyState>
         </CardContent>
       </Card>
     );
   }
 
-  const hasAnyOptimal = sliced.some((d) => d.optimalStart != null && d.optimalEnd != null);
+  const hasWindow = (d: BedtimePoint) =>
+    d.optimalStart != null && d.optimalEnd != null;
+  const hasAnyWindow = sliced.some(hasWindow);
+  const hasMissingWindow = hasAnyWindow && sliced.some((d) => !hasWindow(d));
 
   const allMinutes = sliced.flatMap((d) => [
     d.actualBedtime!,
@@ -106,14 +101,14 @@ export function BedtimeTrendChart({
       <CardHeader>
         <CardTitle>Sleep Timing</CardTitle>
         <CardDescription>
-          {hasAnyOptimal
-            ? `Oura-detected bedtime vs. optimal window in ET (last ${days} recorded nights)`
-            : `Oura-detected bedtime in ET (last ${days} recorded nights — optimal window not available for display)`}
+          {hasAnyWindow
+            ? `Oura-detected bedtime vs. Oura's suggested window in ET (last ${days} recorded nights)`
+            : `Oura-detected bedtime in ET (last ${days} recorded nights — Oura's suggested window not available for display)`}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="relative">
-          <div className="flex justify-between text-xs text-muted-foreground mb-2 pl-14">
+          <div className="flex justify-between text-xs text-muted-foreground tabular-nums mb-2 pl-14">
             {ticks.map((t) => (
               <span key={t}>{formatMinutesAsTime(t)}</span>
             ))}
@@ -122,65 +117,46 @@ export function BedtimeTrendChart({
           <div className="space-y-0.5">
             {[...sliced].reverse().map((point) => {
               const actual = point.actualBedtime!;
-              const hasOptimal = point.optimalStart != null && point.optimalEnd != null;
+              const time = formatMinutesAsTime(actual);
               const dotLeft = ((actual - rangeMin) / rangeSpan) * 100;
-
-              if (!hasOptimal) {
-                const dotClass = hasAnyOptimal
-                  ? "bg-muted-foreground/40"
-                  : "bg-primary/60";
-                const dotTitle = hasAnyOptimal
-                  ? `${formatMinutesAsTime(actual)} — Optimal window unavailable`
-                  : formatMinutesAsTime(actual);
-                return (
-                  <div key={point.day} className="flex items-center gap-2 group">
-                    <span className="text-xs text-muted-foreground w-12 shrink-0 text-right">
-                      {point.day.slice(5)}
-                    </span>
-                    <div className="relative flex-1 h-5">
-                      <div className="absolute inset-y-0 left-0 right-0 bg-muted/30 rounded-sm" />
-                      <div
-                        role="img"
-                        aria-label={`${point.day}: Oura-detected bedtime ${formatMinutesAsTime(actual)}; optimal window unavailable`}
-                        className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${dotClass} transition-transform motion-reduce:transition-none group-hover:scale-150`}
-                        style={{ left: `${Math.max(0, Math.min(98, dotLeft))}%` }}
-                        title={dotTitle}
-                      />
-                    </div>
-                  </div>
-                );
-              }
-
-              const optStart = point.optimalStart!;
-              const optEnd = point.optimalEnd!;
-              const windowLeft = ((optStart - rangeMin) / rangeSpan) * 100;
-              const windowWidth = ((optEnd - optStart) / rangeSpan) * 100;
-              const dotColor = getDotColor(actual, optStart, optEnd);
-              const label = getDotLabel(actual, optStart, optEnd);
+              const windowed = hasWindow(point);
+              const words = windowed
+                ? describeWindow(actual, point.optimalStart!, point.optimalEnd!)
+                : "Oura's suggested window unavailable";
+              const windowLeft = windowed
+                ? ((point.optimalStart! - rangeMin) / rangeSpan) * 100
+                : 0;
+              const windowWidth = windowed
+                ? ((point.optimalEnd! - point.optimalStart!) / rangeSpan) * 100
+                : 0;
 
               return (
-                <div
-                  key={point.day}
-                  className="flex items-center gap-2 group"
-                >
-                  <span className="text-xs text-muted-foreground w-12 shrink-0 text-right">
+                <div key={point.day} className="flex items-center gap-2">
+                  <span className="text-xs text-muted-foreground tabular-nums w-12 shrink-0 text-right">
                     {point.day.slice(5)}
                   </span>
                   <div className="relative flex-1 h-5">
                     <div className="absolute inset-y-0 left-0 right-0 bg-muted/30 rounded-sm" />
-                    <div
-                      className="absolute inset-y-0 bg-violet-500/15 rounded-sm"
-                      style={{
-                        left: `${Math.max(0, windowLeft)}%`,
-                        width: `${Math.min(100 - windowLeft, windowWidth)}%`,
-                      }}
-                    />
+                    {windowed && (
+                      <div
+                        className="absolute inset-y-0 rounded-sm bg-corridor ring-1 ring-inset ring-border"
+                        style={{
+                          left: `${Math.max(0, windowLeft)}%`,
+                          width: `${Math.min(100 - windowLeft, windowWidth)}%`,
+                        }}
+                      />
+                    )}
                     <div
                       role="img"
-                      aria-label={`${point.day}: Oura-detected bedtime ${formatMinutesAsTime(actual)}; ${label}`}
-                      className={`absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full ${dotColor} transition-transform motion-reduce:transition-none group-hover:scale-150`}
+                      aria-label={`${point.day}: Oura-detected bedtime ${time}; ${words}`}
+                      title={windowed || hasAnyWindow ? `${time} — ${words}` : time}
+                      className={cn(
+                        "absolute top-1/2 -translate-y-1/2 size-2.5 rounded-full ring-2 ring-card",
+                        windowed || !hasAnyWindow
+                          ? "bg-foreground"
+                          : "bg-muted-foreground"
+                      )}
                       style={{ left: `${Math.max(0, Math.min(98, dotLeft))}%` }}
-                      title={`${formatMinutesAsTime(actual)} — ${label}`}
                     />
                   </div>
                 </div>
@@ -189,33 +165,29 @@ export function BedtimeTrendChart({
           </div>
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-            {hasAnyOptimal ? (
-              <>
-                <div className="flex items-center gap-1">
-                  <span className="w-3 h-3 rounded-sm bg-violet-500/15" />
-                  Oura optimal window
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-green-400" />
-                  Within Oura window
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-400" />
-                  Within 30m
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-red-400" />
-                  More than 30m outside
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="w-2.5 h-2.5 rounded-full bg-muted-foreground/40" />
-                  Optimal window unavailable
-                </div>
-              </>
-            ) : (
-              <div className="flex items-center gap-1">
-                <span className="w-2.5 h-2.5 rounded-full bg-primary/60" />
-                Oura-detected bedtime
+            {hasAnyWindow && (
+              <div className="flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="h-3 w-4 rounded-sm bg-corridor ring-1 ring-inset ring-border"
+                />
+                Oura&apos;s suggested window
+              </div>
+            )}
+            <div className="flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="size-2.5 rounded-full bg-foreground"
+              />
+              Oura-detected bedtime
+            </div>
+            {hasMissingWindow && (
+              <div className="flex items-center gap-1.5">
+                <span
+                  aria-hidden="true"
+                  className="size-2.5 rounded-full bg-muted-foreground"
+                />
+                Suggested window unavailable
               </div>
             )}
           </div>
