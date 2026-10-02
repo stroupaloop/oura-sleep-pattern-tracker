@@ -146,6 +146,7 @@ export function HealthDashboard({
                   : undefined
               }
               windowDays={trends.windowDays}
+              threshold={data.threshold}
             />
             {trends.compositionData.length > 0 && (
               <SleepCompositionBar data={trends.compositionData} />

@@ -221,7 +221,6 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
             options={VIEW_OPTIONS}
             value={viewMode}
             onValueChange={setViewMode}
-            className="[&>button]:min-h-10 sm:[&>button]:min-h-7"
           />
           {anomalies.length > 0 && (
             <p className="text-xs text-attention">

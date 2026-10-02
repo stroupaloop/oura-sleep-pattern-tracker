@@ -209,6 +209,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Recharts draws its hover cursor in a bright default gray. */
+.recharts-tooltip-cursor {
+  fill: color-mix(in oklch, var(--muted) 70%, transparent);
+  stroke: var(--border);
+}
+
 .recharts-default-tooltip {
   background-color: var(--popover) !important;
   border-color: var(--border) !important;
@@ -236,5 +242,14 @@
     --faint-foreground: oklch(0.45 0 0);
     --border: oklch(0.82 0 0);
     --corridor: oklch(0.9 0 0);
+    /* State and series hues darkened to read on paper. */
+    --primary: oklch(0.5 0.15 5);
+    --attention: oklch(0.55 0.13 70);
+    --alert: oklch(0.5 0.18 25);
+    --destructive: oklch(0.5 0.18 25);
+    --watch: oklch(0.48 0.12 245);
+    --calm: oklch(0.47 0.1 165);
+    --series-hrv: oklch(0.5 0.1 175);
+    --series-hr: oklch(0.55 0.15 30);
   }
 }

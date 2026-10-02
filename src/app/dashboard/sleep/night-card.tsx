@@ -1,7 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/dashboard-metrics";
-import type { Signal } from "@/lib/health/signals";
+import { formatMinutes, type Signal } from "@/lib/health/signals";
 import { HypnogramChart } from "@/components/charts/hypnogram-chart";
 import { STAGE_STYLES } from "@/components/health/night-window-chart";
 import { SignalGauge } from "@/components/health/signal-list";
@@ -36,6 +36,7 @@ export interface AnalysisData {
   /** The night against her usual range, from the pattern checks' baselines. */
   sleep: Signal | null;
   efficiency: Signal | null;
+  latency: Signal | null;
 }
 
 function pct(part: number | null, total: number | null): string {
@@ -103,7 +104,11 @@ export function NightCardContent({
   threshold: number;
 }) {
   const latencyMin = night.latency != null ? night.latency / 60 : null;
-  const hasComparison = !!(analysis?.sleep || analysis?.efficiency);
+  const hasComparison = !!(
+    analysis?.sleep ||
+    analysis?.efficiency ||
+    analysis?.latency
+  );
   const pastThreshold = (z: number) => Math.abs(z) >= threshold;
 
   const notes =
@@ -140,8 +145,9 @@ export function NightCardContent({
           threshold={threshold}
         />
         <Measure
-          label="Latency"
-          value={latencyMin != null ? `${Math.round(latencyMin)}min` : "--"}
+          label="Time to fall asleep"
+          value={latencyMin != null ? formatMinutes(latencyMin) : "--"}
+          signal={analysis?.latency}
           threshold={threshold}
         />
         <Measure

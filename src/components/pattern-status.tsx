@@ -52,6 +52,7 @@ export function PatternStatus({
       <Callout
         tone="neutral"
         icon={paused ? CirclePause : CircleCheck}
+        iconClassName={paused ? undefined : "text-calm"}
         title={
           paused
             ? "Pattern checks are paused"

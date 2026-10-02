@@ -143,7 +143,7 @@ Restrained night-indigo neutrals carry the surfaces; a single rose accent carrie
 - **Lamp Amber** (oklch(0.83 0.12 78)): a measure past the pattern checks' daily threshold, and warning-tier patterns.
 - **Ember** (oklch(0.72 0.16 25)): alert-tier patterns, scores under 60, destructive actions and form errors (`--destructive` is the same red).
 - **Dawn Blue** (oklch(0.8 0.08 245)): watch-tier patterns and informational notices (a night not here yet).
-- **Sage** (oklch(0.8 0.09 165)): no flags; scores of 70 and up.
+- **Sage** (oklch(0.8 0.09 165)): no flags (as a check mark); Oura scores of 70 and up. Oura's Fair scores (60–69) take no hue, since Lamp Amber already means a night past the threshold.
 
 ### Data
 - **Sleep stages:** Deep (oklch(0.55 0.15 268)), Light (oklch(0.8 0.07 230)), REM (oklch(0.72 0.12 305)), Awake (oklch(0.88 0.04 80)). Awake is pale on purpose, so it never reads as Lamp Amber.
@@ -185,6 +185,9 @@ Phone first. A single column with a 16px gutter stacks in the order of a morning
 
 Spacing is an 8px rhythm: 24px between panels (32px on desktop), 16px inside panels, 4 to 8px within a group. Headings sit closer to what they introduce than to what precedes them.
 
+### Print
+Reports print on paper tokens (`@media print` in globals.css): white surfaces, dark text, and state and series hues darkened to read on paper. The dashboard header and footer do not print.
+
 ## Elevation & Depth
 
 Flat and tonal. Panels lift from the page by surface lightness and a hairline border, never by shadow; popovers sit one step lighter. Nothing glows.
@@ -199,6 +202,7 @@ Panels round at 14px, controls at 8px, meters and the corridor band are pills. T
 - **Night window:** clock-time axis on the hour, usual window as a Corridor band above, the night as a stage-colored bar, hour gridlines in Hairline. Screen readers get the times in text.
 - **Signal row:** label and value on the first line; the comparison in words and the corridor gauge on the second. Unusual rows add a Lamp Amber pill and comparison text.
 - **Corridor gauge:** -3 to +3 standard deviations; band at ±1; ticks at the detector's threshold; Moonlight dot, Lamp Amber once unusual.
+- **Charts:** axes, legends and tooltips come from the chart theme; tooltips are a popover surface with a swatch beside readable text; the hover cursor is a muted wash, not the library's bright gray.
 - **Pattern status:** always present. Flagged: tinted surface in the tier's color, the tier named in words. Clear: a Sage check and when the check last ran. Paused: says why.
 - **Notices:** a missing night is Dawn Blue and explains how the data arrives; a lost Oura connection is an amber banner across every dashboard page with the way to reconnect.
 - **Buttons:** shadcn variants on these tokens. Default, small and icon sizes reach 40px on phones and tighten from `sm`.

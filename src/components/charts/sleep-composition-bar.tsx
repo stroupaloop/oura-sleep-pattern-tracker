@@ -9,7 +9,9 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
-import { legendLabel } from "./chart-theme";
+import { CHART, legendLabel } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
+import { formatNightLabel } from "@/lib/health/format";
 import {
   Card,
   CardContent,
@@ -64,21 +66,12 @@ function CustomTooltip({
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground mb-1">{label}</p>
-      <p style={{ color: "var(--stage-deep)" }}>
-        Deep: {formatStage(d.deep, d.deepMin)}
-      </p>
-      <p style={{ color: "var(--stage-rem)" }}>
-        REM: {formatStage(d.rem, d.remMin)}
-      </p>
-      <p style={{ color: "var(--stage-light)" }}>
-        Light: {formatStage(d.light, d.lightMin)}
-      </p>
-      <p style={{ color: "var(--stage-awake)" }}>
-        Awake: {formatStage(d.awake, d.awakeMin)}
-      </p>
-    </div>
+    <ChartTooltipFrame title={label ? formatNightLabel(label, { weekday: false }) : undefined}>
+      <ChartTooltipRow color={CHART.deep} label="Deep" value={formatStage(d.deep, d.deepMin)} />
+      <ChartTooltipRow color={CHART.rem} label="REM" value={formatStage(d.rem, d.remMin)} />
+      <ChartTooltipRow color={CHART.light} label="Light" value={formatStage(d.light, d.lightMin)} />
+      <ChartTooltipRow color={CHART.awake} label="Awake" value={formatStage(d.awake, d.awakeMin)} />
+    </ChartTooltipFrame>
   );
 }
 

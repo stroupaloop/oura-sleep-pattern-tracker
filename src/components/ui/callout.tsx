@@ -51,6 +51,7 @@ export function Callout({
   children,
   role,
   className,
+  iconClassName,
 }: {
   tone?: Tone;
   icon?: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
@@ -58,6 +59,8 @@ export function Callout({
   children?: React.ReactNode;
   role?: "status" | "alert";
   className?: string;
+  /** Overrides the tone's icon color, e.g. a calm check on a neutral surface. */
+  iconClassName?: string;
 }) {
   const style = TONE_STYLES[tone];
   return (
@@ -66,7 +69,10 @@ export function Callout({
       className={cn("flex gap-3 rounded-xl border p-4", style.surface, className)}
     >
       {Icon && (
-        <Icon aria-hidden className={cn("mt-0.5 size-4 shrink-0", style.icon)} />
+        <Icon
+          aria-hidden
+          className={cn("mt-0.5 size-4 shrink-0", style.icon, iconClassName)}
+        />
       )}
       <div className="min-w-0 space-y-1 text-sm">
         {title && <p className="font-semibold">{title}</p>}

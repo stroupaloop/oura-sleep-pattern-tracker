@@ -12,6 +12,9 @@ export interface NightAnalysis {
   wakeTimeMinutes: number | null;
   baselineWakeMinutes: number | null;
   wakeTimeZScore: number | null;
+  onsetLatencyMinutes: number | null;
+  baselineLatency: number | null;
+  latencyZScore: number | null;
   avgHrv: number | null;
   baselineHrv: number | null;
   hrvZScore: number | null;
@@ -30,6 +33,7 @@ export type SignalKey =
   | "sleep"
   | "bedtime"
   | "wake"
+  | "latency"
   | "hrv"
   | "heartRate"
   | "temperature"
@@ -173,6 +177,20 @@ export function buildSignals(
         const delta = circularDelta(value, baseline);
         return `${formatMinutes(delta)} ${signedWord(delta, ["later", "earlier"])} than usual`;
       },
+    },
+    {
+      key: "latency",
+      label: "Time to fall asleep",
+      value: a.onsetLatencyMinutes,
+      baseline: a.baselineLatency,
+      z: a.latencyZScore,
+      formatValue: formatMinutes,
+      formatUsual: (baseline) => formatMinutes(baseline),
+      describe: (value, baseline) =>
+        `${formatMinutes(value - baseline)} ${signedWord(value - baseline, [
+          "longer",
+          "shorter",
+        ])} than usual`,
     },
     {
       key: "hrv",

@@ -359,14 +359,21 @@ export function HypnogramChart({ hypnogram, hr5min, bedtimeStart }: HypnogramCha
 
         {tooltip && (
           <div
-            className="absolute z-10 rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md pointer-events-none"
+            className="absolute z-10 rounded-lg border bg-popover px-3 py-2 text-sm text-popover-foreground shadow-md pointer-events-none"
             style={{
               left: tooltip.left,
               top: -50,
             }}
           >
-            <p className="font-medium text-foreground">{tooltip.point.time}</p>
-            <p style={{ color: tooltip.point.color }}>{tooltip.point.stageLabel}</p>
+            <p className="font-medium tabular-nums">{tooltip.point.time}</p>
+            <p className="flex items-center gap-2">
+              <span
+                aria-hidden="true"
+                className="size-2.5 rounded-sm"
+                style={{ backgroundColor: tooltip.point.color }}
+              />
+              {tooltip.point.stageLabel}
+            </p>
             {tooltip.point.hr != null && (
               <p className="text-muted-foreground">{tooltip.point.hr} bpm</p>
             )}

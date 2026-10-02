@@ -141,6 +141,7 @@ export default async function SleepPage() {
           sleep: signals.find((signal) => signal.key === "sleep") ?? null,
           efficiency:
             signals.find((signal) => signal.key === "efficiency") ?? null,
+          latency: signals.find((signal) => signal.key === "latency") ?? null,
         },
       ];
     })

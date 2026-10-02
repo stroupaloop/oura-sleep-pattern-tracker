@@ -38,6 +38,9 @@ function analysisAt(threshold: number): AnalysisData {
       wakeTimeMinutes: null,
       baselineWakeMinutes: null,
       wakeTimeZScore: null,
+      onsetLatencyMinutes: null,
+      baselineLatency: null,
+      latencyZScore: null,
       avgHrv: null,
       baselineHrv: null,
       hrvZScore: null,
@@ -61,6 +64,7 @@ function analysisAt(threshold: number): AnalysisData {
     anomalyDirection: "hyper",
     sleep: signals.find((signal) => signal.key === "sleep") ?? null,
     efficiency: signals.find((signal) => signal.key === "efficiency") ?? null,
+    latency: signals.find((signal) => signal.key === "latency") ?? null,
   };
 }
 

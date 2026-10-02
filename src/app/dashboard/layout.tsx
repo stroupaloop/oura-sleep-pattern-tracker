@@ -69,7 +69,7 @@ export default async function DashboardLayout({
   return (
     <div className="min-h-screen flex flex-col">
       {trackVisits && <VisitBeacon />}
-      <header className="border-b px-4 md:px-6 py-3 flex items-center justify-between">
+      <header className="border-b px-4 md:px-6 py-3 flex items-center justify-between print:hidden">
         <div className="flex min-w-0 items-center gap-2">
           <MobileNav email={session.user.email} isSensitive={sensitive} />
           <div className="min-w-0">
@@ -102,7 +102,7 @@ export default async function DashboardLayout({
         />
       )}
       <main className="flex-1 p-4 md:p-6">{children}</main>
-      <footer className="border-t px-4 md:px-6 py-3 text-xs text-muted-foreground">
+      <footer className="border-t px-4 md:px-6 py-3 text-xs text-muted-foreground print:hidden">
         This tool tracks sleep patterns for personal awareness. It is not a
         medical device and does not provide diagnoses. Discuss concerns with
         your healthcare provider.{" "}
