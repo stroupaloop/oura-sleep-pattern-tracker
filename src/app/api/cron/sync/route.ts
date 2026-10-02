@@ -6,6 +6,7 @@ import { runHealthSignalDetection } from "@/lib/analysis/health-signals";
 import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import { format, subDays } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
+import { notifyOuraConnectionFailure } from "@/lib/notifications/oura-connection-notify";
 
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -68,6 +69,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     console.error("Cron sync error:", error);
+    await notifyOuraConnectionFailure();
     return NextResponse.json(
       {
         success: false,

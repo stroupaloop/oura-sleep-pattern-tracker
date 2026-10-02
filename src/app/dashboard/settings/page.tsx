@@ -23,7 +23,28 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { OURA_SCOPES } from "@/lib/oura/oauth";
+import { missingOuraScopes } from "@/lib/oura/oauth";
+import type { OuraScope } from "@/lib/oura/contracts";
+import { loadOuraConnectionHealth } from "@/lib/oura/connection-health-data";
+
+const SCOPE_LABELS: Record<OuraScope, string> = {
+  email: "email address",
+  personal: "profile",
+  daily: "sleep, readiness, activity and stress",
+  heartrate: "heart rate",
+  workout: "workouts",
+  tag: "tags",
+  session: "sessions",
+  spo2: "blood oxygen",
+  stress: "resilience",
+  heart_health: "VO₂ max and cardiovascular age",
+};
+
+function formatScopeList(scopes: OuraScope[]): string {
+  const labels = scopes.map((scope) => SCOPE_LABELS[scope]);
+  if (labels.length <= 1) return labels[0] ?? "";
+  return `${labels.slice(0, -1).join(", ")} and ${labels.at(-1)}`;
+}
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -35,13 +56,12 @@ export default async function SettingsPage() {
   const isExpired = tokenExpiry ? tokenExpiry < new Date() : false;
   const canManageOura = isSensitiveUser(session?.user?.email);
   const canManageProfile = isPrimarySensitiveUser(session?.user?.email);
-  const grantedScopes = new Set(
-    (tokens[0]?.scope ?? "").split(/\s+/).filter(Boolean)
-  );
-  const missingScopes = OURA_SCOPES.filter(
-    (scope) => !grantedScopes.has(scope)
-  );
-  const needsReauthorization = isConnected && missingScopes.length > 0;
+  const missingScopes = isConnected ? missingOuraScopes(tokens[0].scope) : [];
+  const connectionHealth = isConnected
+    ? await loadOuraConnectionHealth().catch(() => null)
+    : null;
+  const needsReconnect = connectionHealth?.needsReconnect ?? false;
+  const isMissingData = missingScopes.length > 0;
 
   const recentSyncs = await db
     .select()
@@ -108,7 +128,7 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card id="oura" className="scroll-mt-6">
         <CardHeader>
           <CardTitle>Oura Ring Connection</CardTitle>
           <CardDescription>
@@ -122,16 +142,20 @@ export default async function SettingsPage() {
                 Status:{" "}
                 <span
                   className={
-                    isExpired || needsReauthorization
-                      ? "text-amber-500 font-medium"
-                      : "text-green-500 font-medium"
+                    needsReconnect
+                      ? "text-red-400 font-medium"
+                      : isExpired || isMissingData
+                        ? "text-amber-500 font-medium"
+                        : "text-green-500 font-medium"
                   }
                 >
-                  {needsReauthorization
+                  {needsReconnect
                     ? "Reconnect required"
-                    : isExpired
-                      ? "Connected · refresh due"
-                      : "Connected"}
+                    : isMissingData
+                      ? "Connected · some data not shared"
+                      : isExpired
+                        ? "Connected · refresh due"
+                        : "Connected"}
                 </span>
               </p>
               {tokenExpiry && (
@@ -139,20 +163,29 @@ export default async function SettingsPage() {
                   Current access token expiry: {tokenExpiry.toLocaleString("en-US", { timeZone: "America/New_York" })}
                 </p>
               )}
-              {isExpired && !needsReauthorization && (
+              {isExpired && !needsReconnect && (
                 <p className="text-xs text-muted-foreground">
                   The access token refreshes automatically on the next sync.
                 </p>
               )}
-              {needsReauthorization && (
-                <p className="text-xs text-muted-foreground">
-                  Reconnect once to grant access to the newly supported Oura
-                  datasets.
+              {needsReconnect && (
+                <p className="text-sm text-muted-foreground">
+                  Oura rejected this connection, so syncing has stopped.
+                  Reconnect to resume it.
                 </p>
               )}
-              {canManageOura && needsReauthorization && (
-                  <OuraConnectButton label="Reconnect Oura" />
-                )}
+              {isMissingData && (
+                <p className="text-sm text-muted-foreground">
+                  Oura isn&apos;t sharing {formatScopeList(missingScopes)}. If
+                  those boxes weren&apos;t offered when you connected, allow
+                  them for this app at cloud.ouraring.com under OAuth
+                  applications first. Then reconnect and leave every box
+                  ticked.
+                </p>
+              )}
+              {canManageOura && (needsReconnect || isMissingData) && (
+                <OuraConnectButton label="Reconnect Oura" />
+              )}
               {canManageOura ? (
                 <DisconnectButton />
               ) : (

@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   insert: vi.fn(),
   ouraFetch: vi.fn(),
   ouraFetchSingle: vi.fn(),
+  loadOuraGrant: vi.fn(),
 }));
 
 vi.mock("@/lib/db", () => ({
@@ -25,7 +26,19 @@ vi.mock("@/lib/db", () => ({
 vi.mock("./client", () => ({
   ouraFetch: mocks.ouraFetch,
   ouraFetchSingle: mocks.ouraFetchSingle,
+  loadOuraGrant: mocks.loadOuraGrant,
 }));
+
+/** What production's connection was granted on 2026-10-01. */
+const PRODUCTION_GRANT = new Set([
+  "email",
+  "personal",
+  "daily",
+  "heartrate",
+  "workout",
+  "tag",
+  "session",
+]);
 
 beforeEach(() => {
   mocks.inserts.length = 0;
@@ -54,6 +67,7 @@ beforeEach(() => {
     return [];
   });
   mocks.ouraFetchSingle.mockReset();
+  mocks.loadOuraGrant.mockReset().mockResolvedValue(null);
 });
 
 describe("Oura daily sync", () => {
@@ -73,7 +87,7 @@ describe("Oura daily sync", () => {
 
     expect(mocks.ouraFetch).toHaveBeenCalledWith(
       "v2/usercollection/daily_resilience",
-      { start_date: "2026-07-24", end_date: "2026-07-30" },
+      { start_date: "2026-07-24", end_date: "2026-07-31" },
       { refreshUnauthorized: false }
     );
     expect(mocks.inserts.some(({ table }) => table === dailyActivity)).toBe(true);
@@ -172,6 +186,146 @@ describe("Oura daily sync", () => {
   });
 });
 
+describe("Oura daily sync requests", () => {
+  it("asks for the day after end_date so last night arrives the same morning", async () => {
+    const { syncDateRange } = await import("./sync");
+
+    await syncDateRange("2026-09-25", "2026-10-01", "cron");
+
+    for (const endpoint of [
+      "v2/usercollection/sleep",
+      "v2/usercollection/daily_sleep",
+      "v2/usercollection/daily_readiness",
+      "v2/usercollection/daily_activity",
+      "v2/usercollection/daily_stress",
+    ]) {
+      expect(mocks.ouraFetch).toHaveBeenCalledWith(endpoint, {
+        start_date: "2026-09-25",
+        end_date: "2026-10-02",
+      });
+    }
+  });
+
+  it("never spends a token refresh on an optional dataset", async () => {
+    const { syncDateRange } = await import("./sync");
+
+    await syncDateRange("2026-09-25", "2026-10-01", "cron");
+
+    const optionalCalls = mocks.ouraFetch.mock.calls.filter(([endpoint]) =>
+      [
+        "v2/usercollection/daily_resilience",
+        "v2/usercollection/daily_spo2",
+        "v2/usercollection/workout",
+        "v2/usercollection/session",
+        "v2/usercollection/heartrate",
+      ].includes(endpoint)
+    );
+    expect(optionalCalls).toHaveLength(5);
+    for (const call of optionalCalls) {
+      expect(call[2]).toEqual({ refreshUnauthorized: false });
+    }
+  });
+
+  it("skips datasets the grant does not cover instead of asking Oura", async () => {
+    mocks.loadOuraGrant.mockResolvedValue(PRODUCTION_GRANT);
+    const { dailyResilience, dailySpo2, syncLog } = await import(
+      "@/lib/db/schema"
+    );
+    const { syncDateRange } = await import("./sync");
+
+    const result = await syncDateRange("2026-09-25", "2026-10-01", "cron");
+
+    expect(result.status).toBe("partial");
+    expect(result.warnings).toEqual([
+      { dataset: "daily_resilience", code: "not_granted" },
+      { dataset: "daily_spo2", code: "not_granted" },
+    ]);
+    const requested = mocks.ouraFetch.mock.calls.map(([endpoint]) => endpoint);
+    expect(requested).not.toContain("v2/usercollection/daily_resilience");
+    expect(requested).not.toContain("v2/usercollection/daily_spo2");
+    expect(requested).toContain("v2/usercollection/workout");
+    expect(mocks.inserts.some(({ table }) => table === dailyResilience)).toBe(
+      false
+    );
+    expect(mocks.inserts.some(({ table }) => table === dailySpo2)).toBe(false);
+    expect(
+      mocks.inserts.find(({ table }) => table === syncLog)?.values
+    ).toMatchObject({
+      status: "partial",
+      errorMessage: "daily_resilience:not_granted,daily_spo2:not_granted",
+    });
+  });
+
+  it("fails before any request when the daily scope is missing", async () => {
+    mocks.loadOuraGrant.mockResolvedValue(new Set(["email", "personal"]));
+    const { syncLog } = await import("@/lib/db/schema");
+    const { syncDateRange } = await import("./sync");
+
+    await expect(
+      syncDateRange("2026-09-25", "2026-10-01", "cron")
+    ).rejects.toThrow(/daily scope/);
+    expect(mocks.ouraFetch).not.toHaveBeenCalled();
+    expect(
+      mocks.inserts.find(({ table }) => table === syncLog)?.values
+    ).toMatchObject({ status: "error" });
+  });
+
+  it("asks for a long heart-rate backfill in windows Oura accepts", async () => {
+    mocks.ouraFetch.mockImplementation(
+      async (endpoint: string, params: Record<string, string>) => {
+        if (endpoint !== "v2/usercollection/heartrate") return [];
+        return [
+          { bpm: 60, source: "rest", timestamp: params.start_datetime },
+        ];
+      }
+    );
+    const { dailyHeartrate } = await import("@/lib/db/schema");
+    const { syncDateRange } = await import("./sync");
+
+    await syncDateRange("2026-07-04", "2026-10-01", "backfill");
+
+    const windows = mocks.ouraFetch.mock.calls
+      .filter(([endpoint]) => endpoint === "v2/usercollection/heartrate")
+      .map(([, params]) => params as Record<string, string>);
+    expect(windows).toHaveLength(7);
+    expect(windows[0].start_datetime).toBe("2026-07-04T04:00:00.000Z");
+    expect(windows.at(-1)?.end_datetime).toBe("2026-10-02T03:59:59.000Z");
+    for (const window of windows) {
+      const span =
+        Date.parse(window.end_datetime) - Date.parse(window.start_datetime);
+      expect(span).toBeLessThan(30 * 86_400_000);
+    }
+    expect(
+      mocks.inserts.filter(({ table }) => table === dailyHeartrate)
+    ).toHaveLength(7);
+  });
+
+  it("stores a sleep period Oura left untyped instead of failing the sync", async () => {
+    mocks.ouraFetch.mockImplementation(async (endpoint: string) => {
+      if (endpoint !== "v2/usercollection/sleep") return [];
+      return [
+        {
+          id: "untyped",
+          day: "2026-10-01",
+          type: null,
+          bedtime_start: "2026-10-01T00:10:00-04:00",
+          bedtime_end: "2026-10-01T06:00:00-04:00",
+          heart_rate: null,
+          hrv: null,
+        },
+      ];
+    });
+    const { sleepPeriods } = await import("@/lib/db/schema");
+    const { syncDateRange } = await import("./sync");
+
+    await syncDateRange("2026-09-25", "2026-10-01", "cron");
+
+    expect(
+      mocks.inserts.find(({ table }) => table === sleepPeriods)?.values
+    ).toMatchObject({ id: "untyped", type: "unknown" });
+  });
+});
+
 describe("Oura sensitive sync", () => {
   it("keeps required writes and reports unavailable fitness sources as partial", async () => {
     mocks.ouraFetch.mockImplementation(async (endpoint: string) => {
@@ -235,7 +389,7 @@ describe("Oura sensitive sync", () => {
     ]) {
       expect(mocks.ouraFetch).toHaveBeenCalledWith(
         endpoint,
-        { start_date: "2026-07-24", end_date: "2026-07-30" },
+        { start_date: "2026-07-24", end_date: "2026-07-31" },
         { refreshUnauthorized: false }
       );
     }
@@ -346,6 +500,31 @@ describe("Oura sensitive sync", () => {
       status: "success",
       errorMessage: null,
     });
+  });
+
+  it("skips profile and heart-health data the grant does not cover", async () => {
+    mocks.loadOuraGrant.mockResolvedValue(new Set(["daily", "tag"]));
+    const { personalInfo } = await import("@/lib/db/schema");
+    const { syncSensitiveDateRange } = await import("./sync");
+
+    const result = await syncSensitiveDateRange(
+      "2026-09-25",
+      "2026-10-01",
+      "cron"
+    );
+
+    expect(result.warnings).toEqual([
+      { dataset: "personal_info", code: "not_granted" },
+      { dataset: "daily_cardiovascular_age", code: "not_granted" },
+      { dataset: "vO2_max", code: "not_granted" },
+    ]);
+    expect(mocks.ouraFetchSingle).not.toHaveBeenCalled();
+    expect(
+      mocks.ouraFetch.mock.calls.map(([endpoint]) => endpoint)
+    ).not.toContain("v2/usercollection/vO2_max");
+    expect(mocks.inserts.some(({ table }) => table === personalInfo)).toBe(
+      false
+    );
   });
 
   it("keeps rest-mode authorization failures fatal", async () => {

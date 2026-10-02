@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { hourlyHeartrate, dailyHeartrate, syncLog } from "@/lib/db/schema";
-import { ouraFetch } from "@/lib/oura/client";
+import { loadOuraGrant, ouraFetch } from "@/lib/oura/client";
 import type { OuraHeartrateSample } from "@/lib/oura/types";
 import { sql } from "drizzle-orm";
 import { format, subDays } from "date-fns";
@@ -12,6 +12,7 @@ import {
 } from "@/lib/oura/heartrate";
 import {
   formatOuraSyncWarnings,
+  isOuraDatasetGranted,
   toOuraSyncWarning,
 } from "@/lib/oura/contracts";
 
@@ -29,13 +30,19 @@ export async function GET(request: NextRequest) {
   const now = Math.floor(Date.now() / 1000);
 
   try {
+    if (!isOuraDatasetGranted(await loadOuraGrant(), "heartrate")) {
+      return NextResponse.json({ success: true, records: 0, skipped: "not_granted" });
+    }
     const range = getHeartRateQueryRange(startDate, endDate);
     const hrSamples = await ouraFetch<OuraHeartrateSample>(
       "v2/usercollection/heartrate",
       {
         start_datetime: range.startDatetime,
         end_datetime: range.endDatetime,
-      }
+      },
+      // An expired token is refreshed before the request; a 401 after that
+      // is a grant problem a refresh cannot fix.
+      { refreshUnauthorized: false }
     );
 
     if (hrSamples.length === 0) {

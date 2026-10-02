@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { refreshAccessToken, resolveOuraScope } from "./oauth";
 import {
   OuraRequestError,
+  parseGrantedOuraScopes,
   parseOuraCollectionResponse,
 } from "./contracts";
 
@@ -24,6 +25,12 @@ async function loadToken(): Promise<StoredOuraToken> {
   const tokens = await db.select().from(oauthTokens).limit(1);
   if (tokens.length === 0) throw new Error("No Oura tokens found");
   return tokens[0];
+}
+
+/** The scopes the stored connection was granted, or null when unrecorded. */
+export async function loadOuraGrant(): Promise<Set<string> | null> {
+  const token = await loadToken();
+  return parseGrantedOuraScopes(token.scope);
 }
 
 async function waitForRotatedAccessToken(

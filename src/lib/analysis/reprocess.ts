@@ -10,8 +10,13 @@ import {
   dailySpo2,
   medicationLogs,
 } from "@/lib/db/schema";
-import { sql } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { DetectionConfigValues, BipolarType } from "./config";
+import { getTodayET } from "@/lib/date-utils";
+import {
+  NIGHT_SLEEP_TYPES,
+  selectNightSleepByDay,
+} from "@/lib/oura/main-sleep";
 import {
   extractMetrics,
   computeDailyAnalysis,
@@ -69,11 +74,13 @@ export async function reprocessAll(
 ): Promise<ReprocessResult> {
   const start = performance.now();
 
-  const allSleepRows = await db
+  const sleepPeriodRows = await db
     .select()
     .from(sleepPeriods)
-    .where(sql`${sleepPeriods.type} = 'long_sleep'`)
+    .where(inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES]))
     .orderBy(sleepPeriods.day);
+  const allSleepRows = [...selectNightSleepByDay(sleepPeriodRows).values()]
+    .sort((left, right) => left.day.localeCompare(right.day));
 
   const filtered = allSleepRows.filter((row) => {
     if (startDate && row.day < startDate) return false;
@@ -81,7 +88,12 @@ export async function reprocessAll(
     return true;
   });
 
-  const allActivityRows = await db.select().from(dailyActivity).orderBy(dailyActivity.day);
+  // Oura keeps today's activity up to date as the day goes, so a partial
+  // count would read as an unusually inactive day. It joins tomorrow.
+  const today = getTodayET();
+  const allActivityRows = (
+    await db.select().from(dailyActivity).orderBy(dailyActivity.day)
+  ).filter((row) => row.day < today);
   const allStressRows = await db.select().from(dailyStress).orderBy(dailyStress.day);
   const allResilienceRows = await db.select().from(dailyResilience).orderBy(dailyResilience.day);
   const allDailySleepRows = await db.select().from(dailySleep).orderBy(dailySleep.day);

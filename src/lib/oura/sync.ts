@@ -19,7 +19,7 @@ import {
   sleepTime,
   personalInfo,
 } from "@/lib/db/schema";
-import { ouraFetch, ouraFetchSingle } from "./client";
+import { loadOuraGrant, ouraFetch, ouraFetchSingle } from "./client";
 import type {
   OuraSleepPeriod,
   OuraDailySleep,
@@ -42,10 +42,11 @@ import { sql } from "drizzle-orm";
 import {
   OURA_ENDPOINTS,
   averageOuraTimeSeries,
-  fetchOptionalOuraCollection,
+  fetchGrantedOuraCollection,
   formatOuraSyncWarnings,
   getAppAlignedHypnogram,
   getEnhancedTagDay,
+  isOuraDatasetGranted,
   minimumOuraTimeSeries,
   runOptionalOuraTask,
   type OuraSyncWarning,
@@ -53,8 +54,40 @@ import {
 import {
   aggregateHeartRateSamples,
   getHeartRateQueryRange,
+  splitHeartRateDays,
 } from "./heartrate";
 import { encodeSleepTimeOffset } from "./sleep-time";
+import { shiftIsoDay } from "@/lib/date-utils";
+
+/**
+ * Query parameters for an inclusive ET day range. Oura leaves documents dated
+ * `end_date` out of sleep, daily_activity and workout, so without the extra
+ * day last night's sleep would not arrive until the following day.
+ */
+function ouraDayRangeParams(startDate: string, endDate: string) {
+  return {
+    start_date: startDate,
+    end_date: shiftIsoDay(endDate, 1) ?? endDate,
+  };
+}
+
+async function fetchHeartRateSamples(startDate: string, endDate: string) {
+  const samples: OuraHeartrateSample[] = [];
+  for (const chunk of splitHeartRateDays(startDate, endDate)) {
+    const range = getHeartRateQueryRange(chunk.startDay, chunk.endDay);
+    samples.push(
+      ...(await ouraFetch<OuraHeartrateSample>(
+        "v2/usercollection/heartrate",
+        {
+          start_datetime: range.startDatetime,
+          end_datetime: range.endDatetime,
+        },
+        { refreshUnauthorized: false }
+      ))
+    );
+  }
+  return samples;
+}
 
 export async function syncDateRange(
   startDate: string,
@@ -66,7 +99,11 @@ export async function syncDateRange(
   const warnings: OuraSyncWarning[] = [];
 
   try {
-    const params = { start_date: startDate, end_date: endDate };
+    const granted = await loadOuraGrant();
+    if (!isOuraDatasetGranted(granted, "sleep")) {
+      throw new Error("Oura did not grant the daily scope; reconnect Oura");
+    }
+    const params = ouraDayRangeParams(startDate, endDate);
 
     const [sleepData, dailySleepData, readinessData] = await Promise.all([
       ouraFetch<OuraSleepPeriod>("v2/usercollection/sleep", params),
@@ -79,7 +116,8 @@ export async function syncDateRange(
       ouraFetch<OuraDailyStress>("v2/usercollection/daily_stress", params),
     ]);
 
-    const resilienceResult = await fetchOptionalOuraCollection(
+    const resilienceResult = await fetchGrantedOuraCollection(
+      granted,
       "daily_resilience",
       () =>
         ouraFetch<OuraDailyResilience>(
@@ -97,7 +135,7 @@ export async function syncDateRange(
         .values({
           id: s.id,
           day: s.day,
-          type: s.type,
+          type: s.type ?? "unknown",
           bedtimeStart: s.bedtime_start,
           bedtimeEnd: s.bedtime_end,
           totalSleepDuration: s.total_sleep_duration,
@@ -334,15 +372,22 @@ export async function syncDateRange(
       totalRecords += resilienceData.length;
     }
 
+    // A 401 here means a scope the grant lacks, not an expired token: the
+    // required fetches above already refreshed it if it had expired.
+    const optional = { refreshUnauthorized: false } as const;
     const [spo2Result, workoutResult, sessionResult] = await Promise.all([
-      fetchOptionalOuraCollection("daily_spo2", () =>
-        ouraFetch<OuraDailySpO2>("v2/usercollection/daily_spo2", params)
+      fetchGrantedOuraCollection(granted, "daily_spo2", () =>
+        ouraFetch<OuraDailySpO2>(
+          "v2/usercollection/daily_spo2",
+          params,
+          optional
+        )
       ),
-      fetchOptionalOuraCollection("workout", () =>
-        ouraFetch<OuraWorkout>("v2/usercollection/workout", params)
+      fetchGrantedOuraCollection(granted, "workout", () =>
+        ouraFetch<OuraWorkout>("v2/usercollection/workout", params, optional)
       ),
-      fetchOptionalOuraCollection("session", () =>
-        ouraFetch<OuraSession>("v2/usercollection/session", params)
+      fetchGrantedOuraCollection(granted, "session", () =>
+        ouraFetch<OuraSession>("v2/usercollection/session", params, optional)
       ),
     ]);
     const spo2Data = spo2Result.data;
@@ -457,12 +502,10 @@ export async function syncDateRange(
       else totalRecords += writeResult.value ?? 0;
     }
 
-    const heartRateRange = getHeartRateQueryRange(startDate, endDate);
-    const heartrateResult = await fetchOptionalOuraCollection("heartrate", () =>
-      ouraFetch<OuraHeartrateSample>("v2/usercollection/heartrate", {
-        start_datetime: heartRateRange.startDatetime,
-        end_datetime: heartRateRange.endDatetime,
-      })
+    const heartrateResult = await fetchGrantedOuraCollection(
+      granted,
+      "heartrate",
+      () => fetchHeartRateSamples(startDate, endDate)
     );
     const hrSamples = heartrateResult.data;
     if (heartrateResult.warning) warnings.push(heartrateResult.warning);
@@ -551,19 +594,32 @@ export async function syncSensitiveDateRange(
   const warnings: OuraSyncWarning[] = [];
 
   try {
-    const params = { start_date: startDate, end_date: endDate };
+    const granted = await loadOuraGrant();
+    const params = ouraDayRangeParams(startDate, endDate);
 
-    const [restModeData, personalInfoData] = await Promise.all([
+    const [restModeData, personalInfoResult] = await Promise.all([
       ouraFetch<OuraRestModePeriod>(
         "v2/usercollection/rest_mode_period",
         params
       ),
-      ouraFetchSingle<OuraPersonalInfo>("v2/usercollection/personal_info"),
+      isOuraDatasetGranted(granted, "personal_info")
+        ? runOptionalOuraTask("personal_info", () =>
+            ouraFetchSingle<OuraPersonalInfo>(
+              "v2/usercollection/personal_info",
+              { refreshUnauthorized: false }
+            )
+          )
+        : {
+            value: null,
+            warning: { dataset: "personal_info", code: "not_granted" as const },
+          },
     ]);
+    const personalInfoData = personalInfoResult.value;
+    if (personalInfoResult.warning) warnings.push(personalInfoResult.warning);
 
     const [tagResult, cvAgeResult, vo2Result, sleepTimeResult] =
       await Promise.all([
-        fetchOptionalOuraCollection("enhanced_tag", async () => {
+        fetchGrantedOuraCollection(granted, "enhanced_tag", async () => {
           const tags = await ouraFetch<OuraEnhancedTag>(
             "v2/usercollection/enhanced_tag",
             params,
@@ -572,19 +628,19 @@ export async function syncSensitiveDateRange(
           tags.forEach(getEnhancedTagDay);
           return tags;
         }),
-        fetchOptionalOuraCollection("daily_cardiovascular_age", () =>
+        fetchGrantedOuraCollection(granted, "daily_cardiovascular_age", () =>
           ouraFetch<OuraDailyCardiovascularAge>(
             "v2/usercollection/daily_cardiovascular_age",
             params,
             { refreshUnauthorized: false }
           )
         ),
-        fetchOptionalOuraCollection("vO2_max", () =>
+        fetchGrantedOuraCollection(granted, "vO2_max", () =>
           ouraFetch<OuraVo2Max>(OURA_ENDPOINTS.vo2Max, params, {
             refreshUnauthorized: false,
           })
         ),
-        fetchOptionalOuraCollection("sleep_time", () =>
+        fetchGrantedOuraCollection(granted, "sleep_time", () =>
           ouraFetch<OuraSleepTime>(OURA_ENDPOINTS.sleepTime, params, {
             refreshUnauthorized: false,
           })
@@ -750,28 +806,30 @@ export async function syncSensitiveDateRange(
       else totalRecords += writeResult.value ?? 0;
     }
 
-    await db
-      .insert(personalInfo)
-      .values({
-        id: personalInfoData.id,
-        age: personalInfoData.age,
-        weight: personalInfoData.weight,
-        height: personalInfoData.height,
-        biologicalSex: personalInfoData.biological_sex,
-        email: personalInfoData.email,
-        createdAt: now,
-      })
-      .onConflictDoUpdate({
-        target: personalInfo.id,
-        set: {
-          age: sql`excluded.age`,
-          weight: sql`excluded.weight`,
-          height: sql`excluded.height`,
-          biologicalSex: sql`excluded.biological_sex`,
-          email: sql`excluded.email`,
-        },
-      });
-    totalRecords += 1;
+    if (personalInfoData) {
+      await db
+        .insert(personalInfo)
+        .values({
+          id: personalInfoData.id,
+          age: personalInfoData.age,
+          weight: personalInfoData.weight,
+          height: personalInfoData.height,
+          biologicalSex: personalInfoData.biological_sex,
+          email: personalInfoData.email,
+          createdAt: now,
+        })
+        .onConflictDoUpdate({
+          target: personalInfo.id,
+          set: {
+            age: sql`excluded.age`,
+            weight: sql`excluded.weight`,
+            height: sql`excluded.height`,
+            biologicalSex: sql`excluded.biological_sex`,
+            email: sql`excluded.email`,
+          },
+        });
+      totalRecords += 1;
+    }
 
     const status = warnings.length > 0 ? "partial" : "success";
     await db.insert(syncLog).values({
