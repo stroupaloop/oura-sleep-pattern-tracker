@@ -9,6 +9,7 @@ import {
   OuraRequestError,
   averageOuraTimeSeries,
   fetchGrantedOuraCollection,
+  describeOuraError,
   fetchOptionalOuraCollection,
   isOuraDatasetGranted,
   missingOuraScopes,
@@ -130,6 +131,20 @@ describe("Oura API contracts", () => {
         new Response(JSON.stringify({ error: "Bad <script>" }), { status: 400 })
       )
     ).resolves.toBeNull();
+  });
+
+  it("describes a failure in one line without a database error's values", () => {
+    const failure = new Error(
+      'Failed query: insert into "daily_heartrate" values (?, ?)\nparams: 2026-03-09,96.2',
+      { cause: new Error("SQLITE_BUSY: database is locked") }
+    );
+    expect(describeOuraError(failure)).toBe(
+      'Error: Failed query: insert into "daily_heartrate" values (?, ?) (cause Error: SQLITE_BUSY: database is locked)'
+    );
+    expect(describeOuraError(new OuraRequestError(503, "heartrate"))).toBe(
+      "OuraRequestError: Oura request failed for heartrate with HTTP 503"
+    );
+    expect(describeOuraError("plain\nsecond")).toBe("plain");
   });
 
   it("parses collection responses and normalizes an omitted next token", () => {

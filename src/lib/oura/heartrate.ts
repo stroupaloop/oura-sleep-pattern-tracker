@@ -31,6 +31,26 @@ function roundTenth(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+// Building a formatter per sample made a 90-day backfill spend seconds in
+// Intl alone; one per time zone is enough.
+const dayHourFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function dayHourFormatter(timeZone: string): Intl.DateTimeFormat {
+  let formatter = dayHourFormatters.get(timeZone);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+    });
+    dayHourFormatters.set(timeZone, formatter);
+  }
+  return formatter;
+}
+
 function localDayHour(
   timestamp: string,
   timeZone: string
@@ -40,14 +60,7 @@ function localDayHour(
     throw new TypeError("Invalid Oura heart-rate timestamp");
   }
 
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date);
+  const parts = dayHourFormatter(timeZone).formatToParts(date);
   const value = (type: Intl.DateTimeFormatPartTypes) =>
     parts.find((part) => part.type === type)?.value;
   const year = value("year");
@@ -168,21 +181,36 @@ export function getHeartRateQueryRange(
   };
 }
 
+/**
+ * Buckets samples by ET day and hour. A malformed sample (no usable bpm or
+ * timestamp) is left out and counted rather than failing the batch, so one
+ * bad reading cannot cost a backfill its weeks of heart rate; it is never
+ * placed in a guessed bucket.
+ */
 export function aggregateHeartRateSamples(
   samples: OuraHeartrateSample[],
   timeZone = getOuraTimeZone()
 ): {
   daily: DailyHeartRateBucket[];
   hourly: HourlyHeartRateBucket[];
+  skipped: number;
 } {
   const byDay = new Map<string, OuraHeartrateSample[]>();
   const byDayHour = new Map<string, OuraHeartrateSample[]>();
+  let skipped = 0;
 
   for (const sample of samples) {
     if (!Number.isFinite(sample.bpm) || sample.bpm <= 0) {
-      throw new TypeError("Invalid Oura heart-rate value");
+      skipped++;
+      continue;
     }
-    const bucket = localDayHour(sample.timestamp, timeZone);
+    let bucket: { day: string; hour: number };
+    try {
+      bucket = localDayHour(sample.timestamp, timeZone);
+    } catch {
+      skipped++;
+      continue;
+    }
     const daySamples = byDay.get(bucket.day) ?? [];
     daySamples.push(sample);
     byDay.set(bucket.day, daySamples);
@@ -227,5 +255,5 @@ export function aggregateHeartRateSamples(
     };
   });
 
-  return { daily, hourly };
+  return { daily, hourly, skipped };
 }

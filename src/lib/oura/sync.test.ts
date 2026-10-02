@@ -295,11 +295,14 @@ describe("Oura daily sync requests", () => {
         Date.parse(window.end_datetime) - Date.parse(window.start_datetime);
       expect(span).toBeLessThan(30 * 86_400_000);
     }
+    // Each window is stored as soon as it arrives.
     const dailyWrites = mocks.inserts.filter(
       ({ table }) => table === dailyHeartrate
     );
-    expect(dailyWrites).toHaveLength(1);
-    expect(dailyWrites[0].values).toHaveLength(7);
+    expect(dailyWrites).toHaveLength(7);
+    expect(dailyWrites.every(({ values }) => (values as unknown[]).length === 1)).toBe(
+      true
+    );
   });
 
   it("stores a sleep period Oura left untyped instead of failing the sync", async () => {

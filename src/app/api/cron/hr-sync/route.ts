@@ -1,15 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { syncLog } from "@/lib/db/schema";
-import { loadOuraGrant, ouraFetch } from "@/lib/oura/client";
-import type { OuraHeartrateSample } from "@/lib/oura/types";
+import { loadOuraGrant } from "@/lib/oura/client";
 import { format, subDays } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
-import {
-  aggregateHeartRateSamples,
-  getHeartRateQueryRange,
-} from "@/lib/oura/heartrate";
-import { upsertHeartRateBuckets } from "@/lib/oura/heartrate-store";
+import { syncHeartRateWindows } from "@/lib/oura/heartrate-sync";
 import {
   formatOuraSyncWarnings,
   isOuraDatasetGranted,
@@ -33,47 +28,22 @@ export async function GET(request: NextRequest) {
     if (!isOuraDatasetGranted(await loadOuraGrant(), "heartrate")) {
       return NextResponse.json({ success: true, records: 0, skipped: "not_granted" });
     }
-    const range = getHeartRateQueryRange(startDate, endDate);
-    const hrSamples = await ouraFetch<OuraHeartrateSample>(
-      "v2/usercollection/heartrate",
-      {
-        start_datetime: range.startDatetime,
-        end_datetime: range.endDatetime,
-      },
-      // An expired token is refreshed before the request; a 401 after that
-      // is a grant problem a refresh cannot fix.
-      { refreshUnauthorized: false }
-    );
-
-    if (hrSamples.length === 0) {
-      await db.insert(syncLog).values({
-        syncType: "cron-hr",
-        startDate,
-        endDate,
-        recordsFetched: 0,
-        status: "success",
-        createdAt: now,
-      });
-      return NextResponse.json({ success: true, records: 0 });
-    }
-
-    const buckets = aggregateHeartRateSamples(hrSamples);
-    await upsertHeartRateBuckets(buckets, now);
+    const result = await syncHeartRateWindows(startDate, endDate, now);
 
     await db.insert(syncLog).values({
       syncType: "cron-hr",
       startDate,
       endDate,
-      recordsFetched: hrSamples.length,
-      status: "success",
+      recordsFetched: result.samples,
+      status: result.warning ? "error" : "success",
+      errorMessage: result.warning ? formatOuraSyncWarnings([result.warning]) : null,
       createdAt: now,
     });
 
-    return NextResponse.json({
-      success: true,
-      samples: hrSamples.length,
-      hourlyBuckets: buckets.hourly.length,
-    });
+    return NextResponse.json(
+      { success: !result.warning, ...result },
+      { status: result.warning ? 500 : 200 }
+    );
   } catch (error) {
     const warning = toOuraSyncWarning("heartrate", error);
     await db.insert(syncLog).values({

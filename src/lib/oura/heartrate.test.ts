@@ -39,13 +39,22 @@ describe("aggregateHeartRateSamples", () => {
     });
   });
 
-  it("rejects malformed samples instead of silently mis-bucketing them", () => {
-    expect(() =>
-      aggregateHeartRateSamples(
-        [{ timestamp: "not-a-date", bpm: 60, source: "rest" }],
-        "UTC"
-      )
-    ).toThrow("Invalid Oura heart-rate timestamp");
+  it("leaves malformed samples out and counts them, never mis-bucketing them", () => {
+    const result = aggregateHeartRateSamples(
+      [
+        { timestamp: "not-a-date", bpm: 60, source: "rest" },
+        { timestamp: "2026-07-30T12:00:00Z", bpm: Number.NaN, source: "rest" },
+        { timestamp: "2026-07-30T12:05:00Z", bpm: 0, source: "awake" },
+        { timestamp: "2026-07-30T12:10:00Z", bpm: 64, source: "rest" },
+      ],
+      "UTC"
+    );
+
+    expect(result.skipped).toBe(3);
+    expect(result.daily).toEqual([
+      expect.objectContaining({ day: "2026-07-30", avgBpm: 64, sampleCount: 1 }),
+    ]);
+    expect(result.hourly).toHaveLength(1);
   });
 });
 
