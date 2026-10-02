@@ -34,6 +34,7 @@ import {
   getCycleEvaluationStartDay,
 } from "@/lib/analysis/cycle";
 import { projectActivityToCalendarDays } from "@/lib/oura/activity";
+import { HR_ANOMALY_BASELINE_DAYS } from "@/lib/hr-anomalies";
 import { getOuraSleepDayForTimestamp } from "@/lib/oura/sleep-day";
 import { getSleepTimeClockMinutes } from "@/lib/oura/sleep-time";
 import {
@@ -68,9 +69,12 @@ export default async function PrivatePage() {
   const today = parseISO(currentDay);
   const cutoff = format(subDays(today, 89), "yyyy-MM-dd");
   const cycleCutoff = getCycleEvaluationStartDay(currentDay);
-  const fourteenDayCutoff = format(subDays(today, 13), "yyyy-MM-dd");
-  const activitySourceCutoff =
-    shiftIsoDay(fourteenDayCutoff, -1) ?? fourteenDayCutoff;
+  // The hourly heart-rate views reach back as far as the daily ones. Their
+  // first night needs the evening before, and each day's same-hour
+  // baseline the two weeks before, so those load too.
+  const hourlyLoadStart =
+    shiftIsoDay(cutoff, -HR_ANOMALY_BASELINE_DAYS) ?? cutoff;
+  const activitySourceCutoff = shiftIsoDay(cutoff, -1) ?? cutoff;
   const thirtyDayCutoff = format(subDays(today, 29), "yyyy-MM-dd");
   const sourceDaysPromise = Promise.all([
     db
@@ -174,7 +178,7 @@ export default async function PrivatePage() {
         source: hourlyHeartrate.source,
       })
       .from(hourlyHeartrate)
-      .where(gte(hourlyHeartrate.day, fourteenDayCutoff))
+      .where(gte(hourlyHeartrate.day, hourlyLoadStart))
       .orderBy(hourlyHeartrate.day, hourlyHeartrate.hour),
     db
       .select({
@@ -204,7 +208,7 @@ export default async function PrivatePage() {
     APP_TIME_ZONE
   ).filter(
     (activityDay) =>
-      activityDay.day >= fourteenDayCutoff && activityDay.day <= currentDay
+      activityDay.day >= cutoff && activityDay.day <= currentDay
   );
 
   const [cyclePhaseAnalysis, cyclePhaseMoods] = await Promise.all([
@@ -381,6 +385,7 @@ export default async function PrivatePage() {
         cyclePhaseDaily={cyclePhaseDaily}
         wearActivityData={projectedWearActivityData}
         wearActivityHrData={hourlyHrData}
+        hourlyFirstDay={cutoff}
         sourceFreshness={sourceFreshness}
       />
     </div>

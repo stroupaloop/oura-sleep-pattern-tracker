@@ -35,6 +35,7 @@ const emptyPrivateData = {
   cyclePhaseDaily: [],
   wearActivityData: [],
   wearActivityHrData: [],
+  hourlyFirstDay: "2026-05-04",
   sourceFreshness: {
     sleep: { state: "unknown" as const, attemptedAt: null, lastSourceDay: null },
     cardiovascularAge: {

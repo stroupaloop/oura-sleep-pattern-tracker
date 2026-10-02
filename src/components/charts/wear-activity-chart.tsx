@@ -48,6 +48,8 @@ interface WearActivityChartProps {
   activityData: WearActivityDay[];
   hrData: HrOverlay[];
   currentDay: string;
+  /** The earliest day offered; every day from it to today can be chosen. */
+  firstDay: string;
 }
 
 const LEGEND_CLASSES: ActivityClass[] = ["rest", "inactive", "low", "medium", "high"];
@@ -137,21 +139,27 @@ export function WearActivityChart({
   activityData,
   hrData,
   currentDay,
+  firstDay,
 }: WearActivityChartProps) {
   const hatchId = `nonwear-hatch-${useId().replace(/[^\w-]/g, "")}`;
   const availableDays = useMemo(() => {
     const days = new Set<string>();
-    for (const h of hrData) days.add(h.day);
-    for (const a of activityData) days.add(a.day);
+    for (const h of hrData) if (h.day >= firstDay) days.add(h.day);
+    for (const a of activityData) if (a.day >= firstDay) days.add(a.day);
     return [...days].sort();
-  }, [hrData, activityData]);
+  }, [hrData, activityData, firstDay]);
 
   const selectableDays = useMemo(() => {
-    const calendarWindow = Array.from({ length: 14 }, (_, index) =>
-      shiftIsoDay(currentDay, index - 13)
-    ).filter((day): day is string => day != null);
+    const calendarWindow: string[] = [];
+    for (
+      let day: string | null = firstDay;
+      day != null && day <= currentDay;
+      day = shiftIsoDay(day, 1)
+    ) {
+      calendarWindow.push(day);
+    }
     return [...new Set([...availableDays, ...calendarWindow])].sort();
-  }, [availableDays, currentDay]);
+  }, [availableDays, currentDay, firstDay]);
 
   const [selectedDay, setSelectedDay] = useState(currentDay);
 
