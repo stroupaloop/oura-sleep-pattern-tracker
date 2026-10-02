@@ -235,6 +235,20 @@ export async function fetchGrantedOuraCollection<T>(
   return fetchOptionalOuraCollection(dataset, fetchCollection);
 }
 
+/**
+ * One loggable line for a failure: name and first message line, plus the
+ * cause's. A database error's first line is its statement with placeholders,
+ * never the values, so no health data reaches the logs.
+ */
+export function describeOuraError(error: unknown): string {
+  const line = (value: unknown) =>
+    value instanceof Error
+      ? `${value.name}: ${value.message.split("\n")[0].slice(0, 200)}`
+      : String(value).split("\n")[0].slice(0, 200);
+  const cause = error instanceof Error ? error.cause : undefined;
+  return cause ? `${line(error)} (cause ${line(cause)})` : line(error);
+}
+
 export async function runOptionalOuraTask<T>(
   dataset: string,
   task: () => Promise<T>
@@ -242,6 +256,8 @@ export async function runOptionalOuraTask<T>(
   try {
     return { value: await task(), warning: null };
   } catch (error) {
+    // The sync log keeps only a code; this keeps the reason.
+    console.error(`Oura dataset ${dataset} failed: ${describeOuraError(error)}`);
     return {
       value: null,
       warning: toOuraSyncWarning(dataset, error),

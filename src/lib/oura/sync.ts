@@ -34,7 +34,6 @@ import type {
   OuraVo2Max,
   OuraSleepTime,
   OuraPersonalInfo,
-  OuraHeartrateSample,
 } from "./types";
 import { sql } from "drizzle-orm";
 import {
@@ -49,13 +48,8 @@ import {
   runOptionalOuraTask,
   type OuraSyncWarning,
 } from "./contracts";
-import {
-  aggregateHeartRateSamples,
-  getHeartRateQueryRange,
-  splitHeartRateDays,
-} from "./heartrate";
 import { encodeSleepTimeOffset } from "./sleep-time";
-import { upsertHeartRateBuckets } from "./heartrate-store";
+import { syncHeartRateWindows } from "./heartrate-sync";
 import { shiftIsoDay } from "@/lib/date-utils";
 
 /**
@@ -70,23 +64,6 @@ function ouraDayRangeParams(startDate: string, endDate: string) {
   };
 }
 
-async function fetchHeartRateSamples(startDate: string, endDate: string) {
-  const samples: OuraHeartrateSample[] = [];
-  for (const chunk of splitHeartRateDays(startDate, endDate)) {
-    const range = getHeartRateQueryRange(chunk.startDay, chunk.endDay);
-    samples.push(
-      ...(await ouraFetch<OuraHeartrateSample>(
-        "v2/usercollection/heartrate",
-        {
-          start_datetime: range.startDatetime,
-          end_datetime: range.endDatetime,
-        },
-        { refreshUnauthorized: false }
-      ))
-    );
-  }
-  return samples;
-}
 
 export async function syncDateRange(
   startDate: string,
@@ -501,23 +478,12 @@ export async function syncDateRange(
       else totalRecords += writeResult.value ?? 0;
     }
 
-    const heartrateResult = await fetchGrantedOuraCollection(
-      granted,
-      "heartrate",
-      () => fetchHeartRateSamples(startDate, endDate)
-    );
-    const hrSamples = heartrateResult.data;
-    if (heartrateResult.warning) warnings.push(heartrateResult.warning);
-
-    if (!heartrateResult.warning) {
-      const writeResult = await runOptionalOuraTask("heartrate", async () => {
-        if (hrSamples.length === 0) return 0;
-        const buckets = aggregateHeartRateSamples(hrSamples);
-        await upsertHeartRateBuckets(buckets, now);
-        return buckets.daily.length;
-      });
-      if (writeResult.warning) warnings.push(writeResult.warning);
-      else totalRecords += writeResult.value ?? 0;
+    if (isOuraDatasetGranted(granted, "heartrate")) {
+      const heartRate = await syncHeartRateWindows(startDate, endDate, now);
+      totalRecords += heartRate.days;
+      if (heartRate.warning) warnings.push(heartRate.warning);
+    } else {
+      warnings.push({ dataset: "heartrate", code: "not_granted" });
     }
 
     const status = warnings.length > 0 ? "partial" : "success";
