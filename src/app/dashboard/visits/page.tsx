@@ -9,6 +9,7 @@ import {
   describeLocation,
   shortVisitorId,
 } from "@/lib/notifications/visit-alert";
+import { PageHeader } from "@/components/page-header";
 
 const LIMIT = 100;
 
@@ -40,13 +41,15 @@ export default async function VisitsPage() {
 
   return (
     <div className="mx-auto max-w-6xl space-y-4 md:space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold md:text-3xl">Visits</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {Number(totals.visits)} visits from {Number(totals.visitors)} distinct
-          visitors. Location is approximate, derived from IP.
-        </p>
-      </div>
+      <PageHeader
+        title="Visits"
+        description={
+          <>
+            {Number(totals.visits)} visits from {Number(totals.visitors)}{" "}
+            distinct visitors. Location is approximate, derived from IP.
+          </>
+        }
+      />
 
       {rows.length === 0 ? (
         <div className="py-12 text-center text-muted-foreground">
@@ -68,7 +71,7 @@ export default async function VisitsPage() {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className="border-t">
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap tabular-nums">
                     {formatWhen(row.createdAt)}
                   </td>
                   <td className="px-3 py-2">

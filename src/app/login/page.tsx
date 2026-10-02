@@ -4,6 +4,7 @@ import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -116,9 +117,7 @@ function LoginForm() {
               required
             />
           </div>
-          {error && (
-            <p className="text-sm text-destructive">{error}</p>
-          )}
+          {error && <FormMessage kind="error">{error}</FormMessage>}
           <Button type="submit" className="w-full" disabled={loading}>
             {loading ? "Sending..." : "Send magic link"}
           </Button>

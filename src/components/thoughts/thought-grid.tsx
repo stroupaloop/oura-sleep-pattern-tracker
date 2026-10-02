@@ -49,7 +49,7 @@ export function ThoughtGrid({ grid }: { grid: GridModel }) {
               {WEEKDAY_LABELS.map((label, index) => (
                 <div
                   key={index}
-                  className="h-[11px] text-[9px] leading-[11px] text-muted-foreground"
+                  className="h-[11px] text-[11px] leading-[11px] text-muted-foreground"
                 >
                   {label}
                 </div>
@@ -62,7 +62,7 @@ export function ThoughtGrid({ grid }: { grid: GridModel }) {
               return (
                 <div key={weekIndex} className="flex flex-col gap-[3px] relative">
                   {label && (
-                    <span className="absolute -top-5 left-0 text-[9px] text-muted-foreground">
+                    <span className="absolute -top-5 left-0 whitespace-nowrap text-[11px] text-muted-foreground">
                       {label}
                     </span>
                   )}
@@ -83,8 +83,8 @@ export function ThoughtGrid({ grid }: { grid: GridModel }) {
                         aria-label={describeCell(cell.day, cell.count)}
                         title={describeCell(cell.day, cell.count)}
                         className={cn(
-                          "h-[11px] w-[11px] rounded-[2px] transition-transform",
-                          cell.count > 0 && "hover:scale-125"
+                          "h-[11px] w-[11px] rounded-[2px]",
+                          cell.count > 0 && "hover:ring-1 hover:ring-foreground/70"
                         )}
                         style={{ background: RAMP[cell.bucket] }}
                         onMouseEnter={(event) => {

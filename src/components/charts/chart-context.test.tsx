@@ -31,6 +31,17 @@ describe("compact chart context", () => {
     expect(html).toContain("do not calculate correlation or show causation");
   });
 
+  it("names flag directions in words and shapes, never colors", () => {
+    const html = renderToStaticMarkup(
+      createElement(CorrelationView, { pairs: [] })
+    );
+
+    expect(html).toContain("Higher-activation flag");
+    expect(html).toContain("Lower-activation flag");
+    expect(html).toContain("Unflagged");
+    expect(html).not.toMatch(/orange|blue|gray/i);
+  });
+
   it("explains requirements instead of showing empty technical plots", () => {
     const variability = renderToStaticMarkup(
       createElement(VariabilityChart, { data: [] })

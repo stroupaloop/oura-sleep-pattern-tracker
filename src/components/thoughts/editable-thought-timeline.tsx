@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Heart, Link2, Loader2, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -137,11 +138,13 @@ function EntryEditor({
         />
       </div>
 
-      {error && <p className="text-xs text-red-300">{error}</p>}
+      {error && <FormMessage kind="error">{error}</FormMessage>}
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" onClick={save} disabled={busy} className="gap-2">
-          {busy && <Loader2 className="size-3.5 animate-spin" />}
+          {busy && (
+            <Loader2 className="size-3.5 animate-spin motion-reduce:animate-none" />
+          )}
           Save
         </Button>
         <Button size="sm" variant="ghost" onClick={onDone} disabled={busy}>
@@ -153,10 +156,9 @@ function EntryEditor({
             <span className="text-xs text-muted-foreground">Delete this?</span>
             <Button
               size="sm"
-              variant="ghost"
+              variant="destructive"
               onClick={remove}
               disabled={busy}
-              className="text-red-300 hover:text-red-200"
             >
               Yes, delete
             </Button>
@@ -220,7 +222,7 @@ export function EditableThoughtTimeline({
                     )}
                     {entry.isAuto && (
                       <span
-                        className="rounded border px-1 text-[10px] uppercase tracking-wide"
+                        className="rounded border px-1 text-[11px]"
                         title="Logged automatically; only you see this"
                       >
                         auto
@@ -231,7 +233,7 @@ export function EditableThoughtTimeline({
                     size="sm"
                     variant="ghost"
                     onClick={() => setEditing(entry.id)}
-                    className="-my-1 h-7 shrink-0 gap-1.5 px-2 text-muted-foreground"
+                    className="-my-1 h-9 shrink-0 gap-1.5 px-2 text-muted-foreground sm:h-7"
                   >
                     <Pencil className="size-3" />
                     Edit

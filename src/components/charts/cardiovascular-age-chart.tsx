@@ -17,6 +17,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AXIS_TICK, CHART } from "./chart-theme";
+import { formatIsoDay } from "@/lib/date-utils";
 
 interface CardiovascularAgePoint {
   day: string;
@@ -68,7 +70,7 @@ export function CardiovascularAgeChart({
       </CardHeader>
       <CardContent>
         {latest?.vascularAge != null && (
-          <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-sm">
+          <div className="mb-4 flex flex-wrap gap-x-3 gap-y-1 text-sm tabular-nums">
             <span className="font-medium">
               Latest: {latest.vascularAge} years
             </span>
@@ -86,38 +88,37 @@ export function CardiovascularAgeChart({
                 Oura category: {latestCategory}
               </span>
             )}
-            <span className="text-muted-foreground">Through {latest.day}</span>
+            <span className="text-muted-foreground">
+              Through {formatIsoDay(latest.day) ?? latest.day}
+            </span>
           </div>
         )}
         <ResponsiveContainer width="100%" height={300}>
           <LineChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+            <CartesianGrid strokeDasharray="3 3" />
             <XAxis
               dataKey="day"
               tickFormatter={(d) => d.slice(5)}
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              tick={AXIS_TICK}
               interval="preserveStartEnd"
             />
             <YAxis
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              // Fit the visible range (and actual age); from zero it flattens.
+              domain={[
+                (min: number) => Math.max(0, Math.floor(min - 3)),
+                (max: number) => Math.ceil(max + 3),
+              ]}
+              allowDecimals={false}
+              tick={AXIS_TICK}
               tickFormatter={(v) => `${v}y`}
               label={{
                 value: "years",
                 angle: -90,
                 position: "insideLeft",
-                fontSize: 10,
-                fill: "oklch(0.708 0 0)",
+                fontSize: 11,
               }}
             />
             <Tooltip
-              contentStyle={{
-                backgroundColor: "oklch(0.205 0 0)",
-                borderColor: "oklch(1 0 0 / 10%)",
-                borderRadius: "0.5rem",
-                color: "oklch(0.985 0 0)",
-              }}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => {
                 const cardiovascularAge = Number(value);
@@ -135,12 +136,12 @@ export function CardiovascularAgeChart({
             {actualAge != null && (
               <ReferenceLine
                 y={actualAge}
-                stroke="oklch(0.708 0 0)"
+                stroke={CHART.baseline}
                 strokeDasharray="4 4"
+                ifOverflow="extendDomain"
                 label={{
                   value: "Actual Age",
-                  position: "right",
-                  fill: "oklch(0.708 0 0)",
+                  position: "insideBottomRight",
                   fontSize: 11,
                 }}
               />
@@ -148,7 +149,7 @@ export function CardiovascularAgeChart({
             <Line
               type="monotone"
               dataKey="vascularAge"
-              stroke="oklch(0.65 0.2 260)"
+              stroke="var(--foreground)"
               strokeWidth={2}
               dot={false}
               connectNulls={false}

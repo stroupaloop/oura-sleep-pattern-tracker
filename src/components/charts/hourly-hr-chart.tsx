@@ -19,15 +19,40 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { DayNavigator } from "@/components/ui/day-navigator";
+import { EmptyState } from "@/components/ui/empty-state";
+import {
+  SegmentedControl,
+  type SegmentedOption,
+} from "@/components/ui/segmented-control";
+import { AXIS_TICK, CHART } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 import { type HourlyHrPoint, type HrAnomaly, detectHrAnomalies } from "@/lib/hr-anomalies";
-import { shiftIsoDay } from "@/lib/date-utils";
+import { formatIsoDay, shiftIsoDay } from "@/lib/date-utils";
+import { formatNightLabel } from "@/lib/health/format";
 
 interface HourlyHrChartProps {
   data: HourlyHrPoint[];
 }
 
 type ViewMode = "night" | "day";
+
+const VIEW_OPTIONS: SegmentedOption<ViewMode>[] = [
+  { value: "night", label: "Night" },
+  { value: "day", label: "Full Day" },
+];
+
+interface HourlyChartPoint {
+  day: string;
+  hour: number;
+  actualHour: number;
+  label: string;
+  avgBpm: number | null;
+  minBpm: number | null;
+  maxBpm: number | null;
+  range: [number, number] | null;
+  source: string | null;
+}
 
 function formatHour(h: number): string {
   const normalized = ((h % 24) + 24) % 24;
@@ -41,6 +66,63 @@ function prevDay(day: string): string {
   return shiftIsoDay(day, -1) ?? day;
 }
 
+function toChartPoint(
+  point: HourlyHrPoint | undefined,
+  day: string,
+  hour: number
+): HourlyChartPoint {
+  const minBpm = point?.minBpm ?? null;
+  const maxBpm = point?.maxBpm ?? null;
+  return {
+    day: point?.day ?? day,
+    hour,
+    actualHour: ((hour % 24) + 24) % 24,
+    label: formatHour(hour),
+    avgBpm: point?.avgBpm ?? null,
+    minBpm,
+    maxBpm,
+    range: minBpm != null && maxBpm != null ? [minBpm, maxBpm] : null,
+    source: point?.source ?? null,
+  };
+}
+
+function formatBpm(value: number | null): string {
+  return value != null ? `${value} bpm` : "—";
+}
+
+function HourlyHrTooltip({
+  active,
+  payload,
+  anomalyByHour,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ payload?: HourlyChartPoint }>;
+  anomalyByHour: Map<string, HrAnomaly>;
+}) {
+  const entry = active ? payload?.[0]?.payload : undefined;
+  if (!entry) return null;
+  const anomaly = anomalyByHour.get(`${entry.day}:${entry.actualHour}`);
+  return (
+    <ChartTooltipFrame title={`Time: ${formatHour(entry.actualHour)}`}>
+      <ChartTooltipRow
+        color={CHART.heartRate}
+        label="Avg"
+        value={formatBpm(entry.avgBpm)}
+      />
+      <ChartTooltipRow label="Min" value={formatBpm(entry.minBpm)} />
+      <ChartTooltipRow label="Max" value={formatBpm(entry.maxBpm)} />
+      {entry.source && (
+        <p className="text-muted-foreground">Source: {entry.source}</p>
+      )}
+      {anomaly && (
+        <p className="text-attention">
+          Unusual vs prior same-hour avg ~{Math.round(anomaly.baseline)} bpm
+        </p>
+      )}
+    </ChartTooltipFrame>
+  );
+}
+
 export function HourlyHrChart({ data }: HourlyHrChartProps) {
   const availableDays = useMemo(() => {
     const days = new Set(data.map((d) => d.day));
@@ -52,7 +134,7 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
   );
   const [viewMode, setViewMode] = useState<ViewMode>("night");
 
-  const chartData = useMemo(() => {
+  const chartData = useMemo((): HourlyChartPoint[] => {
     if (viewMode === "night") {
       const prevDayStr = prevDay(selectedDay);
       const eveningPoints = data.filter((d) => d.day === prevDayStr && d.hour >= 20);
@@ -65,36 +147,16 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
       const hours: number[] = [];
       for (let h = -4; h <= 12; h++) hours.push(h);
 
-      return hours.map((h) => {
-        const p = byKey.get(h);
-        return {
-          day: p?.day ?? (h < 0 ? prevDayStr : selectedDay),
-          hour: h,
-          actualHour: ((h % 24) + 24) % 24,
-          label: formatHour(h),
-          avgBpm: p?.avgBpm ?? null,
-          minBpm: p?.minBpm ?? null,
-          maxBpm: p?.maxBpm ?? null,
-          source: p?.source ?? null,
-        };
-      });
+      return hours.map((h) =>
+        toChartPoint(byKey.get(h), h < 0 ? prevDayStr : selectedDay, h)
+      );
     }
 
     const points = data.filter((d) => d.day === selectedDay);
     const byHour = new Map(points.map((p) => [p.hour, p]));
-    return Array.from({ length: 24 }, (_, h) => {
-      const p = byHour.get(h);
-      return {
-        day: selectedDay,
-        hour: h,
-        actualHour: h,
-        label: formatHour(h),
-        avgBpm: p?.avgBpm ?? null,
-        minBpm: p?.minBpm ?? null,
-        maxBpm: p?.maxBpm ?? null,
-        source: p?.source ?? null,
-      };
-    });
+    return Array.from({ length: 24 }, (_, h) =>
+      toChartPoint(byHour.get(h), selectedDay, h)
+    );
   }, [data, selectedDay, viewMode]);
 
   const anomalies = useMemo(() => {
@@ -127,63 +189,41 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
 
   if (availableDays.length === 0) return null;
 
-  const nightLabel = `${prevDay(selectedDay).slice(5)} night`;
-  const dayLabel = selectedDay.slice(5);
+  const isNight = viewMode === "night";
+  const periodLabel = isNight
+    ? formatNightLabel(selectedDay, { weekday: false })
+    : (formatIsoDay(selectedDay) ?? selectedDay);
 
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           <CardTitle>Hourly Heart Rate</CardTitle>
-          <div className="flex items-center gap-2 text-sm">
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!canPrev}
-              onClick={() => {
-                const idx = availableDays.indexOf(selectedDay);
-                if (idx > 0) setSelectedDay(availableDays[idx - 1]);
-              }}
-            >
-              &lt;
-            </Button>
-            <span className="font-mono text-muted-foreground min-w-[90px] text-center">
-              {viewMode === "night" ? nightLabel : dayLabel}
-            </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={!canNext}
-              onClick={() => {
-                const idx = availableDays.indexOf(selectedDay);
-                if (idx < availableDays.length - 1) setSelectedDay(availableDays[idx + 1]);
-              }}
-            >
-              &gt;
-            </Button>
-          </div>
+          <DayNavigator
+            label={<span className="inline-block min-w-32">{periodLabel}</span>}
+            onPrevious={() => {
+              const idx = availableDays.indexOf(selectedDay);
+              if (idx > 0) setSelectedDay(availableDays[idx - 1]);
+            }}
+            onNext={() => {
+              const idx = availableDays.indexOf(selectedDay);
+              if (idx < availableDays.length - 1) setSelectedDay(availableDays[idx + 1]);
+            }}
+            previousDisabled={!canPrev}
+            nextDisabled={!canNext}
+            previousLabel={isNight ? "Previous night" : "Previous day"}
+            nextLabel={isNight ? "Next night" : "Next day"}
+          />
         </div>
-        <div className="flex items-center gap-2 mt-1">
-          <div className="flex gap-1 text-xs">
-            <Button
-              variant={viewMode === "night" ? "default" : "outline"}
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setViewMode("night")}
-            >
-              Night
-            </Button>
-            <Button
-              variant={viewMode === "day" ? "default" : "outline"}
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setViewMode("day")}
-            >
-              Full Day
-            </Button>
-          </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <SegmentedControl
+            label="Hours shown"
+            options={VIEW_OPTIONS}
+            value={viewMode}
+            onValueChange={setViewMode}
+          />
           {anomalies.length > 0 && (
-            <p className="text-xs text-amber-300">
+            <p className="text-xs text-attention">
               {anomalies.length} unusual hour{anomalies.length === 1 ? "" : "s"}{" "}
               vs prior same-hour pattern
             </p>
@@ -197,101 +237,67 @@ export function HourlyHrChart({ data }: HourlyHrChartProps) {
       </CardHeader>
       <CardContent>
         {!hasChartHeartRate ? (
-          <div className="flex min-h-[300px] items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
-            No hourly heart-rate samples are available for this view.
-          </div>
+          <EmptyState
+            className="min-h-[300px] justify-center"
+            title="No hourly heart-rate samples are available for this view."
+          />
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <ComposedChart data={chartData}>
-            <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
-            <XAxis
-              dataKey="label"
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
-              interval={viewMode === "night" ? 1 : 2}
-            />
-            <YAxis
-              fontSize={11}
-              tick={{ fill: "oklch(0.708 0 0)" }}
-              tickFormatter={(v) => `${v}`}
-              domain={["dataMin - 5", "dataMax + 5"]}
-              label={{
-                value: "bpm",
-                angle: -90,
-                position: "insideLeft",
-                fontSize: 10,
-                fill: "oklch(0.708 0 0)",
-              }}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "oklch(0.205 0 0)",
-                borderColor: "oklch(1 0 0 / 10%)",
-                borderRadius: "0.5rem",
-                color: "oklch(0.985 0 0)",
-              }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={(value: any, name: any) => {
-                const labels: Record<string, string> = {
-                  avgBpm: "Avg",
-                  minBpm: "Min",
-                  maxBpm: "Max",
-                };
-                return [value != null ? `${Number(value)} bpm` : "—", labels[String(name)] ?? name];
-              }}
-              labelFormatter={(_label, payload) => {
-                const entry = payload?.[0]?.payload;
-                if (!entry) return "";
-                const anomaly = anomalyByHour.get(
-                  `${entry.day}:${entry.actualHour}`
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis
+                dataKey="label"
+                tick={AXIS_TICK}
+                interval={isNight ? 1 : 2}
+              />
+              <YAxis
+                tick={AXIS_TICK}
+                tickFormatter={(v) => `${v}`}
+                domain={["dataMin - 5", "dataMax + 5"]}
+                label={{
+                  value: "bpm",
+                  angle: -90,
+                  position: "insideLeft",
+                  fontSize: 11,
+                }}
+              />
+              <Tooltip
+                content={<HourlyHrTooltip anomalyByHour={anomalyByHour} />}
+              />
+              <Area
+                type="monotone"
+                dataKey="range"
+                name="Min–max"
+                fill={CHART.heartRate}
+                fillOpacity={0.15}
+                stroke="none"
+                activeDot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="avgBpm"
+                name="Avg"
+                stroke={CHART.heartRate}
+                strokeWidth={2}
+                dot={false}
+              />
+              {anomalies.map((a) => {
+                const point = chartData.find(
+                  (d) => d.day === a.day && d.actualHour === a.hour
                 );
-                const parts = [`Time: ${formatHour(entry.actualHour)}`];
-                if (entry.source) parts.push(`Source: ${entry.source}`);
-                if (anomaly) {
-                  parts.push(
-                    `Unusual vs prior same-hour avg ~${Math.round(
-                      anomaly.baseline
-                    )} bpm`
-                  );
-                }
-                return parts.join(" | ");
-              }}
-            />
-            <Area
-              type="monotone"
-              dataKey="maxBpm"
-              fill="oklch(0.65 0.08 250 / 12%)"
-              stroke="none"
-            />
-            <Area
-              type="monotone"
-              dataKey="minBpm"
-              fill="oklch(0.205 0 0)"
-              stroke="none"
-            />
-            <Line
-              type="monotone"
-              dataKey="avgBpm"
-              stroke="#60a5fa"
-              strokeWidth={2}
-              dot={false}
-            />
-            {anomalies.map((a) => {
-              const point = chartData.find(
-                (d) => d.day === a.day && d.actualHour === a.hour
-              );
-              if (!point || point.avgBpm == null) return null;
-              return (
-                <ReferenceDot
-                  key={`anomaly-${a.day}-${a.hour}-${a.type}`}
-                  x={point.label}
-                  y={point.avgBpm}
-                  r={5}
-                  fill={a.severity === "high" ? "#ef4444" : "#f97316"}
-                  stroke="none"
-                />
-              );
-            })}
+                if (!point || point.avgBpm == null) return null;
+                return (
+                  <ReferenceDot
+                    key={`anomaly-${a.day}-${a.hour}-${a.type}`}
+                    x={point.label}
+                    y={point.avgBpm}
+                    r={5}
+                    fill={CHART.attention}
+                    stroke="var(--card)"
+                    strokeWidth={1.5}
+                  />
+                );
+              })}
             </ComposedChart>
           </ResponsiveContainer>
         )}

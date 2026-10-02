@@ -18,6 +18,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ResearchTooltip } from "@/components/research-tooltip";
+import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
 interface VariabilityPoint {
   day: string;
@@ -35,6 +37,10 @@ interface VariabilityTooltipPayload {
   payload: VariabilityPoint;
 }
 
+/** Neutral series only: the first in Moonlight, the next in Mist dashed. */
+const MOONLIGHT = "var(--foreground)";
+const MIST = CHART.axis;
+
 function VariabilityTooltipContent({
   active,
   payload,
@@ -47,22 +53,29 @@ function VariabilityTooltipContent({
   if (!active || !payload?.length) return null;
   const p = payload[0].payload as VariabilityPoint;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground">{p.day}</p>
+    <ChartTooltipFrame title={p.day}>
       {mode === "sleep" && p.sleepCV != null && (
-        <p style={{ color: "#3b82f6" }}>Sleep Duration CV: {(p.sleepCV * 100).toFixed(1)}%</p>
+        <ChartTooltipRow
+          color={MOONLIGHT}
+          label="Sleep Duration CV"
+          value={`${(p.sleepCV * 100).toFixed(1)}%`}
+        />
       )}
       {mode === "clock" && p.bedtimeCV != null && (
-        <p style={{ color: "#a78bfa" }}>
-          Bedtime variation index: {p.bedtimeCV.toFixed(3)}
-        </p>
+        <ChartTooltipRow
+          color={MOONLIGHT}
+          label="Bedtime variation index"
+          value={p.bedtimeCV.toFixed(3)}
+        />
       )}
       {mode === "clock" && p.wakeCV != null && (
-        <p style={{ color: "#22d3ee" }}>
-          Wake-time variation index: {p.wakeCV.toFixed(3)}
-        </p>
+        <ChartTooltipRow
+          color={MIST}
+          label="Wake-time variation index"
+          value={p.wakeCV.toFixed(3)}
+        />
       )}
-    </div>
+    </ChartTooltipFrame>
   );
 }
 
@@ -85,12 +98,12 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
-          <span className="font-medium text-blue-300">What to watch for:</span>{" "}
+        <p className="mb-4 max-w-prose text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">What to watch for:</span>{" "}
           Rising values mean the measured schedule is becoming more variable.
           Compare sustained changes with your own baseline; these rolling
           metrics do not determine mood state or predict an episode on their own.
-        </div>
+        </p>
         {!hasSleepVariability && !hasClockVariation ? (
           <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
             No rolling variability is available yet. A consecutive multi-day
@@ -105,17 +118,15 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
                 </p>
                 <ResponsiveContainer width="100%" height={180}>
                   <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                     <XAxis
                       dataKey="day"
                       tickFormatter={(d) => d.slice(5)}
-                      fontSize={11}
-                      tick={{ fill: "oklch(0.708 0 0)" }}
+                      tick={AXIS_TICK}
                       interval="preserveStartEnd"
                     />
                     <YAxis
-                      fontSize={11}
-                      tick={{ fill: "oklch(0.708 0 0)" }}
+                      tick={AXIS_TICK}
                       tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
                     />
                     <Tooltip
@@ -124,7 +135,7 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
                     <Line
                       type="monotone"
                       dataKey="sleepCV"
-                      stroke="#3b82f6"
+                      stroke={MOONLIGHT}
                       strokeWidth={2}
                       dot={false}
                       name="Sleep Duration CV"
@@ -141,28 +152,26 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
                 </p>
                 <ResponsiveContainer width="100%" height={180}>
                   <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                     <XAxis
                       dataKey="day"
                       tickFormatter={(d) => d.slice(5)}
-                      fontSize={11}
-                      tick={{ fill: "oklch(0.708 0 0)" }}
+                      tick={AXIS_TICK}
                       interval="preserveStartEnd"
                     />
                     <YAxis
                       domain={[0, "auto"]}
-                      fontSize={11}
-                      tick={{ fill: "oklch(0.708 0 0)" }}
+                      tick={AXIS_TICK}
                       tickFormatter={(value) => Number(value).toFixed(2)}
                     />
                     <Tooltip
                       content={<VariabilityTooltipContent mode="clock" />}
                     />
-                    <Legend />
+                    <Legend formatter={legendLabel} />
                     <Line
                       type="monotone"
                       dataKey="bedtimeCV"
-                      stroke="#a78bfa"
+                      stroke={MOONLIGHT}
                       strokeWidth={2}
                       dot={false}
                       name="Bedtime variation"
@@ -171,7 +180,8 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
                     <Line
                       type="monotone"
                       dataKey="wakeCV"
-                      stroke="#22d3ee"
+                      stroke={MIST}
+                      strokeDasharray="6 4"
                       strokeWidth={2}
                       dot={false}
                       name="Wake-time variation"

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
 import { formatOuraSyncSummary } from "@/lib/oura/sync-summary";
 import type { BackfillCoverage } from "@/lib/oura/backfill-coverage";
 import { cn } from "@/lib/utils";
@@ -25,11 +26,11 @@ function readCoverage(value: unknown): BackfillCoverage | null {
 /** What the backfill left in place, dataset by dataset. */
 function CoverageList({ coverage }: { coverage: BackfillCoverage }) {
   return (
-    <dl className="divide-y divide-border rounded-lg border text-sm">
+    <dl className="divide-y border-y text-sm">
       {coverage.rows.map((row) => (
         <div
           key={row.dataset}
-          className="flex items-center justify-between gap-4 px-3 py-2"
+          className="flex items-center justify-between gap-4 py-2"
         >
           <dt>{row.label}</dt>
           <dd
@@ -44,7 +45,7 @@ function CoverageList({ coverage }: { coverage: BackfillCoverage }) {
           </dd>
         </div>
       ))}
-      <div className="flex items-center justify-between gap-4 px-3 py-2">
+      <div className="flex items-center justify-between gap-4 py-2">
         <dt>Pattern checks</dt>
         <dd className="text-muted-foreground tabular-nums">
           {coverage.checkedNights}/{coverage.nights} nights
@@ -97,16 +98,7 @@ export function BackfillButton() {
       <Button onClick={handleBackfill} disabled={loading}>
         {loading ? "Backfilling, about a minute…" : "Backfill Last 90 Days"}
       </Button>
-      {result && (
-        <p
-          className="text-sm text-muted-foreground"
-          role={result.kind === "error" ? "alert" : "status"}
-          aria-live={result.kind === "error" ? "assertive" : "polite"}
-          aria-atomic="true"
-        >
-          {result.message}
-        </p>
-      )}
+      {result && <FormMessage kind={result.kind}>{result.message}</FormMessage>}
       {coverage && <CoverageList coverage={coverage} />}
     </div>
   );
@@ -147,16 +139,7 @@ export function ManualSyncButton() {
       <Button variant="outline" onClick={handleSync} disabled={loading}>
         {loading ? "Syncing..." : "Sync Last 7 Days"}
       </Button>
-      {result && (
-        <p
-          className="text-sm text-muted-foreground"
-          role={result.kind === "error" ? "alert" : "status"}
-          aria-live={result.kind === "error" ? "assertive" : "polite"}
-          aria-atomic="true"
-        >
-          {result.message}
-        </p>
-      )}
+      {result && <FormMessage kind={result.kind}>{result.message}</FormMessage>}
     </div>
   );
 }

@@ -10,7 +10,7 @@ export function Panel({
   children,
 }: {
   id: string;
-  title: string;
+  title: React.ReactNode;
   description?: React.ReactNode;
   meta?: React.ReactNode;
   className?: string;
@@ -26,11 +26,11 @@ export function Panel({
           {title}
         </h2>
         {meta && (
-          <p className="text-xs text-muted-foreground tabular-nums">{meta}</p>
+          <div className="text-xs text-muted-foreground tabular-nums">{meta}</div>
         )}
       </div>
       {description && (
-        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+        <div className="mt-1 text-sm text-muted-foreground">{description}</div>
       )}
       <div className="mt-4">{children}</div>
     </section>

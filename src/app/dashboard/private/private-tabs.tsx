@@ -9,6 +9,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Stat } from "@/components/ui/stat";
 import { CardiovascularAgeChart } from "@/components/charts/cardiovascular-age-chart";
 import { Vo2MaxChart } from "@/components/charts/vo2-max-chart";
 import { CycleTemperatureChart } from "@/components/charts/cycle-temperature-chart";
@@ -192,7 +194,7 @@ function OverviewTab({
   sourceFreshness,
 }: PrivateTabsProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:space-y-8">
       <HealthSignalsCard signals={healthSignalsProp} />
 
       <SourceFreshnessCard data={sourceFreshness} />
@@ -203,30 +205,24 @@ function OverviewTab({
             <CardTitle>Personal Info</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               {personalInfo.age != null && (
-                <div>
-                  <span className="text-muted-foreground">Age</span>
-                  <p className="font-medium">{personalInfo.age}</p>
-                </div>
+                <Stat size="sm" label="Age" value={personalInfo.age} />
               )}
               {personalInfo.height != null && (
-                <div>
-                  <span className="text-muted-foreground">Height</span>
-                  <p className="font-medium">{personalInfo.height} cm</p>
-                </div>
+                <Stat size="sm" label="Height" value={`${personalInfo.height} cm`} />
               )}
               {personalInfo.weight != null && (
-                <div>
-                  <span className="text-muted-foreground">Weight</span>
-                  <p className="font-medium">{personalInfo.weight} kg</p>
-                </div>
+                <Stat size="sm" label="Weight" value={`${personalInfo.weight} kg`} />
               )}
               {personalInfo.biologicalSex && (
-                <div>
-                  <span className="text-muted-foreground">Biological Sex</span>
-                  <p className="font-medium capitalize">{personalInfo.biologicalSex}</p>
-                </div>
+                <Stat
+                  size="sm"
+                  label="Biological Sex"
+                  value={
+                    <span className="capitalize">{personalInfo.biologicalSex}</span>
+                  }
+                />
               )}
             </div>
           </CardContent>
@@ -332,7 +328,7 @@ function HeartRateTab({
   wearActivityHrData,
 }: PrivateTabsProps) {
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:space-y-8">
       {hourlyHrData.length > 0 && <HourlyHrChart data={hourlyHrData} />}
 
       <WearActivityChart
@@ -344,13 +340,9 @@ function HeartRateTab({
       {hrData.length > 0 && <RestingHrChart data={hrData} />}
 
       {hourlyHrData.length === 0 && hrData.length === 0 && wearActivityData.length === 0 && (
-        <Card>
-          <CardContent className="py-8">
-            <p className="text-sm text-muted-foreground text-center">
-              No heart rate data available. Sync your Oura data to see HR trends.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState title="No heart rate data available.">
+          Sync your Oura data to see HR trends.
+        </EmptyState>
       )}
     </div>
   );
@@ -440,7 +432,7 @@ function CycleTab({
       : "No temperature nights excluded";
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:space-y-8">
       <Card>
         <CardHeader>
           <CardTitle>Cycle Context</CardTitle>
@@ -450,40 +442,40 @@ function CycleTab({
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
             <div>
-              <dt className="text-muted-foreground">Result</dt>
-              <dd className="font-medium">
+              <dt className="text-xs text-muted-foreground">Result</dt>
+              <dd className="text-sm font-medium tabular-nums">
                 {getCycleEvaluationResultLabel(cycleEvaluation)}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Evaluation End</dt>
-              <dd className="font-medium">
+              <dt className="text-xs text-muted-foreground">Evaluation End</dt>
+              <dd className="text-sm font-medium tabular-nums">
                 {formatSourceDay(cycleEvaluation.checkedThroughDay)}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Temperature Through</dt>
-              <dd className="font-medium">
+              <dt className="text-xs text-muted-foreground">Temperature Through</dt>
+              <dd className="text-sm font-medium tabular-nums">
                 {cycleEvaluation.latestTemperatureDay
                   ? formatSourceDay(cycleEvaluation.latestTemperatureDay)
                   : "Not available"}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Eligible Run</dt>
-              <dd className="font-medium">{runCopy}</dd>
+              <dt className="text-xs text-muted-foreground">Eligible Run</dt>
+              <dd className="text-sm font-medium tabular-nums">{runCopy}</dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Eligible Nights</dt>
-              <dd className="font-medium">
+              <dt className="text-xs text-muted-foreground">Eligible Nights</dt>
+              <dd className="text-sm font-medium tabular-nums">
                 {cycleEvaluation.eligibleTemperatureDays}
               </dd>
             </div>
             <div>
-              <dt className="text-muted-foreground">Rest Mode</dt>
-              <dd className="font-medium">{restModeCopy}</dd>
+              <dt className="text-xs text-muted-foreground">Rest Mode</dt>
+              <dd className="text-sm font-medium tabular-nums">{restModeCopy}</dd>
             </div>
           </dl>
 
@@ -576,7 +568,7 @@ function FitnessTab({
   const hasVo2 = vo2Data.some((d) => d.vo2Max != null);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 md:space-y-8">
       {hasCvAge && (
         <CardiovascularAgeChart
           data={cvAgeData}

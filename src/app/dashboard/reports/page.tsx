@@ -2,8 +2,9 @@ export const dynamic = "force-dynamic";
 
 import { format, subDays } from "date-fns";
 import { generateReport } from "@/lib/reports/generate";
-import { ReportView } from "./report-view";
+import { PrintReportButton, ReportView } from "./report-view";
 import { getTodayET } from "@/lib/date-utils";
+import { PageHeader } from "@/components/page-header";
 
 interface Props {
   searchParams: Promise<{ start?: string; end?: string }>;
@@ -20,12 +21,12 @@ export default async function ReportsPage({ searchParams }: Props) {
 
   return (
     <div className="max-w-3xl mx-auto space-y-4 md:space-y-6">
-      <div>
-        <h1 className="text-2xl md:text-3xl font-bold print:hidden">Reports</h1>
-        <p className="text-muted-foreground text-sm mt-1 print:hidden">
-          Shareable summary for the selected date range
-        </p>
-      </div>
+      <PageHeader
+        title="Reports"
+        description="Shareable summary for the selected date range"
+        actions={<PrintReportButton />}
+        className="print:hidden"
+      />
       <ReportView data={data} />
     </div>
   );

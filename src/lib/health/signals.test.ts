@@ -16,6 +16,9 @@ const BASE: NightAnalysis = {
   wakeTimeMinutes: 450,
   baselineWakeMinutes: 452,
   wakeTimeZScore: -0.1,
+  onsetLatencyMinutes: 22,
+  baselineLatency: 9,
+  latencyZScore: 1.8,
   avgHrv: 27.4,
   baselineHrv: 30.2,
   hrvZScore: -0.7,
@@ -61,6 +64,13 @@ describe("buildSignals", () => {
       level: "outside",
     });
     expect(signals.wake).toMatchObject({ comparison: "About usual", level: "usual" });
+    expect(signals.latency).toMatchObject({
+      label: "Time to fall asleep",
+      value: "22m",
+      comparison: "13m longer than usual",
+      usualValue: "9m",
+      level: "unusual",
+    });
     expect(signals.hrv).toMatchObject({
       value: "27 ms",
       comparison: "3 ms below usual",

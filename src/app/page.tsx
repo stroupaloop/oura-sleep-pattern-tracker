@@ -46,8 +46,10 @@ export default async function Home() {
 
       <main className="mx-auto max-w-3xl space-y-8">
         <header className="space-y-2">
-          <span className="text-5xl">🦥</span>
-          <h1 className="text-2xl font-bold tracking-tight md:text-3xl">
+          <span aria-hidden="true" className="text-5xl">
+            🦥
+          </span>
+          <h1 className="text-2xl font-semibold tracking-tight md:text-3xl">
             Thinking of you
           </h1>
           <p className="text-sm text-muted-foreground">

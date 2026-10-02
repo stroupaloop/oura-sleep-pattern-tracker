@@ -17,7 +17,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Pill } from "@/components/ui/pill";
 import { ResearchTooltip } from "@/components/research-tooltip";
+import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
 interface WithinNightPoint {
   day: string;
@@ -35,6 +38,9 @@ interface WithinNightTooltipPayload {
   payload: WithinNightPoint;
 }
 
+/** Stage changes are neither HRV nor heart rate, so they draw in Moonlight. */
+const FRAGMENTATION_COLOR = "var(--foreground)";
+
 function WithinNightTooltipContent({
   active,
   payload,
@@ -47,21 +53,29 @@ function WithinNightTooltipContent({
   if (!active || !payload?.length) return null;
   const p = payload[0].payload as WithinNightPoint;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground">{p.day}</p>
+    <ChartTooltipFrame title={p.day}>
       {mode === "cv" && p.hrvCV != null && (
-        <p style={{ color: "#60a5fa" }}>HRV CV: {(p.hrvCV * 100).toFixed(1)}%</p>
+        <ChartTooltipRow
+          color={CHART.hrv}
+          label="HRV CV"
+          value={`${(p.hrvCV * 100).toFixed(1)}%`}
+        />
       )}
       {mode === "cv" && p.hrCV != null && (
-        <p style={{ color: "#a78bfa" }}>HR CV: {(p.hrCV * 100).toFixed(1)}%</p>
+        <ChartTooltipRow
+          color={CHART.heartRate}
+          label="HR CV"
+          value={`${(p.hrCV * 100).toFixed(1)}%`}
+        />
       )}
       {mode === "fragmentation" && p.fragmentation != null && (
-        <p style={{ color: "#f59e0b" }}>
-          Adjacent intervals with a stage change:{" "}
-          {(p.fragmentation * 100).toFixed(1)}%
-        </p>
+        <ChartTooltipRow
+          color={FRAGMENTATION_COLOR}
+          label="Adjacent intervals with a stage change"
+          value={`${(p.fragmentation * 100).toFixed(1)}%`}
+        />
       )}
-    </div>
+    </ChartTooltipFrame>
   );
 }
 
@@ -76,7 +90,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
   return (
     <Card>
       <CardHeader>
-        <div className="flex items-start justify-between">
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
           <div>
             <CardTitle className="flex items-center gap-2">
               Within-Night Variability
@@ -87,20 +101,22 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
               measures for each long-sleep period
             </CardDescription>
           </div>
-          <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-medium">
+          <Pill tone="neutral" className="shrink-0">
             Exploratory Signal
-          </span>
+          </Pill>
         </div>
       </CardHeader>
       <CardContent>
-        <div className="rounded-md bg-amber-500/5 border border-amber-500/20 px-3 py-2 mb-4 text-xs text-amber-200/80">
-          These app-derived CV and transition measures are exploratory and are
-          not the study-specific sleep-stage signal.
-        </div>
-        <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
-          <span className="font-medium text-blue-300">What to watch for:</span>{" "}
-          Higher values mean more within-night variation. Compare sustained
-          changes with your own history; there is no universal good range.
+        <div className="mb-4 max-w-prose space-y-2 text-sm text-muted-foreground">
+          <p>
+            These app-derived CV and transition measures are exploratory and
+            are not the study-specific sleep-stage signal.
+          </p>
+          <p>
+            <span className="font-medium text-foreground">What to watch for:</span>{" "}
+            Higher values mean more within-night variation. Compare sustained
+            changes with your own history; there is no universal good range.
+          </p>
         </div>
         {!hasCvData && !hasFragmentationData ? (
           <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
@@ -116,17 +132,15 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                 </p>
                 <ResponsiveContainer width="100%" height={190}>
                   <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                     <XAxis
                       dataKey="day"
                       tickFormatter={(d) => d.slice(5)}
-                      fontSize={11}
-                      tick={{ fill: "oklch(0.708 0 0)" }}
+                      tick={AXIS_TICK}
                       interval="preserveStartEnd"
                     />
                     <YAxis
-                      fontSize={11}
-                      tick={{ fill: "oklch(0.708 0 0)" }}
+                      tick={AXIS_TICK}
                       tickFormatter={(value) =>
                         `${(value * 100).toFixed(0)}%`
                       }
@@ -134,11 +148,11 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                     <Tooltip
                       content={<WithinNightTooltipContent mode="cv" />}
                     />
-                    <Legend />
+                    <Legend formatter={legendLabel} />
                     <Line
                       type="monotone"
                       dataKey="hrvCV"
-                      stroke="#60a5fa"
+                      stroke={CHART.hrv}
                       strokeWidth={2}
                       dot={false}
                       name="HRV CV"
@@ -147,7 +161,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                     <Line
                       type="monotone"
                       dataKey="hrCV"
-                      stroke="#a78bfa"
+                      stroke={CHART.heartRate}
                       strokeWidth={2}
                       dot={false}
                       name="HR CV"
@@ -164,18 +178,16 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                 </p>
                 <ResponsiveContainer width="100%" height={170}>
                   <LineChart data={data}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+                    <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                     <XAxis
                       dataKey="day"
                       tickFormatter={(d) => d.slice(5)}
-                      fontSize={11}
-                      tick={{ fill: "oklch(0.708 0 0)" }}
+                      tick={AXIS_TICK}
                       interval="preserveStartEnd"
                     />
                     <YAxis
                       domain={[0, "auto"]}
-                      fontSize={11}
-                      tick={{ fill: "oklch(0.708 0 0)" }}
+                      tick={AXIS_TICK}
                       tickFormatter={(value) =>
                         `${(value * 100).toFixed(0)}%`
                       }
@@ -188,7 +200,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                     <Line
                       type="monotone"
                       dataKey="fragmentation"
-                      stroke="#f59e0b"
+                      stroke={FRAGMENTATION_COLOR}
                       strokeWidth={2}
                       dot={false}
                       name="Sleep-stage changes"

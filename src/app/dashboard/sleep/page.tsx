@@ -20,6 +20,8 @@ import {
   currentDailyPatternFields,
   filterCurrentPatternAssessments,
 } from "@/lib/analysis/provenance";
+import { buildSignals } from "@/lib/health/signals";
+import { PageHeader } from "@/components/page-header";
 
 export default async function SleepPage() {
   const [
@@ -38,15 +40,9 @@ export default async function SleepPage() {
       .orderBy(desc(sleepPeriods.day))
       .limit(35),
     db.select().from(dailySleep).orderBy(desc(dailySleep.day)).limit(35),
+    // Whole rows: the comparisons with her usual need each baseline.
     db
-      .select({
-        day: dailyAnalysis.day,
-        hrvZScore: dailyAnalysis.hrvZScore,
-        sleepDurationZScore: dailyAnalysis.sleepDurationZScore,
-        efficiencyZScore: dailyAnalysis.efficiencyZScore,
-        isAnomaly: dailyAnalysis.isAnomaly,
-        anomalyDirection: dailyAnalysis.anomalyDirection,
-      })
+      .select()
       .from(dailyAnalysis)
       .orderBy(desc(dailyAnalysis.day))
       .limit(35),
@@ -130,30 +126,36 @@ export default async function SleepPage() {
       .map((s) => [s.day, s.score as number])
   );
 
+  const threshold = patternConfig.dailyAnomalyThreshold;
   const analysesRecord: Record<string, AnalysisData> = Object.fromEntries(
-    analyses.map((a) => [
-      a.day,
-      {
-        hrvZScore: a.hrvZScore ?? 0,
-        sleepDurationZScore: a.sleepDurationZScore ?? 0,
-        efficiencyZScore: a.efficiencyZScore ?? 0,
-        isAnomaly: a.isAnomaly === 1,
-        anomalyDirection: a.anomalyDirection,
-      },
-    ])
+    analyses.map((a) => {
+      const signals = buildSignals(a, threshold);
+      return [
+        a.day,
+        {
+          hrvZScore: a.hrvZScore ?? 0,
+          sleepDurationZScore: a.sleepDurationZScore ?? 0,
+          efficiencyZScore: a.efficiencyZScore ?? 0,
+          isAnomaly: a.isAnomaly === 1,
+          anomalyDirection: a.anomalyDirection,
+          sleep: signals.find((signal) => signal.key === "sleep") ?? null,
+          efficiency:
+            signals.find((signal) => signal.key === "efficiency") ?? null,
+          latency: signals.find((signal) => signal.key === "latency") ?? null,
+        },
+      ];
+    })
   );
 
   return (
     <div className="max-w-4xl mx-auto space-y-4 md:space-y-6">
-      <h1 className="text-2xl md:text-3xl font-bold">Sleep Details</h1>
-      <p className="text-muted-foreground">
-        5-week sleep overview
-      </p>
+      <PageHeader title="Sleep Details" description="5-week sleep overview" />
 
       <SleepCalendar
         nights={nightsRecord}
         scores={scoresRecord}
         analyses={analysesRecord}
+        threshold={threshold}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Popover } from "radix-ui";
 import { SmilePlus } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { FormMessage } from "@/components/ui/form-message";
 import {
   REACTION_EMOJIS,
   type ThoughtReaction,
@@ -81,7 +82,7 @@ export function ReactionBar({
       aria-label={`React with ${emoji}`}
       aria-pressed={mine === emoji}
       className={cn(
-        "size-9 rounded-md text-xl leading-none transition-colors hover:bg-muted",
+        "size-10 rounded-md text-xl leading-none transition-colors hover:bg-muted sm:size-9",
         mine === emoji && "bg-muted ring-1 ring-primary/40"
       )}
     >
@@ -105,7 +106,7 @@ export function ReactionBar({
           type="button"
           onClick={() => choose(mine)}
           aria-label={`Remove your ${mine} reaction`}
-          className="rounded-full bg-primary/15 px-1.5 py-0.5 text-sm leading-none ring-1 ring-primary/40"
+          className="inline-flex min-h-10 min-w-10 items-center justify-center rounded-full bg-primary/15 px-2 text-sm leading-none ring-1 ring-primary/40 sm:min-h-8 sm:min-w-8"
         >
           {mine}
         </button>
@@ -121,7 +122,7 @@ export function ReactionBar({
           <button
             type="button"
             aria-label="Add a reaction"
-            className="rounded-full p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="inline-flex size-10 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:size-8"
           >
             <SmilePlus className="size-3.5" />
           </button>
@@ -140,7 +141,7 @@ export function ReactionBar({
                 type="button"
                 onClick={() => setShowAll((value) => !value)}
                 aria-expanded={showAll}
-                className="ml-0.5 h-9 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="ml-0.5 h-10 rounded-md px-2 text-xs text-muted-foreground hover:bg-muted hover:text-foreground sm:h-9"
               >
                 {showAll ? "Less" : "More"}
               </button>
@@ -156,9 +157,9 @@ export function ReactionBar({
         </Popover.Portal>
       </Popover.Root>
       {failed && (
-        <span role="alert" className="text-xs text-red-400">
+        <FormMessage kind="error" className="text-xs">
           Reaction not saved
-        </span>
+        </FormMessage>
       )}
     </div>
   );

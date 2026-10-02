@@ -12,6 +12,9 @@ import {
   Legend,
   ComposedChart,
 } from "recharts";
+import { CHART, legendLabel } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
+import { formatNightLabel } from "@/lib/health/format";
 import {
   Card,
   CardContent,
@@ -21,11 +24,6 @@ import {
 } from "@/components/ui/card";
 import { computeCalendarRollingAverage } from "@/lib/dashboard-metrics";
 
-
-/** Series colors carry the swatches; the labels stay readable text. */
-function legendLabel(value: string) {
-  return <span className="text-xs text-muted-foreground">{value}</span>;
-}
 
 interface SleepData {
   day: string;
@@ -52,6 +50,8 @@ interface SleepTrendChartProps {
   data: SleepData[];
   analysisData?: AnalysisPoint[];
   windowDays?: number;
+  /** The detector's daily threshold, in standard deviations. */
+  threshold?: number;
 }
 
 interface MergedHrvPoint {
@@ -70,7 +70,11 @@ interface MergedHrPoint {
   isDeviation: boolean;
 }
 
-function mergeHrvData(data: SleepData[], analysis?: AnalysisPoint[]): MergedHrvPoint[] {
+function mergeHrvData(
+  data: SleepData[],
+  analysis: AnalysisPoint[] | undefined,
+  threshold: number
+): MergedHrvPoint[] {
   const analysisMap = new Map(analysis?.map((a) => [a.day, a]));
   const rollingAvg = computeCalendarRollingAverage(
     data.map((point) => ({
@@ -88,12 +92,16 @@ function mergeHrvData(data: SleepData[], analysis?: AnalysisPoint[]): MergedHrvP
       hrv: d.hrv,
       hrvAvg: rollingAvg[i],
       baselineHrv: baseline,
-      isDeviation: Math.abs(a?.hrvZScore ?? 0) >= 2,
+      isDeviation: Math.abs(a?.hrvZScore ?? 0) >= threshold,
     };
   });
 }
 
-function mergeHrData(data: SleepData[], analysis?: AnalysisPoint[]): MergedHrPoint[] {
+function mergeHrData(
+  data: SleepData[],
+  analysis: AnalysisPoint[] | undefined,
+  threshold: number
+): MergedHrPoint[] {
   const analysisMap = new Map(analysis?.map((a) => [a.day, a]));
   const rollingAvg = computeCalendarRollingAverage(
     data.map((point) => ({
@@ -111,7 +119,7 @@ function mergeHrData(data: SleepData[], analysis?: AnalysisPoint[]): MergedHrPoi
       hr: d.hr,
       hrAvg: rollingAvg[i],
       baselineHr: baseline,
-      isDeviation: Math.abs(a?.heartRateZScore ?? 0) >= 2,
+      isDeviation: Math.abs(a?.heartRateZScore ?? 0) >= threshold,
     };
   });
 }
@@ -134,21 +142,24 @@ function HrvTooltipContent({
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground">{p.day}</p>
-      <p style={{ color: "var(--series-hrv)" }}>HRV: {p.hrv?.toFixed(0) ?? "--"} ms</p>
+    <ChartTooltipFrame title={formatNightLabel(p.day, { weekday: false })}>
+      <ChartTooltipRow
+        color={CHART.hrv}
+        label="HRV"
+        value={`${p.hrv?.toFixed(0) ?? "--"} ms`}
+      />
       {p.hrvAvg != null && (
-        <p className="text-muted-foreground">7-day avg: {p.hrvAvg.toFixed(0)} ms</p>
+        <ChartTooltipRow muted label="7-day avg" value={`${p.hrvAvg.toFixed(0)} ms`} />
       )}
       {p.baselineHrv != null && (
-        <p className="text-muted-foreground">Baseline: {p.baselineHrv.toFixed(0)} ms</p>
+        <ChartTooltipRow muted label="Usual" value={`${p.baselineHrv.toFixed(0)} ms`} />
       )}
       {p.isDeviation && (
-        <p className="text-attention text-xs mt-1">
-          At least 2 standard deviations from baseline
+        <p className="mt-1 text-xs text-attention">
+          Unusual for the pattern checks
         </p>
       )}
-    </div>
+    </ChartTooltipFrame>
   );
 }
 
@@ -170,21 +181,24 @@ function HrTooltipContent({
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground">{p.day}</p>
-      <p style={{ color: "var(--series-hr)" }}>HR: {p.hr?.toFixed(0) ?? "--"} bpm</p>
+    <ChartTooltipFrame title={formatNightLabel(p.day, { weekday: false })}>
+      <ChartTooltipRow
+        color={CHART.heartRate}
+        label="Heart rate"
+        value={`${p.hr?.toFixed(0) ?? "--"} bpm`}
+      />
       {p.hrAvg != null && (
-        <p className="text-muted-foreground">7-day avg: {p.hrAvg.toFixed(0)} bpm</p>
+        <ChartTooltipRow muted label="7-day avg" value={`${p.hrAvg.toFixed(0)} bpm`} />
       )}
       {p.baselineHr != null && (
-        <p className="text-muted-foreground">Baseline: {p.baselineHr.toFixed(0)} bpm</p>
+        <ChartTooltipRow muted label="Usual" value={`${p.baselineHr.toFixed(0)} bpm`} />
       )}
       {p.isDeviation && (
-        <p className="text-attention text-xs mt-1">
-          At least 2 standard deviations from baseline
+        <p className="mt-1 text-xs text-attention">
+          Unusual for the pattern checks
         </p>
       )}
-    </div>
+    </ChartTooltipFrame>
   );
 }
 
@@ -207,9 +221,10 @@ export function SleepTrendChart({
   data,
   analysisData,
   windowDays = 30,
+  threshold = 1.5,
 }: SleepTrendChartProps) {
-  const hrvData = mergeHrvData(data, analysisData);
-  const hrData = mergeHrData(data, analysisData);
+  const hrvData = mergeHrvData(data, analysisData, threshold);
+  const hrData = mergeHrData(data, analysisData, threshold);
   const hasHrvBaseline =
     analysisData?.some((point) => point.baselineHrv != null) ?? false;
   const hasHrBaseline =

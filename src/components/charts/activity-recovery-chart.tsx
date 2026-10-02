@@ -20,6 +20,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ResearchTooltip } from "@/components/research-tooltip";
+import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
+import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
 interface ActivityPoint {
   day: string;
@@ -38,26 +40,45 @@ interface ActivityRecoveryChartProps {
   limitations?: string;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function ActivityTooltipContent({ active, payload }: { active?: boolean; payload?: any[] }) {
+interface ActivityTooltipProps {
+  active?: boolean;
+  payload?: ReadonlyArray<{ payload: ActivityPoint }>;
+}
+
+/** Neutral series only: the first in Moonlight, the next in Mist. */
+const MOONLIGHT = "var(--foreground)";
+const MIST = CHART.axis;
+
+function ActivityTooltipContent({ active, payload }: ActivityTooltipProps) {
   if (!active || !payload?.length) return null;
-  const p = payload[0].payload as ActivityPoint;
+  const p = payload[0].payload;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground">{p.day}</p>
-      {p.steps != null && <p style={{ color: "#3b82f6" }}>Steps: {p.steps.toLocaleString()}</p>}
-      {p.activeMinutes != null && <p style={{ color: "#34d399" }}>Active: {p.activeMinutes} min</p>}
-      {p.stressHigh != null && <p style={{ color: "#60a5fa" }}>Stress: {p.stressHigh} min</p>}
-      {p.recoveryHigh != null && <p style={{ color: "#a78bfa" }}>Recovery: {p.recoveryHigh} min</p>}
-      {p.resilienceLevel && <p className="text-muted-foreground">Resilience: {p.resilienceLevel}</p>}
+    <ChartTooltipFrame title={p.day}>
+      {p.steps != null && (
+        <ChartTooltipRow color={MIST} label="Steps" value={p.steps.toLocaleString()} />
+      )}
+      {p.activeMinutes != null && (
+        <ChartTooltipRow color={MOONLIGHT} label="Active" value={`${p.activeMinutes} min`} />
+      )}
+      {p.stressHigh != null && (
+        <ChartTooltipRow muted label="Stress" value={`${p.stressHigh} min`} />
+      )}
+      {p.recoveryHigh != null && (
+        <ChartTooltipRow muted label="Recovery" value={`${p.recoveryHigh} min`} />
+      )}
+      {p.resilienceLevel && (
+        <ChartTooltipRow muted label="Resilience" value={p.resilienceLevel} />
+      )}
       {(p.workoutCount ?? 0) > 0 && (
         <>
-          <p style={{ color: "#fb923c" }}>
-            Workouts: {p.workoutCount}
-            {p.workoutCalories != null
-              ? ` (${p.workoutCalories.toFixed(0)} cal)`
-              : ""}
-          </p>
+          <ChartTooltipRow
+            label="Workouts"
+            value={`${p.workoutCount}${
+              p.workoutCalories != null
+                ? ` (${p.workoutCalories.toFixed(0)} cal)`
+                : ""
+            }`}
+          />
           {p.workoutCalories == null && (
             <p className="text-muted-foreground text-xs">
               Calories unavailable
@@ -68,21 +89,25 @@ function ActivityTooltipContent({ active, payload }: { active?: boolean; payload
           )}
         </>
       )}
-    </div>
+    </ChartTooltipFrame>
   );
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function StressTooltipContent({ active, payload }: { active?: boolean; payload?: any[] }) {
+function StressTooltipContent({ active, payload }: ActivityTooltipProps) {
   if (!active || !payload?.length) return null;
-  const p = payload[0].payload as ActivityPoint;
+  const p = payload[0].payload;
   return (
-    <div className="rounded-lg border border-border bg-card px-3 py-2 text-sm shadow-md">
-      <p className="font-medium text-foreground">{p.day}</p>
-      {p.stressHigh != null && <p style={{ color: "#60a5fa" }}>Stress High: {p.stressHigh} min</p>}
-      {p.recoveryHigh != null && <p style={{ color: "#a78bfa" }}>Recovery High: {p.recoveryHigh} min</p>}
-      {p.resilienceLevel && <p className="text-muted-foreground">Resilience: {p.resilienceLevel}</p>}
-    </div>
+    <ChartTooltipFrame title={p.day}>
+      {p.stressHigh != null && (
+        <ChartTooltipRow color={MOONLIGHT} label="Stress High" value={`${p.stressHigh} min`} />
+      )}
+      {p.recoveryHigh != null && (
+        <ChartTooltipRow color={MIST} label="Recovery High" value={`${p.recoveryHigh} min`} />
+      )}
+      {p.resilienceLevel && (
+        <ChartTooltipRow muted label="Resilience" value={p.resilienceLevel} />
+      )}
+    </ChartTooltipFrame>
   );
 }
 
@@ -93,6 +118,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
   const hasStressRecoveryData = data.some(
     (point) => point.stressHigh != null || point.recoveryHigh != null
   );
+  const hasWorkouts = data.some((point) => (point.workoutCount ?? 0) > 0);
 
   return (
     <div className="space-y-4">
@@ -105,72 +131,79 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
           <CardDescription>Daily steps + active minutes</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="rounded-md bg-blue-500/5 border border-blue-500/20 px-3 py-2 mb-4 text-xs text-blue-200/80">
-            <span className="font-medium text-blue-300">What to watch for:</span>{" "}
+          <p className="mb-4 max-w-prose text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">What to watch for:</span>{" "}
             Compare sustained activity changes with your personal baseline. Research has linked specialized
             step-variability signals with later depressive symptoms, but a simple drop in steps or active minutes is
             not a validated episode predictor. Oura stress reflects physiological load, not necessarily emotional stress.
-          </div>
+          </p>
           {hasActivityData ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <ComposedChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
-              <XAxis
-                dataKey="day"
-                tickFormatter={(d) => d.slice(5)}
-                fontSize={11}
-                tick={{ fill: "oklch(0.708 0 0)" }}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                yAxisId="steps"
-                orientation="left"
-                fontSize={11}
-                tick={{ fill: "oklch(0.708 0 0)" }}
-                tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
-              />
-              <YAxis
-                yAxisId="mins"
-                orientation="right"
-                fontSize={11}
-                tick={{ fill: "oklch(0.708 0 0)" }}
-              />
-              <Tooltip content={<ActivityTooltipContent />} />
-              <Legend />
-              <Bar
-                yAxisId="steps"
-                dataKey="steps"
-                fill="#3b82f6"
-                fillOpacity={0.6}
-                name="Steps"
-              />
-              <Line
-                yAxisId="mins"
-                type="monotone"
-                dataKey="activeMinutes"
-                stroke="#34d399"
-                strokeWidth={2}
-                dot={false}
-                name="Active Min"
-                connectNulls={false}
-              />
-              {data.map((d, i) =>
-                (d.workoutCount ?? 0) > 0 ? (
-                  <ReferenceDot
-                    key={i}
-                    x={d.day}
-                    y={d.steps ?? 0}
-                    yAxisId="steps"
-                    r={4}
-                    fill="#fb923c"
-                    stroke="#fb923c"
-                    strokeWidth={1}
-                    fillOpacity={0.8}
+            <>
+              <ResponsiveContainer width="100%" height={240}>
+                <ComposedChart data={data}>
+                <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
+                <XAxis
+                  dataKey="day"
+                  tickFormatter={(d) => d.slice(5)}
+                  tick={AXIS_TICK}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  yAxisId="steps"
+                  orientation="left"
+                  tick={AXIS_TICK}
+                  tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
+                />
+                <YAxis
+                  yAxisId="mins"
+                  orientation="right"
+                  tick={AXIS_TICK}
+                />
+                <Tooltip content={<ActivityTooltipContent />} />
+                <Legend formatter={legendLabel} />
+                <Bar
+                  yAxisId="steps"
+                  dataKey="steps"
+                  fill={MIST}
+                  fillOpacity={0.4}
+                  name="Steps"
+                />
+                <Line
+                  yAxisId="mins"
+                  type="monotone"
+                  dataKey="activeMinutes"
+                  stroke={MOONLIGHT}
+                  strokeWidth={2}
+                  dot={false}
+                  name="Active Min"
+                  connectNulls={false}
+                />
+                {data.map((d, i) =>
+                  (d.workoutCount ?? 0) > 0 ? (
+                    <ReferenceDot
+                      key={i}
+                      x={d.day}
+                      y={d.steps ?? 0}
+                      yAxisId="steps"
+                      r={4}
+                      fill="var(--card)"
+                      stroke={MOONLIGHT}
+                      strokeWidth={1.5}
+                    />
+                  ) : null
+                )}
+                </ComposedChart>
+              </ResponsiveContainer>
+              {hasWorkouts && (
+                <p className="mt-1 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                  <span
+                    aria-hidden="true"
+                    className="size-2.5 rounded-full border-[1.5px] border-foreground"
                   />
-                ) : null
+                  Days with a workout
+                </p>
               )}
-              </ComposedChart>
-            </ResponsiveContainer>
+            </>
           ) : (
             <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
               No daily steps or active-minute values are available for this
@@ -192,25 +225,23 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
           {hasStressRecoveryData ? (
             <ResponsiveContainer width="100%" height={240}>
               <ComposedChart data={data}>
-              <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+              <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
               <XAxis
                 dataKey="day"
                 tickFormatter={(d) => d.slice(5)}
-                fontSize={11}
-                tick={{ fill: "oklch(0.708 0 0)" }}
+                tick={AXIS_TICK}
                 interval="preserveStartEnd"
               />
               <YAxis
-                fontSize={11}
-                tick={{ fill: "oklch(0.708 0 0)" }}
+                tick={AXIS_TICK}
                 tickFormatter={(value) => `${value}m`}
               />
               <Tooltip content={<StressTooltipContent />} />
-              <Legend />
+              <Legend formatter={legendLabel} />
               <Line
                 type="monotone"
                 dataKey="stressHigh"
-                stroke="#60a5fa"
+                stroke={MOONLIGHT}
                 strokeWidth={2}
                 dot={false}
                 name="High stress (min)"
@@ -219,7 +250,8 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
               <Line
                 type="monotone"
                 dataKey="recoveryHigh"
-                stroke="#a78bfa"
+                stroke={MIST}
+                strokeDasharray="6 4"
                 strokeWidth={2}
                 dot={false}
                 name="Restorative (min)"

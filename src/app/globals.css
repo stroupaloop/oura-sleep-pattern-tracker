@@ -8,7 +8,7 @@
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-atkinson), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-atkinson-mono), ui-monospace, monospace;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
   --color-attention: var(--attention);
   --color-alert: var(--alert);
   --color-watch: var(--watch);
@@ -21,6 +21,13 @@
   --color-series-hr: var(--series-hr);
   --color-corridor: var(--corridor);
   --color-faint-foreground: var(--faint-foreground);
+  --color-level-0: var(--level-0);
+  --color-level-1: var(--level-1);
+  --color-level-2: var(--level-2);
+  --color-level-3: var(--level-3);
+  --color-level-4: var(--level-4);
+  --color-level-5: var(--level-5);
+  --color-level-6: var(--level-6);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -96,7 +103,7 @@
   /* Thought-frequency heatmap: single-hue sequential ramp.
      Validated against the dark surface (the app forces dark mode) for
      lightness monotonicity, step gaps, hue spread, and contrast. */
-  --thought-empty: oklch(0.24 0 0);
+  --thought-empty: oklch(0.24 0.014 268);
   --thought-1: oklch(0.40 0.09 15);
   --thought-2: oklch(0.50 0.13 15);
   --thought-3: oklch(0.60 0.16 15);
@@ -123,7 +130,8 @@
   --faint-foreground: oklch(0.62 0.02 268);
   --accent: oklch(0.27 0.02 268);
   --accent-foreground: oklch(0.96 0.006 268);
-  --destructive: oklch(0.704 0.191 22.216);
+  /* Ember: destructive actions and form errors share the alert red. */
+  --destructive: oklch(0.72 0.16 25);
   --border: oklch(0.85 0.03 268 / 11%);
   --input: oklch(0.85 0.03 268 / 16%);
   --ring: oklch(0.76 0.12 5);
@@ -140,6 +148,18 @@
   --stage-awake: oklch(0.88 0.04 80);
   --series-hrv: oklch(0.78 0.1 175);
   --series-hr: oklch(0.72 0.14 30);
+
+  /* An ordinal ramp in the night-ink family for ordered scales (mood,
+     activity): lightness carries the order, so it reads under every color
+     vision and judges nothing. level-0 is 3:1 on a panel, the floor for
+     non-text marks. Never set text on these. */
+  --level-0: oklch(0.5 0.03 268);
+  --level-1: oklch(0.57 0.03 268);
+  --level-2: oklch(0.64 0.025 268);
+  --level-3: oklch(0.71 0.02 268);
+  --level-4: oklch(0.78 0.02 268);
+  --level-5: oklch(0.85 0.015 268);
+  --level-6: oklch(0.92 0.01 268);
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
@@ -189,6 +209,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Recharts draws its hover cursor in a bright default gray. */
+.recharts-tooltip-cursor {
+  fill: color-mix(in oklch, var(--muted) 70%, transparent);
+  stroke: var(--border);
+}
+
 .recharts-default-tooltip {
   background-color: var(--popover) !important;
   border-color: var(--border) !important;
@@ -201,4 +227,29 @@
 
 .recharts-tooltip-item {
   color: var(--muted-foreground) !important;
+}
+/* Print (Reports): paper, not night ink. */
+@media print {
+  .dark {
+    --background: oklch(1 0 0);
+    --foreground: oklch(0.2 0 0);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.2 0 0);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.2 0 0);
+    --muted: oklch(0.95 0 0);
+    --muted-foreground: oklch(0.38 0 0);
+    --faint-foreground: oklch(0.45 0 0);
+    --border: oklch(0.82 0 0);
+    --corridor: oklch(0.9 0 0);
+    /* State and series hues darkened to read on paper. */
+    --primary: oklch(0.5 0.15 5);
+    --attention: oklch(0.55 0.13 70);
+    --alert: oklch(0.5 0.18 25);
+    --destructive: oklch(0.5 0.18 25);
+    --watch: oklch(0.48 0.12 245);
+    --calm: oklch(0.47 0.1 165);
+    --series-hrv: oklch(0.5 0.1 175);
+    --series-hr: oklch(0.55 0.15 30);
+  }
 }

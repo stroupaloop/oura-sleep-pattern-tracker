@@ -3,7 +3,7 @@ import { CircleSlash } from "lucide-react";
 import type { DataAvailability } from "@/lib/analysis/confidence";
 import type { OuraScope } from "@/lib/oura/contracts";
 import { formatOuraScopeList } from "@/lib/oura/scope-labels";
-import { Panel } from "@/components/health/panel";
+import { Panel } from "@/components/ui/panel";
 
 interface AvailabilityRowProps {
   label: string;

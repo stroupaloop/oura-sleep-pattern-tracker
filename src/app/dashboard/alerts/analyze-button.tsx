@@ -2,11 +2,15 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
 import { useRouter } from "next/navigation";
 
 export function AnalyzeButton() {
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const [status, setStatus] = useState<{
+    kind: "status" | "error";
+    text: string;
+  } | null>(null);
   const router = useRouter();
 
   async function handleAnalyze() {
@@ -16,15 +20,19 @@ export function AnalyzeButton() {
       const res = await fetch("/api/oura/reprocess", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setStatus(`Updated ${data.daysProcessed} historical days.`);
+        setStatus({
+          kind: "status",
+          text: `Updated ${data.daysProcessed} historical days.`,
+        });
         router.refresh();
       } else {
-        setStatus(`Update failed: ${data.error}`);
+        setStatus({ kind: "error", text: `Update failed: ${data.error}` });
       }
     } catch (e) {
-      setStatus(
-        `Update failed: ${e instanceof Error ? e.message : String(e)}`
-      );
+      setStatus({
+        kind: "error",
+        text: `Update failed: ${e instanceof Error ? e.message : String(e)}`,
+      });
     } finally {
       setLoading(false);
     }
@@ -35,11 +43,9 @@ export function AnalyzeButton() {
       <Button onClick={handleAnalyze} disabled={loading}>
         {loading ? "Updating history..." : "Update all history"}
       </Button>
-      {status && (
-        <p className="text-xs text-muted-foreground" role="status">
-          {status}
-        </p>
-      )}
+      <FormMessage kind={status?.kind} className="text-xs tabular-nums">
+        {status?.text}
+      </FormMessage>
     </div>
   );
 }

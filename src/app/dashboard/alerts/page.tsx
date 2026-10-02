@@ -1,5 +1,7 @@
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
+import { ChevronDown, CircleCheck, History } from "lucide-react";
 import { db } from "@/lib/db";
 import {
   dailyAnalysis,
@@ -7,13 +9,6 @@ import {
   episodeAssessments,
 } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { AnalyzeButton } from "./analyze-button";
 import { EpisodeTimeline } from "@/components/charts/episode-timeline";
 import { RESEARCH_REFERENCES } from "@/lib/research/references";
@@ -33,24 +28,20 @@ import {
   evaluateRetrospectiveAgreement,
   type RetrospectiveAgreement,
 } from "@/lib/analysis/retrospective";
+import { PageHeader } from "@/components/page-header";
+import { PatternDirectionLabel } from "@/components/pattern-direction-label";
+import { Callout } from "@/components/ui/callout";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Panel } from "@/components/ui/panel";
+import { Pill } from "@/components/ui/pill";
+import { Stat } from "@/components/ui/stat";
+import { describePatternDirection } from "@/lib/design/pattern-direction";
+import { tierColor, tierLabel, tierTone } from "@/lib/design/pattern-tiers";
+import { formatNightLabel } from "@/lib/health/format";
+import { getTodayET } from "@/lib/date-utils";
 
-const tierConfig = {
-  alert: {
-    border: "border-l-red-500",
-    badge: "bg-red-500/20 text-red-300",
-    label: "Alert",
-  },
-  warning: {
-    border: "border-l-amber-500",
-    badge: "bg-amber-500/20 text-amber-300",
-    label: "Warning",
-  },
-  watch: {
-    border: "border-l-blue-500",
-    badge: "bg-blue-500/20 text-blue-300",
-    label: "Watch",
-  },
-} as const;
+const RESEARCH_LINK =
+  "text-primary underline decoration-primary/40 hover:decoration-primary";
 
 function EvidenceBar({
   value,
@@ -60,17 +51,11 @@ function EvidenceBar({
   tier: string;
 }) {
   const pct = Math.min(100, (value / 10) * 100);
-  const color =
-    tier === "alert"
-      ? "bg-red-500"
-      : tier === "warning"
-        ? "bg-amber-500"
-        : "bg-blue-500";
   return (
-    <div className="w-full bg-muted rounded-full h-2">
+    <div aria-hidden="true" className="h-2 w-full rounded-full bg-muted">
       <div
-        className={`h-2 rounded-full ${color}`}
-        style={{ width: `${pct}%` }}
+        className="h-2 rounded-full"
+        style={{ width: `${pct}%`, backgroundColor: tierColor(tier) }}
       />
     </div>
   );
@@ -94,90 +79,81 @@ function formatEvaluatedAt(timestamp: number | null): string | null {
   }).format(new Date(timestamp * 1000));
 }
 
+/** Both sides of the night, with the year when it is not this one. */
+function flaggedNightLabel(day: string, currentYear: string): string {
+  const label = formatNightLabel(day, { weekday: false });
+  const year = day.slice(0, 4);
+  return year === currentYear ? label : `${label}, ${year}`;
+}
+
 function RetrospectiveAgreementCard({
   agreement,
 }: {
   agreement: RetrospectiveAgreement;
 }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Retrospective Agreement</CardTitle>
-        <CardDescription>
-          Compares wearable-only flags with separately logged episode-state
-          check-ins. This is not clinical accuracy.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {agreement.explicitLabelDays === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            No episode-state check-ins are available for comparison. Optional
-            check-ins remain separate from scoring.
+    <Panel
+      id="retrospective-agreement"
+      title="Retrospective Agreement"
+      description="Compares wearable-only flags with separately logged episode-state check-ins. This is not clinical accuracy."
+    >
+      {agreement.explicitLabelDays === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No episode-state check-ins are available for comparison. Optional
+          check-ins remain separate from scoring.
+        </p>
+      ) : agreement.labelledEvents === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {agreement.explicitLabelDays} day
+          {agreement.explicitLabelDays === 1 ? " has" : "s have"} an explicit
+          episode-state check-in, but none form a depressive, hypomanic,
+          manic, or mixed event for comparison.
+        </p>
+      ) : agreement.evaluableEvents === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          {agreement.labelledEvents} labelled event
+          {agreement.labelledEvents === 1 ? "" : "s"}, but none yet have the
+          required {agreement.minimumCoverageDays} assessed days from the{" "}
+          {agreement.lookbackDays} days before through the first labelled day.
+        </p>
+      ) : (
+        <>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <Stat
+              className="flex flex-col justify-between gap-1"
+              label="Events with a matching flag"
+              value={`${agreement.eventsWithMatchingFlag}/${agreement.evaluableEvents}`}
+            />
+            <Stat
+              className="flex flex-col justify-between gap-1"
+              label="Labelled events without a matching flag"
+              value={agreement.missedEvents}
+            />
+            <Stat
+              className="flex flex-col justify-between gap-1"
+              label="Days with an explicit state check-in"
+              value={agreement.explicitLabelDays}
+            />
+            <Stat
+              className="flex flex-col justify-between gap-1"
+              label="Median lead time among matches"
+              value={
+                agreement.medianLeadDays == null
+                  ? "—"
+                  : `${agreement.medianLeadDays}d`
+              }
+            />
+          </div>
+          <p className="mt-4 text-xs text-muted-foreground">
+            A non-None event is evaluable with at least{" "}
+            {agreement.minimumCoverageDays} wearable assessment days from the{" "}
+            {agreement.lookbackDays} days before through its first labelled
+            day. A match requires a same-direction flag in that inclusive
+            span; lead time is reported only among matched events.
           </p>
-        ) : agreement.labelledEvents === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {agreement.explicitLabelDays} day
-            {agreement.explicitLabelDays === 1 ? " has" : "s have"} an explicit
-            episode-state check-in, but none form a depressive, hypomanic,
-            manic, or mixed event for comparison.
-          </p>
-        ) : agreement.evaluableEvents === 0 ? (
-          <p className="text-sm text-muted-foreground">
-            {agreement.labelledEvents} labelled event
-            {agreement.labelledEvents === 1 ? "" : "s"}, but none yet have the
-            required {agreement.minimumCoverageDays} assessed days from the{" "}
-            {agreement.lookbackDays} days before through the first labelled day.
-          </p>
-        ) : (
-          <>
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <div>
-                <p className="text-xl font-semibold">
-                  {agreement.eventsWithMatchingFlag}/
-                  {agreement.evaluableEvents}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  events with a matching flag
-                </p>
-              </div>
-              <div>
-                <p className="text-xl font-semibold">
-                  {agreement.missedEvents}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  labelled events without a matching flag
-                </p>
-              </div>
-              <div>
-                <p className="text-xl font-semibold">
-                  {agreement.explicitLabelDays}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  days with an explicit state check-in
-                </p>
-              </div>
-              <div>
-                <p className="text-xl font-semibold">
-                  {agreement.medianLeadDays == null
-                    ? "—"
-                    : `${agreement.medianLeadDays}d`}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  median lead time among matches
-                </p>
-              </div>
-            </div>
-            <p className="mt-4 text-xs text-muted-foreground">
-              A non-None event is evaluable with at least{" "}
-              {agreement.minimumCoverageDays} wearable assessment days from the{" "}
-              {agreement.lookbackDays} days before through its first labelled
-              day. A match requires a same-direction flag in that inclusive
-              span; lead time is reported only among matched events.
-            </p>
-          </>
-        )}
-      </CardContent>
-    </Card>
+        </>
+      )}
+    </Panel>
   );
 }
 
@@ -199,23 +175,19 @@ function ResearchContextCard({
     <div className="space-y-4">
       <p className="text-sm font-medium">
         {consecutiveDays != null ? `${consecutiveDays}-day` : "Multi-day"}{" "}
-        {direction === "hyper"
-          ? "higher-activation"
-          : direction === "hypo"
-            ? "lower-activation"
-            : "mixed"}{" "}
-        pattern flag from the available data
+        {describePatternDirection(direction).adjective.toLowerCase()} pattern
+        flag from the available data
       </p>
 
       {ctx.whatWeDetected.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+          <h3 className="mb-1 text-xs font-medium text-muted-foreground">
             What we detected
-          </p>
+          </h3>
           <ul className="text-sm space-y-1">
             {ctx.whatWeDetected.map((item, i) => (
               <li key={i} className="flex gap-2">
-                <span className="text-muted-foreground">&bull;</span>
+                <span className="text-muted-foreground">•</span>
                 <span>{item}</span>
               </li>
             ))}
@@ -225,30 +197,30 @@ function ResearchContextCard({
 
       {topRef && (
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+          <h3 className="mb-1 text-xs font-medium text-muted-foreground">
             Why this matters
-          </p>
+          </h3>
           <p className="text-sm">{topRef.finding}</p>
           <a
             href={topRef.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-blue-400 hover:text-blue-300 mt-1 inline-block"
+            className={`mt-1 inline-block text-xs ${RESEARCH_LINK}`}
           >
-            &mdash; {topRef.authors}, {topRef.journal}, {topRef.year} &rarr;
+            — {topRef.authors}, {topRef.journal}, {topRef.year} →
           </a>
         </div>
       )}
 
       {ctx.whatYouCanDo.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
+          <h3 className="mb-1 text-xs font-medium text-muted-foreground">
             What you can do
-          </p>
+          </h3>
           <ul className="text-sm space-y-1">
             {ctx.whatYouCanDo.map((item, i) => (
               <li key={i} className="flex gap-2">
-                <span className="text-muted-foreground">&bull;</span>
+                <span className="text-muted-foreground">•</span>
                 <span>{item}</span>
               </li>
             ))}
@@ -309,6 +281,7 @@ export default async function AlertsPage() {
   const latestEvaluatedAt = formatEvaluatedAt(
     latestAssessment?.evaluatedAt ?? null
   );
+  const currentYear = getTodayET().slice(0, 4);
 
   const timelineEpisodes = currentAssessments.map((e) => ({
     day: e.day,
@@ -324,34 +297,46 @@ export default async function AlertsPage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold">Pattern Alerts</h1>
-          <p className="text-muted-foreground">
+      <PageHeader
+        title="Pattern Alerts"
+        description={
+          <>
             {currentAssessments.length} current days analyzed, {episodes.length}{" "}
             in-app pattern flag
             {episodes.length !== 1 ? "s" : ""}
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {profileLabel(bipolarType)} heuristic · config v{config.version} ·{" "}
-            {PATTERN_SIGNAL_MODE} · algorithm {PATTERN_ALGORITHM_VERSION}
-            {latestEvaluatedAt ? ` · updated ${latestEvaluatedAt}` : ""}
-          </p>
-        </div>
-        <AnalyzeButton />
-      </div>
+            <span className="mt-1 block text-xs">
+              {profileLabel(bipolarType)} heuristic · config v{config.version} ·{" "}
+              {PATTERN_SIGNAL_MODE} · algorithm {PATTERN_ALGORITHM_VERSION}
+              {latestEvaluatedAt ? ` · updated ${latestEvaluatedAt}` : ""}
+            </span>
+          </>
+        }
+        actions={<AnalyzeButton />}
+      />
 
       {staleAssessmentCount > 0 && (
-        <Card className="border-amber-500/40">
-          <CardContent className="pt-6">
-            <p className="text-sm text-amber-200">
-              {staleAssessmentCount} historical assessment
-              {staleAssessmentCount === 1 ? " uses" : "s use"} an older
-              profile, configuration, or algorithm. They are excluded here
-              until &quot;Update all history&quot; recomputes the full history.
-            </p>
-          </CardContent>
-        </Card>
+        <Callout
+          tone="attention"
+          icon={History}
+          title={`${staleAssessmentCount} older result${
+            staleAssessmentCount === 1 ? " is" : "s are"
+          } hidden`}
+        >
+          <p>
+            {staleAssessmentCount === 1 ? "It was" : "They were"} computed by
+            an older version of the pattern checks, or with an earlier profile
+            or configuration, so {staleAssessmentCount === 1 ? "it stays" : "they stay"}{" "}
+            hidden here until recomputed.{" "}
+            <Link
+              href="/dashboard/settings"
+              className="font-medium text-foreground underline decoration-border hover:decoration-current"
+            >
+              Settings → Backfill
+            </Link>{" "}
+            recomputes all history, as does “Update all history”
+            above.
+          </p>
+        </Callout>
       )}
 
       {currentAssessments.length > 0 && (
@@ -369,26 +354,19 @@ export default async function AlertsPage() {
       <RetrospectiveAgreementCard agreement={agreement} />
 
       {allEpisodes.length === 0 && allAnalysis.length === 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-muted-foreground">
-              No analysis has been run yet. Click &quot;Update all
-              history&quot; to analyze your available wearable data for
-              patterns.
-            </p>
-          </CardContent>
-        </Card>
+        <EmptyState title="No analysis has been run yet">
+          Click “Update all history” to analyze your available
+          wearable data for patterns.
+        </EmptyState>
       )}
 
       {episodes.length === 0 && currentAssessments.length > 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="font-medium">
-              No sustained pattern flags from the available data. This is not a
-              clinical assessment.
-            </p>
-          </CardContent>
-        </Card>
+        <Callout
+          icon={CircleCheck}
+          title="No sustained pattern flags from the available data"
+        >
+          This is not a clinical assessment.
+        </Callout>
       )}
 
       {episodes.map((storedEpisode) => {
@@ -396,8 +374,6 @@ export default async function AlertsPage() {
           ...storedEpisode,
           confidence: normalizeEvidenceScore(storedEpisode.confidence),
         };
-        const cfg =
-          tierConfig[ep.tier as keyof typeof tierConfig] ?? tierConfig.watch;
         let drivers: string[] = [];
         try {
           drivers = JSON.parse(ep.primaryDrivers ?? "[]");
@@ -415,33 +391,23 @@ export default async function AlertsPage() {
         }
 
         return (
-          <Card key={ep.day} className={`border-l-4 ${cfg.border}`}>
-            <CardHeader className="pb-2">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <CardTitle className="text-lg">{ep.day}</CardTitle>
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {ep.direction && (
-                    <span
-                      className={`text-xs font-medium px-2 py-1 rounded ${
-                        ep.direction === "hypo"
-                          ? "bg-blue-500/20 text-blue-300"
-                          : "bg-amber-500/20 text-amber-300"
-                      }`}
-                    >
-                      {ep.direction === "hypo"
-                        ? "Lower-activation pattern"
-                        : "Higher-activation pattern"}
-                    </span>
-                  )}
-                  <span
-                    className={`text-xs font-bold px-2 py-1 rounded ${cfg.badge}`}
-                  >
-                    {cfg.label}
-                  </span>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <Panel
+            key={ep.day}
+            id={`flag-${ep.day}`}
+            title={flaggedNightLabel(ep.day, currentYear)}
+            meta={
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                {ep.direction && (
+                  <PatternDirectionLabel
+                    direction={ep.direction}
+                    className="font-medium text-foreground"
+                  />
+                )}
+                <Pill tone={tierTone(ep.tier)}>{tierLabel(ep.tier)}</Pill>
+              </span>
+            }
+          >
+            <div className="space-y-4">
               {researchCtx ? (
                 <ResearchContextCard
                   ctx={researchCtx}
@@ -450,18 +416,18 @@ export default async function AlertsPage() {
                 />
               ) : (
                 <>
-                  <CardDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground tabular-nums">
                     <span>Evidence score: {ep.confidence?.toFixed(1)}/10</span>
                     {ep.consecutiveConcerningDays != null && (
                       <span>
-                        &middot; {ep.consecutiveConcerningDays} consecutive day
+                        · {ep.consecutiveConcerningDays} consecutive day
                         {ep.consecutiveConcerningDays !== 1 ? "s" : ""}
                       </span>
                     )}
                     {ep.bestWindowDays && (
-                      <span>&middot; {ep.bestWindowDays}-day window</span>
+                      <span>· {ep.bestWindowDays}-day window</span>
                     )}
-                  </CardDescription>
+                  </p>
                   <EvidenceBar
                     value={ep.confidence ?? 0}
                     tier={ep.tier}
@@ -481,11 +447,15 @@ export default async function AlertsPage() {
                 </>
               )}
 
-              <details className="text-xs">
-                <summary className="text-muted-foreground cursor-pointer">
+              <details className="group text-xs">
+                <summary className="flex min-h-10 w-fit cursor-pointer list-none items-center gap-1.5 text-muted-foreground transition-colors hover:text-foreground sm:min-h-8 [&::-webkit-details-marker]:hidden">
                   Technical details
+                  <ChevronDown
+                    aria-hidden="true"
+                    className="size-3.5 transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
+                  />
                 </summary>
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground">
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2 text-muted-foreground tabular-nums">
                   <div>Evidence score: {ep.confidence?.toFixed(1)}/10</div>
                   {ep.bestWindowDays && (
                     <div>Window: {ep.bestWindowDays} days</div>
@@ -512,12 +482,12 @@ export default async function AlertsPage() {
                   )}
                   {ep.temperatureMean != null && (
                     <div>
-                      Temp mean: {ep.temperatureMean.toFixed(2)}&deg;
+                      Temp mean: {ep.temperatureMean.toFixed(2)}°
                       {ep.temperatureElevated === 1 && " (elevated)"}
                     </div>
                   )}
                   {drivers.length > 0 && (
-                    <div className="col-span-2">
+                    <div className="sm:col-span-2">
                       Drivers: {drivers.join(", ")}
                     </div>
                   )}
@@ -525,7 +495,7 @@ export default async function AlertsPage() {
               </details>
 
               {(ep.confounderLikelihood ?? 0) > 0.2 && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground tabular-nums">
                   Bounce-back index:{" "}
                   {((ep.confounderLikelihood ?? 0) * 100).toFixed(0)}%
                 </p>
@@ -535,40 +505,35 @@ export default async function AlertsPage() {
                 This tool tracks patterns for personal awareness. It is not a
                 medical device and does not provide diagnoses.
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
         );
       })}
 
       {episodes.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Research References</CardTitle>
-            <CardDescription>
-              Context only; these studies do not validate this app&apos;s
-              algorithm.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {RESEARCH_REFERENCES.map((r) => (
-                <div key={r.id} className="text-xs space-y-0.5">
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-400 hover:text-blue-300 font-medium"
-                  >
-                    {r.title}
-                  </a>
-                  <p className="text-muted-foreground">
-                    {r.authors} &middot; {r.journal}, {r.year}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+        <Panel
+          id="research-references"
+          title="Research References"
+          description="Context only; these studies do not validate this app's algorithm."
+        >
+          <ul className="space-y-3">
+            {RESEARCH_REFERENCES.map((r) => (
+              <li key={r.id} className="space-y-0.5">
+                <a
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={`text-sm font-medium ${RESEARCH_LINK}`}
+                >
+                  {r.title}
+                </a>
+                <p className="text-xs text-muted-foreground">
+                  {r.authors} · {r.journal}, {r.year}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </Panel>
       )}
     </div>
   );

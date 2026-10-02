@@ -4,7 +4,7 @@ import { buildNightWindow } from "@/lib/health/night-window";
 import type { Signal } from "@/lib/health/signals";
 import { MissingNightNotice } from "./missing-night-notice";
 import { NightWindowChart } from "./night-window-chart";
-import { PatternStatus } from "./pattern-status";
+import { PatternStatus } from "@/components/pattern-status";
 import { scoreBand } from "./score-panel";
 import { SignalList } from "./signal-list";
 

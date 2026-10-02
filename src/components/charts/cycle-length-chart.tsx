@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { AXIS_TICK } from "./chart-theme";
 
 interface CycleLengthPoint {
   cycleNumber: number;
@@ -44,33 +45,23 @@ export function CycleLengthChart({ data }: CycleLengthChartProps) {
       <CardContent>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={filtered}>
-            <CartesianGrid strokeDasharray="3 3" stroke="oklch(1 0 0 / 8%)" />
+            <CartesianGrid strokeDasharray="3 3" />
             <XAxis
               dataKey="cycleNumber"
-              fontSize={12}
-              tick={{ fill: "oklch(0.708 0 0)" }}
+              tick={AXIS_TICK}
               tickFormatter={(v) => `Shift #${v}`}
             />
-            <YAxis
-              fontSize={12}
-              tick={{ fill: "oklch(0.708 0 0)" }}
-              tickFormatter={(v) => `${v}d`}
-            />
+            <YAxis tick={AXIS_TICK} tickFormatter={(v) => `${v}d`} />
             <Tooltip
-              contentStyle={{
-                backgroundColor: "oklch(0.205 0 0)",
-                borderColor: "oklch(1 0 0 / 10%)",
-                borderRadius: "0.5rem",
-                color: "oklch(0.985 0 0)",
-              }}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any) => [`${Number(value)} days`, "Shift Interval"]}
               labelFormatter={(label) => `Shift #${label}`}
             />
             <Bar
               dataKey="interShiftDays"
-              fill="oklch(0.65 0.2 350)"
-              fillOpacity={0.8}
+              fill="var(--foreground)"
+              fillOpacity={0.7}
+              maxBarSize={48}
               name="Shift Interval"
             />
           </BarChart>
