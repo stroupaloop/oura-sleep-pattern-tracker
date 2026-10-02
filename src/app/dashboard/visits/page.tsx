@@ -71,7 +71,7 @@ export default async function VisitsPage() {
             <tbody>
               {rows.map((row) => (
                 <tr key={row.id} className="border-t">
-                  <td className="px-3 py-2 whitespace-nowrap">
+                  <td className="px-3 py-2 whitespace-nowrap tabular-nums">
                     {formatWhen(row.createdAt)}
                   </td>
                   <td className="px-3 py-2">

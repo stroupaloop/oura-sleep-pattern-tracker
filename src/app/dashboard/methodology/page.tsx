@@ -1,10 +1,12 @@
 import Link from "next/link";
+import { Info } from "lucide-react";
 import {
   RESEARCH_REFERENCES,
   OURA_LIMITATIONS,
   METRIC_LIMITATIONS,
 } from "@/lib/research/references";
 import { PageHeader } from "@/components/page-header";
+import { Callout } from "@/components/ui/callout";
 
 export default function MethodologyPage() {
   return (
@@ -126,7 +128,7 @@ export default function MethodologyPage() {
                 {ref.title}
               </a>
               <p className="text-xs text-muted-foreground">
-                {ref.authors} &middot; {ref.journal} ({ref.year})
+                {ref.authors} · {ref.journal} ({ref.year})
               </p>
               <p className="text-xs text-muted-foreground">{ref.finding}</p>
             </div>
@@ -174,10 +176,8 @@ export default function MethodologyPage() {
             <div className="space-y-2">
               {Object.entries(METRIC_LIMITATIONS).map(([metric, note]) => (
                 <div key={metric} className="text-xs">
-                  <span className="font-mono text-muted-foreground">
-                    {metric}
-                  </span>
-                  : {note}
+                  <span className="font-medium">{metric}</span>
+                  <span className="text-muted-foreground">: {note}</span>
                 </div>
               ))}
             </div>
@@ -242,20 +242,20 @@ export default function MethodologyPage() {
       </section>
 
       {/* Disclaimer */}
-      <section className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4 space-y-2">
-        <h2 className="text-sm font-semibold">Disclaimer</h2>
-        <p className="text-xs text-muted-foreground">
+      <Callout tone="info" icon={Info}>
+        <h2 className="mb-1 font-semibold text-foreground">Disclaimer</h2>
+        <p>
           This tool is for personal awareness only. It is not a medical device,
           does not provide clinical diagnoses, and should not replace
           professional psychiatric care. The algorithms detect statistical
           patterns in wearable data &mdash; they cannot confirm or rule out
           mood episodes. Always discuss concerns with your healthcare provider.
         </p>
-        <p className="text-xs text-muted-foreground">
+        <p className="mt-2">
           Research references are provided for transparency. Individual results
           may vary significantly from published study populations.
         </p>
-      </section>
+      </Callout>
     </div>
   );
 }

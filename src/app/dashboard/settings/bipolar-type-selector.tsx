@@ -2,25 +2,40 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
+import {
+  SegmentedControl,
+  type SegmentedOption,
+} from "@/components/ui/segmented-control";
 
 type BPType = "bp1" | "bp2" | "unspecified";
 
-const options: { value: BPType; label: string }[] = [
+const options: SegmentedOption<BPType>[] = [
   { value: "bp1", label: "Bipolar I" },
   { value: "bp2", label: "Bipolar II" },
   { value: "unspecified", label: "Not specified" },
 ];
 
+const FORTY_PIXEL_OPTIONS_ON_PHONES =
+  "[&>button]:min-h-10 sm:[&>button]:min-h-7";
+
+function toBPType(value: string): BPType {
+  return value === "bp1" || value === "bp2" ? value : "unspecified";
+}
+
+interface Result {
+  message: string;
+  kind: "status" | "error";
+}
+
 export function BipolarTypeSelector({ initial }: { initial: string }) {
-  const [selected, setSelected] = useState<BPType>(
-    (initial as BPType) || "unspecified"
-  );
+  const [selected, setSelected] = useState<BPType>(toBPType(initial));
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
 
   async function handleSave() {
     setSaving(true);
-    setStatus(null);
+    setResult(null);
     try {
       const res = await fetch("/api/user/profile", {
         method: "PATCH",
@@ -33,23 +48,29 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
         });
         const reprocess = await reprocessResponse.json();
         if (reprocessResponse.ok) {
-          setStatus(
-            `Saved and updated ${reprocess.daysProcessed} historical days ` +
+          setResult({
+            kind: "status",
+            message:
+              `Saved and updated ${reprocess.daysProcessed} historical days ` +
               `(${reprocess.episodes.watch} watch, ` +
               `${reprocess.episodes.warning} warning, ` +
-              `${reprocess.episodes.alert} alert).`
-          );
+              `${reprocess.episodes.alert} alert).`,
+          });
         } else {
-          setStatus(
-            `Profile saved, but historical results could not be updated: ${reprocess.error}`
-          );
+          setResult({
+            kind: "error",
+            message: `Profile saved, but historical results could not be updated: ${reprocess.error}`,
+          });
         }
       } else {
         const data = await res.json();
-        setStatus(`Error: ${data.error}`);
+        setResult({ kind: "error", message: `Error: ${data.error}` });
       }
     } catch (e) {
-      setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setResult({
+        kind: "error",
+        message: `Error: ${e instanceof Error ? e.message : String(e)}`,
+      });
     } finally {
       setSaving(false);
     }
@@ -58,29 +79,14 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <p id="pattern-profile-label" className="text-sm font-medium">
-          Pattern Profile
-        </p>
-        <div
-          className="flex flex-wrap gap-2"
-          role="group"
-          aria-labelledby="pattern-profile-label"
-        >
-          {options.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setSelected(opt.value)}
-              aria-pressed={selected === opt.value}
-              className={`px-3 py-1.5 text-sm rounded border transition-colors ${
-                selected === opt.value
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background border-input hover:bg-accent"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <p className="text-sm font-medium">Pattern Profile</p>
+        <SegmentedControl
+          label="Pattern profile"
+          options={options}
+          value={selected}
+          onValueChange={setSelected}
+          className={FORTY_PIXEL_OPTIONS_ON_PHONES}
+        />
       </div>
 
       <div className="text-xs text-muted-foreground space-y-1">
@@ -120,11 +126,7 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
         {saving ? "Saving and updating history..." : "Save profile"}
       </Button>
 
-      {status && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {status}
-        </p>
-      )}
+      {result && <FormMessage kind={result.kind}>{result.message}</FormMessage>}
     </div>
   );
 }

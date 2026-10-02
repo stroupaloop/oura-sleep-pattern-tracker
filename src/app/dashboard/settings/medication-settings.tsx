@@ -3,6 +3,13 @@
 import { useState, useEffect } from "react";
 import { getTodayET } from "@/lib/date-utils";
 import { getSupersededMedicationIds } from "@/lib/medication-write";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 
 const SLOTS = [
   { value: "morning", label: "Morning" },
@@ -46,6 +53,35 @@ function defaultScheduleForFrequency(frequency: string | null): Slot[] {
 function formatScheduleLabel(slots: Slot[]): string {
   if (slots.length === 0) return "";
   return slots.map((s) => SLOTS.find((x) => x.value === s)?.label ?? s).join(" + ");
+}
+
+function DoseSchedule({
+  id,
+  value,
+  onToggle,
+}: {
+  id: string;
+  value: Slot[];
+  onToggle: (slot: Slot) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <p id={id} className="text-sm leading-none font-medium">
+        Dose schedule
+      </p>
+      <div role="group" aria-labelledby={id} className="flex flex-wrap gap-1.5">
+        {SLOTS.map((slot) => (
+          <ToggleChip
+            key={slot.value}
+            pressed={value.includes(slot.value)}
+            onClick={() => onToggle(slot.value)}
+          >
+            {slot.label}
+          </ToggleChip>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 async function getApiError(response: Response, fallback: string): Promise<string> {
@@ -235,236 +271,224 @@ export function MedicationSettings() {
   const supersededIds = getSupersededMedicationIds(meds);
 
   return (
-    <div className="space-y-4">
-      {error && (
-        <p role="alert" className="text-sm text-red-400">
-          {error}
-        </p>
-      )}
+    <div className="space-y-6">
+      {error && <FormMessage kind="error">{error}</FormMessage>}
       {active.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Active</p>
-          {active.map((med) => {
-            const schedule = parseSchedule(med.doseSchedule);
-            return (
-              <div key={med.id} className="flex flex-col gap-2 border rounded-md p-3">
-                {editingId === med.id ? (
-                  <div className="space-y-2">
-                    <p className="font-medium text-sm">{med.name}</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        placeholder="Dosage (e.g. 150mg)"
-                        value={editFields.dosage ?? ""}
-                        onChange={(e) => setEditFields((prev) => ({ ...prev, dosage: e.target.value }))}
-                        className="text-sm rounded border bg-transparent px-2 py-1"
-                      />
-                      <select
-                        value={editFields.frequency ?? "daily"}
-                        onChange={(e) => handleEditFrequencyChange(e.target.value)}
-                        className="text-sm rounded border bg-transparent px-2 py-1"
-                      >
-                        <option value="daily">Daily</option>
-                        <option value="twice_daily">Twice daily</option>
-                        <option value="as_needed">As needed</option>
-                        {editFields.frequency === "weekly" && (
-                          <option value="weekly" disabled>
-                            Weekly (unsupported)
-                          </option>
-                        )}
-                      </select>
-                    </div>
-                    {editFields.frequency !== "as_needed" && (
-                      <div>
-                        <p className="text-xs text-muted-foreground mb-1">Dose schedule</p>
-                        <div className="flex flex-wrap gap-1.5">
-                          {SLOTS.map((slot) => {
-                            const selected = editSchedule.includes(slot.value);
-                            return (
-                              <button
-                                key={slot.value}
-                                type="button"
-                                onClick={() => setEditSchedule((prev) => toggleSlot(prev, slot.value))}
-                                className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
-                                  selected
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted text-muted-foreground hover:text-foreground"
-                                }`}
-                              >
-                                {slot.label}
-                              </button>
-                            );
-                          })}
+        <div className="space-y-1">
+          <h3 className="text-sm font-medium">Active</h3>
+          <ul className="divide-y">
+            {active.map((med) => {
+              const schedule = parseSchedule(med.doseSchedule);
+              return (
+                <li key={med.id} className="py-3">
+                  {editingId === med.id ? (
+                    <div className="space-y-4">
+                      <p className="font-medium text-sm">{med.name}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-2">
+                          <Label htmlFor={`med-${med.id}-dosage`}>Dosage</Label>
+                          <Input
+                            id={`med-${med.id}-dosage`}
+                            placeholder="e.g. 150mg"
+                            value={editFields.dosage ?? ""}
+                            onChange={(e) => setEditFields((prev) => ({ ...prev, dosage: e.target.value }))}
+                            className="h-10 sm:h-9"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor={`med-${med.id}-frequency`}>Frequency</Label>
+                          <NativeSelect
+                            id={`med-${med.id}-frequency`}
+                            value={editFields.frequency ?? "daily"}
+                            onChange={(e) => handleEditFrequencyChange(e.target.value)}
+                          >
+                            <option value="daily">Daily</option>
+                            <option value="twice_daily">Twice daily</option>
+                            <option value="as_needed">As needed</option>
+                            {editFields.frequency === "weekly" && (
+                              <option value="weekly" disabled>
+                                Weekly (unsupported)
+                              </option>
+                            )}
+                          </NativeSelect>
                         </div>
                       </div>
-                    )}
-                    <div className="flex items-center gap-2">
-                      <label className="text-xs text-muted-foreground">Start date:</label>
-                      <input
-                        type="date"
-                        value={editFields.startDate ?? ""}
-                        onChange={(e) => setEditFields((prev) => ({ ...prev, startDate: e.target.value || null }))}
-                        className="text-sm rounded border bg-transparent px-2 py-1"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => saveEdit(med.id)}
-                        disabled={
-                          saving ||
-                          editFields.frequency === "weekly" ||
-                          (editFields.frequency !== "as_needed" &&
-                            editSchedule.length === 0)
-                        }
-                        className="text-xs px-3 py-1 rounded bg-primary text-primary-foreground disabled:opacity-50"
-                      >
-                        Save
-                      </button>
-                      <button
-                        onClick={() => setEditingId(null)}
-                        className="text-xs px-3 py-1 rounded bg-muted text-muted-foreground"
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-sm font-medium">{med.name}</span>
-                      {med.dosage && (
-                        <span className="text-xs text-muted-foreground ml-2">{med.dosage}</span>
+                      {editFields.frequency !== "as_needed" && (
+                        <DoseSchedule
+                          id={`med-${med.id}-schedule`}
+                          value={editSchedule}
+                          onToggle={(slot) => setEditSchedule((prev) => toggleSlot(prev, slot))}
+                        />
                       )}
-                      {med.frequency === "weekly" ? (
-                        <span className="text-xs text-amber-400 ml-2">
-                          (weekly tracking unavailable; not shown in daily check-ins)
-                        </span>
-                      ) : med.frequency === "as_needed" ? (
-                        <span className="text-xs text-muted-foreground ml-2">(as needed)</span>
-                      ) : schedule.length > 0 ? (
-                        <span className="text-xs text-muted-foreground ml-2">
-                          · {formatScheduleLabel(schedule)}
-                        </span>
-                      ) : med.frequency ? (
-                        <span className="text-xs text-muted-foreground ml-2">({med.frequency})</span>
-                      ) : null}
-                      {med.startDate && (
-                        <span className="text-xs text-muted-foreground ml-2">since {med.startDate}</span>
-                      )}
+                      <div className="space-y-2">
+                        <Label htmlFor={`med-${med.id}-start`}>Start date</Label>
+                        <Input
+                          id={`med-${med.id}-start`}
+                          type="date"
+                          value={editFields.startDate ?? ""}
+                          onChange={(e) => setEditFields((prev) => ({ ...prev, startDate: e.target.value || null }))}
+                          className="h-10 sm:h-9 sm:w-48"
+                        />
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => saveEdit(med.id)}
+                          disabled={
+                            saving ||
+                            editFields.frequency === "weekly" ||
+                            (editFields.frequency !== "as_needed" &&
+                              editSchedule.length === 0)
+                          }
+                        >
+                          Save
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setEditingId(null)}
+                        >
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => startEdit(med)}
-                        className="text-xs px-2 py-1 rounded bg-muted text-muted-foreground hover:text-foreground"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deactivate(med.id)}
-                        className="text-xs px-2 py-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500/20"
-                      >
-                        Deactivate
-                      </button>
+                  ) : (
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                      <div className="min-w-0">
+                        <span className="text-sm font-medium">{med.name}</span>
+                        {med.dosage && (
+                          <span className="text-xs text-muted-foreground ml-2">{med.dosage}</span>
+                        )}
+                        {med.frequency === "weekly" ? (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            (weekly tracking unavailable; not shown in daily check-ins)
+                          </span>
+                        ) : med.frequency === "as_needed" ? (
+                          <span className="text-xs text-muted-foreground ml-2">(as needed)</span>
+                        ) : schedule.length > 0 ? (
+                          <span className="text-xs text-muted-foreground ml-2">
+                            · {formatScheduleLabel(schedule)}
+                          </span>
+                        ) : med.frequency ? (
+                          <span className="text-xs text-muted-foreground ml-2">({med.frequency})</span>
+                        ) : null}
+                        {med.startDate && (
+                          <span className="text-xs text-muted-foreground tabular-nums ml-2">since {med.startDate}</span>
+                        )}
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => startEdit(med)}
+                        >
+                          Edit
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => deactivate(med.id)}
+                        >
+                          Deactivate
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         </div>
       )}
 
       {inactive.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium text-muted-foreground">Inactive</p>
-          {inactive.map((med) => (
-            <div key={med.id} className="flex items-center justify-between border rounded-md p-3 opacity-60">
-              <div>
-                <span className="text-sm">{med.name}</span>
-                {med.dosage && (
-                  <span className="text-xs text-muted-foreground ml-2">{med.dosage}</span>
+        <div className="space-y-1">
+          <h3 className="text-sm font-medium text-muted-foreground">Inactive</h3>
+          <ul className="divide-y">
+            {inactive.map((med) => (
+              <li
+                key={med.id}
+                className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3"
+              >
+                <div className="min-w-0 text-muted-foreground">
+                  <span className="text-sm">{med.name}</span>
+                  {med.dosage && (
+                    <span className="text-xs ml-2">{med.dosage}</span>
+                  )}
+                  {med.endDate && (
+                    <span className="text-xs tabular-nums ml-2">ended {med.endDate}</span>
+                  )}
+                </div>
+                {!supersededIds.has(med.id) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => reactivate(med.id)}
+                  >
+                    Reactivate
+                  </Button>
                 )}
-                {med.endDate && (
-                  <span className="text-xs text-muted-foreground ml-2">ended {med.endDate}</span>
-                )}
-              </div>
-              {!supersededIds.has(med.id) && (
-                <button
-                  onClick={() => reactivate(med.id)}
-                  className="text-xs px-2 py-1 rounded bg-green-500/10 text-green-400 hover:bg-green-500/20"
-                >
-                  Reactivate
-                </button>
-              )}
-            </div>
-          ))}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
-      <div className="border rounded-md p-3 space-y-2">
-        <p className="text-sm font-medium">Add Medication</p>
-        <div className="grid grid-cols-2 gap-2">
-          <input
-            type="text"
-            placeholder="Name *"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            className="text-sm rounded border bg-transparent px-2 py-1.5"
-          />
-          <input
-            type="text"
-            placeholder="Dosage (e.g. 150mg)"
-            value={newDosage}
-            onChange={(e) => setNewDosage(e.target.value)}
-            className="text-sm rounded border bg-transparent px-2 py-1.5"
-          />
+      <div className={cn("space-y-4", meds.length > 0 && "border-t pt-4")}>
+        <h3 className="text-sm font-medium">Add Medication</h3>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-2">
+            <Label htmlFor="new-med-name">Name</Label>
+            <Input
+              id="new-med-name"
+              required
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              className="h-10 sm:h-9"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="new-med-dosage">Dosage</Label>
+            <Input
+              id="new-med-dosage"
+              placeholder="e.g. 150mg"
+              value={newDosage}
+              onChange={(e) => setNewDosage(e.target.value)}
+              className="h-10 sm:h-9"
+            />
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={newFrequency}
-            onChange={(e) => handleNewFrequencyChange(e.target.value)}
-            className="text-sm rounded border bg-transparent px-2 py-1.5"
-          >
-            <option value="daily">Daily</option>
-            <option value="twice_daily">Twice daily</option>
-            <option value="as_needed">As needed</option>
-          </select>
-          <button
-            onClick={addMed}
-            disabled={
-              saving ||
-              !newName.trim() ||
-              (newFrequency !== "as_needed" && newSchedule.length === 0)
-            }
-            className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground disabled:opacity-50"
-          >
-            Add
-          </button>
+        <div className="space-y-2">
+          <Label htmlFor="new-med-frequency">Frequency</Label>
+          <div className="sm:w-48">
+            <NativeSelect
+              id="new-med-frequency"
+              value={newFrequency}
+              onChange={(e) => handleNewFrequencyChange(e.target.value)}
+            >
+              <option value="daily">Daily</option>
+              <option value="twice_daily">Twice daily</option>
+              <option value="as_needed">As needed</option>
+            </NativeSelect>
+          </div>
         </div>
         {newFrequency !== "as_needed" && (
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Dose schedule</p>
-            <div className="flex flex-wrap gap-1.5">
-              {SLOTS.map((slot) => {
-                const selected = newSchedule.includes(slot.value);
-                return (
-                  <button
-                    key={slot.value}
-                    type="button"
-                    onClick={() => setNewSchedule((prev) => toggleSlot(prev, slot.value))}
-                    className={`px-2.5 py-0.5 text-xs rounded-full transition-colors ${
-                      selected
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-muted text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {slot.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <DoseSchedule
+            id="new-med-schedule"
+            value={newSchedule}
+            onToggle={(slot) => setNewSchedule((prev) => toggleSlot(prev, slot))}
+          />
         )}
+        <Button
+          onClick={addMed}
+          disabled={
+            saving ||
+            !newName.trim() ||
+            (newFrequency !== "as_needed" && newSchedule.length === 0)
+          }
+        >
+          Add
+        </Button>
       </div>
     </div>
   );

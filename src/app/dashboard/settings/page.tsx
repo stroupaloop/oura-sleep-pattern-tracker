@@ -9,24 +9,40 @@ import {
   isSensitiveUser,
 } from "@/lib/auth";
 import { eq } from "drizzle-orm";
+import {
+  loadActiveConfig,
+  SENSITIVITY_PRESETS,
+  type DetectionConfigValues,
+} from "@/lib/analysis/config";
+import type { Tone } from "@/lib/design/tone";
 import { OuraConnectButton } from "./oura-connect-button";
 import { DisconnectButton } from "./disconnect-button";
 import { BackfillButton, ManualSyncButton } from "./sync-buttons";
-import { DetectionConfig } from "./detection-config";
+import { DetectionConfig, type SensitivityPreset } from "./detection-config";
 import { BipolarTypeSelector } from "./bipolar-type-selector";
 import { MedicationSettings } from "./medication-settings";
 import { NotificationSettings } from "./notification-settings";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Panel } from "@/components/ui/panel";
+import { Pill } from "@/components/ui/pill";
 import { missingOuraScopes } from "@/lib/oura/oauth";
 import { formatOuraScopeList } from "@/lib/oura/scope-labels";
 import { loadOuraConnectionHealth } from "@/lib/oura/connection-health-data";
 import { PageHeader } from "@/components/page-header";
+
+function savedPresetOf(config: DetectionConfigValues): SensitivityPreset | null {
+  const presets = Object.keys(SENSITIVITY_PRESETS) as SensitivityPreset[];
+  return (
+    presets.find((preset) =>
+      Object.entries(SENSITIVITY_PRESETS[preset]).every(
+        ([key, value]) =>
+          Math.abs(
+            config[key as keyof (typeof SENSITIVITY_PRESETS)[typeof preset]] -
+              value
+          ) < 1e-9
+      )
+    ) ?? null
+  );
+}
 
 export default async function SettingsPage() {
   const session = await auth();
@@ -44,12 +60,12 @@ export default async function SettingsPage() {
     : null;
   const needsReconnect = connectionHealth?.needsReconnect ?? false;
   const isMissingData = missingScopes.length > 0;
+  const showDetection = isConnected && canManageOura;
 
-  const recentSyncs = await db
-    .select()
-    .from(syncLog)
-    .orderBy(desc(syncLog.createdAt))
-    .limit(5);
+  const [recentSyncs, activeConfig] = await Promise.all([
+    db.select().from(syncLog).orderBy(desc(syncLog.createdAt)).limit(5),
+    showDetection ? loadActiveConfig() : null,
+  ]);
 
   let bipolarType = "unspecified";
   if (canManageProfile && session?.user?.id) {
@@ -61,87 +77,63 @@ export default async function SettingsPage() {
     bipolarType = userRows[0]?.bipolarType ?? "unspecified";
   }
 
+  const connectionStatus: { label: string; tone: Tone } = needsReconnect
+    ? { label: "Reconnect required", tone: "attention" }
+    : isMissingData
+      ? { label: "Connected · some data not shared", tone: "attention" }
+      : isExpired
+        ? { label: "Connected · refresh due", tone: "neutral" }
+        : { label: "Connected", tone: "calm" };
+
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <PageHeader title="Settings" />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Pattern Profile</CardTitle>
-          <CardDescription>
-            Choose how this app weights exploratory wearable patterns. This
-            does not diagnose Bipolar I or Bipolar II.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {canManageProfile ? (
-            <BipolarTypeSelector initial={bipolarType} />
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Only the primary private-data owner can change the profile used
-              by detection.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <Panel
+        id="pattern-profile"
+        title="Pattern Profile"
+        description="Choose how this app weights exploratory wearable patterns. This does not diagnose Bipolar I or Bipolar II."
+      >
+        {canManageProfile ? (
+          <BipolarTypeSelector initial={bipolarType} />
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Only the primary private-data owner can change the profile used
+            by detection.
+          </p>
+        )}
+      </Panel>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Medication Management</CardTitle>
-          <CardDescription>
-            Manage your medications, dosages, and tracking periods.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <MedicationSettings />
-        </CardContent>
-      </Card>
+      <Panel
+        id="medications"
+        title="Medication Management"
+        description="Manage your medications, dosages, and tracking periods."
+      >
+        <MedicationSettings />
+      </Panel>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Notification Preferences</CardTitle>
-          <CardDescription>
-            Daily log reminders by email or SMS, sent only if the day&apos;s
-            log is still empty.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <NotificationSettings />
-        </CardContent>
-      </Card>
+      <Panel
+        id="notifications"
+        title="Notification Preferences"
+        description="Daily log reminders by email or SMS, sent only if the day's log is still empty."
+      >
+        <NotificationSettings />
+      </Panel>
 
-      <Card id="oura" className="scroll-mt-6">
-        <CardHeader>
-          <CardTitle>Oura Ring Connection</CardTitle>
-          <CardDescription>
-            Connect your Oura Ring account to sync sleep data.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div id="oura" className="scroll-mt-6">
+        <Panel
+          id="oura-connection"
+          title="Oura Ring Connection"
+          description="Connect your Oura Ring account to sync sleep data."
+        >
           {isConnected ? (
             <div className="space-y-2">
-              <p className="text-sm">
-                Status:{" "}
-                <span
-                  className={
-                    needsReconnect
-                      ? "text-red-400 font-medium"
-                      : isExpired || isMissingData
-                        ? "text-amber-500 font-medium"
-                        : "text-green-500 font-medium"
-                  }
-                >
-                  {needsReconnect
-                    ? "Reconnect required"
-                    : isMissingData
-                      ? "Connected · some data not shared"
-                      : isExpired
-                        ? "Connected · refresh due"
-                        : "Connected"}
-                </span>
+              <p className="flex flex-wrap items-center gap-2 text-sm">
+                Status:
+                <Pill tone={connectionStatus.tone}>{connectionStatus.label}</Pill>
               </p>
               {tokenExpiry && (
-                <p className="text-sm text-muted-foreground">
+                <p className="text-sm text-muted-foreground tabular-nums">
                   Current access token expiry: {tokenExpiry.toLocaleString("en-US", { timeZone: "America/New_York" })}
                 </p>
               )}
@@ -183,77 +175,67 @@ export default async function SettingsPage() {
               The private-data owner manages this connection.
             </p>
           )}
-        </CardContent>
-      </Card>
+        </Panel>
+      </div>
 
-      {isConnected && canManageOura && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Data Sync</CardTitle>
-            <CardDescription>
-              Sync pulls the last 7 days from Oura. Backfill pulls the last
-              90 days, recomputes the pattern checks for every night on
-              record, and lists what arrived for each kind of data.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+      {showDetection && (
+        <Panel
+          id="data-sync"
+          title="Data Sync"
+          description="Sync pulls the last 7 days from Oura. Backfill pulls the last 90 days, recomputes the pattern checks for every night on record, and lists what arrived for each kind of data."
+        >
+          <div className="space-y-4">
             <BackfillButton />
             <ManualSyncButton />
-          </CardContent>
-        </Card>
+          </div>
+        </Panel>
       )}
 
-      {isConnected && canManageOura && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Anomaly Detection</CardTitle>
-            <CardDescription>
-              Configure sensitivity for multi-day pattern detection.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DetectionConfig />
-          </CardContent>
-        </Card>
+      {showDetection && (
+        <Panel
+          id="anomaly-detection"
+          title="Anomaly Detection"
+          description="Configure sensitivity for multi-day pattern detection."
+        >
+          <DetectionConfig
+            savedPreset={activeConfig ? savedPresetOf(activeConfig) : null}
+          />
+        </Panel>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Sync History</CardTitle>
-          <CardDescription>Recent data synchronization activity.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {recentSyncs.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No syncs yet. Connect your Oura Ring to get started.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {recentSyncs.map((sync) => (
-                <div
-                  key={sync.id}
-                  className="flex flex-col sm:flex-row sm:justify-between gap-1 text-sm border-b pb-2"
+      <Panel
+        id="sync-history"
+        title="Sync History"
+        description="Recent data synchronization activity."
+      >
+        {recentSyncs.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No syncs yet. Connect your Oura Ring to get started.
+          </p>
+        ) : (
+          <ul className="divide-y text-sm tabular-nums">
+            {recentSyncs.map((sync) => (
+              <li
+                key={sync.id}
+                className="flex flex-col gap-1 py-2 first:pt-0 last:pb-0 sm:flex-row sm:justify-between"
+              >
+                <span>
+                  {sync.syncType} ({sync.startDate} to {sync.endDate})
+                </span>
+                <span
+                  className={
+                    sync.status === "success"
+                      ? "text-muted-foreground"
+                      : "text-attention"
+                  }
                 >
-                  <span>
-                    {sync.syncType} ({sync.startDate} to {sync.endDate})
-                  </span>
-                  <span
-                    className={
-                      sync.status === "success"
-                        ? "text-green-500"
-                        : sync.status === "partial"
-                          ? "text-amber-500"
-                          : "text-red-500"
-                    }
-                  >
-                    {sync.status} - {sync.recordsFetched ?? 0} records
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                  {sync.status} - {sync.recordsFetched ?? 0} records
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
     </div>
   );
 }

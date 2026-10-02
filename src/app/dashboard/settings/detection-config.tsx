@@ -1,19 +1,60 @@
 "use client";
 
 import { useState } from "react";
+import type { SENSITIVITY_PRESETS } from "@/lib/analysis/config";
 import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
+import {
+  SegmentedControl,
+  type SegmentedOption,
+} from "@/components/ui/segmented-control";
 
-type Preset = "low" | "medium" | "high";
+export type SensitivityPreset = keyof typeof SENSITIVITY_PRESETS;
 
-export function DetectionConfig() {
-  const [preset, setPreset] = useState<Preset>("medium");
+const FORTY_PIXEL_OPTIONS_ON_PHONES =
+  "[&>button]:min-h-10 sm:[&>button]:min-h-7";
+
+type Choice = SensitivityPreset | "custom";
+
+const PRESET_OPTIONS: SegmentedOption<Choice>[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+const CUSTOM_OPTION: SegmentedOption<Choice> = {
+  value: "custom",
+  label: "Custom",
+};
+
+interface Result {
+  message: string;
+  kind: "status" | "error";
+}
+
+/**
+ * Opens on the sensitivity that is saved, so the page never claims a preset
+ * the detector is not using. Saved thresholds that match no preset show as
+ * Custom until a preset replaces them.
+ */
+export function DetectionConfig({
+  savedPreset,
+}: {
+  savedPreset: SensitivityPreset | null;
+}) {
+  const [saved, setSaved] = useState<SensitivityPreset | null>(savedPreset);
+  const [choice, setChoice] = useState<Choice>(savedPreset ?? "custom");
   const [saving, setSaving] = useState(false);
   const [reprocessing, setReprocessing] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const [result, setResult] = useState<Result | null>(null);
+
+  const options = saved ? PRESET_OPTIONS : [...PRESET_OPTIONS, CUSTOM_OPTION];
 
   async function handleSavePreset() {
+    if (choice === "custom") return;
+    const preset = choice;
     setSaving(true);
-    setStatus(null);
+    setResult(null);
     try {
       const res = await fetch("/api/oura/config", {
         method: "POST",
@@ -22,29 +63,37 @@ export function DetectionConfig() {
       });
       const data = await res.json();
       if (res.ok) {
+        setSaved(preset);
         const reprocessRes = await fetch("/api/oura/reprocess", {
           method: "POST",
         });
         const reprocessData = await reprocessRes.json();
         if (reprocessRes.ok) {
-          setStatus(
-            `Config v${data.config.version} saved (${preset} sensitivity). ` +
+          setResult({
+            kind: "status",
+            message:
+              `Config v${data.config.version} saved (${preset} sensitivity). ` +
               `Reprocessed ${reprocessData.daysProcessed} days ` +
               `(${reprocessData.episodes.watch} watch, ` +
               `${reprocessData.episodes.warning} warning, ` +
-              `${reprocessData.episodes.alert} alert).`
-          );
+              `${reprocessData.episodes.alert} alert).`,
+          });
         } else {
-          setStatus(
-            `Config v${data.config.version} saved, but all-data reprocessing failed: ` +
-              `${reprocessData.error ?? "Unknown error"}. Use Reprocess All Data to retry.`
-          );
+          setResult({
+            kind: "error",
+            message:
+              `Config v${data.config.version} saved, but all-data reprocessing failed: ` +
+              `${reprocessData.error ?? "Unknown error"}. Use Reprocess All Data to retry.`,
+          });
         }
       } else {
-        setStatus(`Error: ${data.error}`);
+        setResult({ kind: "error", message: `Error: ${data.error}` });
       }
     } catch (e) {
-      setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setResult({
+        kind: "error",
+        message: `Error: ${e instanceof Error ? e.message : String(e)}`,
+      });
     } finally {
       setSaving(false);
     }
@@ -52,20 +101,25 @@ export function DetectionConfig() {
 
   async function handleReprocess() {
     setReprocessing(true);
-    setStatus(null);
+    setResult(null);
     try {
       const res = await fetch("/api/oura/reprocess", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setStatus(
-          `Reprocessed ${data.daysProcessed} days in ${data.processingTimeMs}ms ` +
-          `(${data.episodes.watch} watch, ${data.episodes.warning} warning, ${data.episodes.alert} alert)`
-        );
+        setResult({
+          kind: "status",
+          message:
+            `Reprocessed ${data.daysProcessed} days in ${data.processingTimeMs}ms ` +
+            `(${data.episodes.watch} watch, ${data.episodes.warning} warning, ${data.episodes.alert} alert)`,
+        });
       } else {
-        setStatus(`Error: ${data.error}`);
+        setResult({ kind: "error", message: `Error: ${data.error}` });
       }
     } catch (e) {
-      setStatus(`Error: ${e instanceof Error ? e.message : String(e)}`);
+      setResult({
+        kind: "error",
+        message: `Error: ${e instanceof Error ? e.message : String(e)}`,
+      });
     } finally {
       setReprocessing(false);
     }
@@ -74,36 +128,23 @@ export function DetectionConfig() {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <p id="sensitivity-preset-label" className="text-sm font-medium">
-          Sensitivity Preset
-        </p>
-        <div
-          className="flex flex-wrap gap-2"
-          role="group"
-          aria-labelledby="sensitivity-preset-label"
-        >
-          {(["low", "medium", "high"] as const).map((p) => (
-            <button
-              key={p}
-              onClick={() => setPreset(p)}
-              aria-pressed={preset === p}
-              className={`px-3 py-1.5 text-sm rounded border transition-colors ${
-                preset === p
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-background border-input hover:bg-accent"
-              }`}
-            >
-              {p.charAt(0).toUpperCase() + p.slice(1)}
-            </button>
-          ))}
-        </div>
+        <p className="text-sm font-medium">Sensitivity Preset</p>
+        <SegmentedControl
+          label="Sensitivity preset"
+          options={options}
+          value={choice}
+          onValueChange={setChoice}
+          className={FORTY_PIXEL_OPTIONS_ON_PHONES}
+        />
         <p className="text-xs text-muted-foreground">
-          {preset === "low" && "Fewer alerts \u2014 only strong, sustained patterns trigger warnings."}
-          {preset === "medium" && "Balanced \u2014 moderate heuristic thresholds for sustained personal-baseline changes."}
-          {preset === "high" &&
+          {choice === "low" && "Fewer alerts — only strong, sustained patterns trigger warnings."}
+          {choice === "medium" && "Balanced — moderate heuristic thresholds for sustained personal-baseline changes."}
+          {choice === "high" &&
             "More sensitive — uses lower heuristic thresholds and may flag more confounders."}
+          {choice === "custom" &&
+            "The saved thresholds match no preset. Saving a preset replaces them."}
         </p>
-        <p className="text-xs text-muted-foreground mt-1">
+        <p className="text-xs text-muted-foreground">
           Detection combines personal-baseline sleep, physiology, activity,
           and circadian features. Mood and episode check-ins remain context and
           retrospective labels; they do not change the pattern score. The
@@ -117,7 +158,7 @@ export function DetectionConfig() {
           variant="outline"
           size="sm"
           onClick={handleSavePreset}
-          disabled={saving || reprocessing}
+          disabled={saving || reprocessing || choice === "custom"}
         >
           {saving ? "Saving & Reprocessing..." : "Save Preset & Reprocess"}
         </Button>
@@ -131,11 +172,7 @@ export function DetectionConfig() {
         </Button>
       </div>
 
-      {status && (
-        <p className="text-sm text-muted-foreground" role="status">
-          {status}
-        </p>
-      )}
+      {result && <FormMessage kind={result.kind}>{result.message}</FormMessage>}
     </div>
   );
 }

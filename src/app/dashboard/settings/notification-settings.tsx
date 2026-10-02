@@ -1,6 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
+
+const TYPE_LABELS: Record<string, string> = { email: "Email", sms: "SMS" };
 
 interface NotificationRecipient {
   id: number;
@@ -120,86 +128,97 @@ export function NotificationSettings() {
   const selectedLabel = HOUR_OPTIONS.find((o) => o.value === reminderHour)?.label ?? "10:00 PM";
 
   return (
-    <div className="space-y-4">
-      <p className="text-xs text-muted-foreground">
-        Get a reminder at {selectedLabel} ET if you haven&apos;t checked in yet.
-      </p>
-
-      <div className="flex items-center gap-2">
-        <label className="text-sm font-medium">Reminder time</label>
-        <select
-          value={reminderHour}
-          onChange={(e) => updateReminderHour(Number(e.target.value))}
-          className="text-sm rounded border bg-transparent px-2 py-1.5"
-        >
-          {HOUR_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.label} ET
-            </option>
-          ))}
-        </select>
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <Label htmlFor="reminder-hour">Reminder time</Label>
+        <div className="sm:w-48">
+          <NativeSelect
+            id="reminder-hour"
+            aria-describedby="reminder-hour-note"
+            value={reminderHour}
+            onChange={(e) => updateReminderHour(Number(e.target.value))}
+          >
+            {HOUR_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label} ET
+              </option>
+            ))}
+          </NativeSelect>
+        </div>
+        <p id="reminder-hour-note" className="text-xs text-muted-foreground">
+          {`Get a reminder at ${selectedLabel} ET if you haven't checked in yet.`}
+        </p>
       </div>
 
       {recipients.length > 0 && (
-        <div className="space-y-2">
+        <ul className="divide-y">
           {recipients.map((r) => (
-            <div key={r.id} className="flex items-center justify-between border rounded-md p-3">
-              <div className="flex items-center gap-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={r.enabled === 1}
-                    onChange={() => toggleEnabled(r.id, r.enabled)}
-                    className="rounded"
-                  />
-                  <span className="text-sm">
-                    <span className="text-xs uppercase text-muted-foreground mr-1.5">
-                      {r.type}
-                    </span>
-                    {r.destination}
+            <li
+              key={r.id}
+              className="flex items-center justify-between gap-3 py-2"
+            >
+              <label className="flex min-h-10 min-w-0 cursor-pointer items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={r.enabled === 1}
+                  onChange={() => toggleEnabled(r.id, r.enabled)}
+                  className="size-4 shrink-0 accent-primary"
+                />
+                <span className="min-w-0 break-words text-sm">
+                  <span className="text-xs text-muted-foreground mr-1.5">
+                    {TYPE_LABELS[r.type] ?? r.type}
                   </span>
-                </label>
-              </div>
-              <button
+                  {r.destination}
+                </span>
+              </label>
+              <Button
+                size="sm"
+                variant="ghost"
                 onClick={() => removeRecipient(r.id)}
-                className="text-xs text-red-400 hover:text-red-300"
+                className="text-destructive hover:text-destructive"
               >
                 Remove
-              </button>
-            </div>
+              </Button>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
 
-      {error && (
-        <p className="text-sm text-red-400">{error}</p>
-      )}
+      {error && <FormMessage kind="error">{error}</FormMessage>}
 
-      <div className="border rounded-md p-3 space-y-2">
-        <p className="text-sm font-medium">Add Recipient</p>
+      <div className={cn("space-y-3", recipients.length > 0 && "border-t pt-4")}>
+        <h3 className="text-sm font-medium">Add Recipient</h3>
         <div className="flex items-center gap-2">
-          <select
-            value={newType}
-            onChange={(e) => setNewType(e.target.value as "email" | "sms")}
-            className="text-sm rounded border bg-transparent px-2 py-1.5"
-          >
-            <option value="email">Email</option>
-            <option value="sms">SMS</option>
-          </select>
-          <input
+          <Label htmlFor="new-recipient-type" className="sr-only">
+            Send by
+          </Label>
+          <div className="w-24 shrink-0">
+            <NativeSelect
+              id="new-recipient-type"
+              value={newType}
+              onChange={(e) => setNewType(e.target.value as "email" | "sms")}
+            >
+              <option value="email">Email</option>
+              <option value="sms">SMS</option>
+            </NativeSelect>
+          </div>
+          <Label htmlFor="new-recipient-destination" className="sr-only">
+            {newType === "email" ? "Email address" : "Phone number"}
+          </Label>
+          <Input
+            id="new-recipient-destination"
             type={newType === "email" ? "email" : "tel"}
             placeholder={newType === "email" ? "email@example.com" : "+1234567890"}
             value={newDestination}
             onChange={(e) => setNewDestination(e.target.value)}
-            className="flex-1 text-sm rounded border bg-transparent px-2 py-1.5"
+            className="h-10 min-w-0 flex-1 sm:h-9"
           />
-          <button
+          <Button
             onClick={addRecipient}
             disabled={saving || !newDestination.trim()}
-            className="text-sm px-3 py-1.5 rounded bg-primary text-primary-foreground disabled:opacity-50"
           >
             Add
-          </button>
+          </Button>
         </div>
       </div>
     </div>

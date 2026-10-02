@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Heart, Loader2, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { FormMessage } from "@/components/ui/form-message";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,7 +57,7 @@ export function ThoughtComposer() {
           aria-label="Log that you thought of her"
         >
           {busy && !open ? (
-            <Loader2 className="size-4 animate-spin" />
+            <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
           ) : (
             <Heart className="size-4" />
           )}
@@ -108,13 +109,15 @@ export function ThoughtComposer() {
             disabled={busy || (note.trim() === "" && link.trim() === "")}
             className="gap-2"
           >
-            {busy && <Loader2 className="size-4 animate-spin" />}
+            {busy && (
+              <Loader2 className="size-4 animate-spin motion-reduce:animate-none" />
+            )}
             Save
           </Button>
         </div>
       )}
 
-      {error && <p className="text-xs text-red-300">{error}</p>}
+      {error && <FormMessage kind="error">{error}</FormMessage>}
     </div>
   );
 }
