@@ -1,5 +1,5 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_CONFIG, SENSITIVITY_PRESETS } from "@/lib/analysis/config";
 import { OURA_SCOPE } from "@/lib/oura/contracts";
 import SettingsPage from "./page";
@@ -54,8 +54,16 @@ function checkedSensitivity(html: string): string | undefined {
   return group?.match(/aria-checked="true"[^>]*>([^<]+)</)?.[1];
 }
 
+const originalAdminEmails = process.env.ADMIN_EMAILS;
+
 describe("Settings", () => {
+  afterEach(() => {
+    if (originalAdminEmails === undefined) delete process.env.ADMIN_EMAILS;
+    else process.env.ADMIN_EMAILS = originalAdminEmails;
+  });
+
   beforeEach(() => {
+    process.env.ADMIN_EMAILS = "someone-else@example.com";
     state.needsReconnect = false;
     state.rows = {
       oauth_tokens: [
@@ -94,5 +102,27 @@ describe("Settings", () => {
     const html = await renderSettings();
     expect(html).toMatch(/text-attention[^"]*">Reconnect required</);
     expect(html).not.toMatch(/\b(red|amber|green)-\d/);
+  });
+
+  it("shows admins the automatic-thoughts switch as it is saved", async () => {
+    process.env.ADMIN_EMAILS = "owner@example.com";
+    state.rows.app_settings = [
+      { value: "0", updatedAt: 1790000000, updatedBy: "owner@example.com" },
+    ];
+    const html = await renderSettings();
+    expect(html).toContain("Automatic Thoughts");
+    expect(html).toContain("Turn on automatic thoughts");
+    expect(html).toContain("by owner@example.com");
+  });
+
+  it("shows it on when nobody has switched it", async () => {
+    process.env.ADMIN_EMAILS = "owner@example.com";
+    expect(await renderSettings()).toContain("Turn off automatic thoughts");
+  });
+
+  it("hides the switch from everyone who is not an admin", async () => {
+    const html = await renderSettings();
+    expect(html).not.toContain("Automatic Thoughts");
+    expect(html).not.toContain("automatic thoughts");
   });
 });

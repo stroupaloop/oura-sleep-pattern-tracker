@@ -410,6 +410,14 @@ export const notificationSettings = sqliteTable("notification_settings", {
   createdAt: integer("created_at").notNull(),
 });
 
+/** Site-wide switches admins flip in Settings, one row per key. */
+export const appSettings = sqliteTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+  updatedBy: text("updated_by"),
+});
+
 // Sensitive data tables (gated by SENSITIVE_EMAILS)
 
 export const enhancedTags = sqliteTable("enhanced_tags", {

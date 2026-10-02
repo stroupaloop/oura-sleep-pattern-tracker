@@ -6,13 +6,16 @@ import { getNowUnixSeconds } from "@/lib/date-utils";
 import { unixToEtDay } from "@/lib/thoughts-schedule";
 import {
   DEFAULT_FALLBACK_OPTIONS,
+  fallbackClockStart,
   fallbackPingDue,
 } from "@/lib/thoughts-fallback";
+import { loadFallbackSetting } from "@/lib/thoughts-fallback-setting";
 
 /**
  * Logs a "thought of you" when nothing has been logged for a random 6-12
  * hours, within waking hours. Any entry resets the clock: a ping, a note, a
- * link, an edit, or one of these automatic pings.
+ * link, an edit, or one of these automatic pings. Admins switch it off and on
+ * in Settings; THOUGHTS_FALLBACK_ENABLED=0 still overrides that.
  */
 export async function GET(request: NextRequest) {
   const authHeader = request.headers.get("authorization");
@@ -35,6 +38,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const setting = await loadFallbackSetting();
+    if (!setting.enabled) {
+      return NextResponse.json({ status: "disabled", inserted: 0 });
+    }
+
     const lastActivity = await db
       .select({
         at: sql<number | null>`max(max(${thoughts.createdAt}, coalesce(${thoughts.updatedAt}, 0)))`,
@@ -46,10 +54,14 @@ export async function GET(request: NextRequest) {
       });
 
     const now = getNowUnixSeconds();
-    const ping = fallbackPingDue(lastActivity, now, {
-      ...DEFAULT_FALLBACK_OPTIONS,
-      seed,
-    });
+    const ping = fallbackPingDue(
+      fallbackClockStart(lastActivity, setting.updatedAt),
+      now,
+      {
+        ...DEFAULT_FALLBACK_OPTIONS,
+        seed,
+      }
+    );
     if (!ping) {
       return NextResponse.json({ status: "not-due", lastActivity, inserted: 0 });
     }

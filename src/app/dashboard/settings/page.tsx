@@ -22,12 +22,15 @@ import { DetectionConfig, type SensitivityPreset } from "./detection-config";
 import { BipolarTypeSelector } from "./bipolar-type-selector";
 import { MedicationSettings } from "./medication-settings";
 import { NotificationSettings } from "./notification-settings";
+import { FallbackToggle } from "./fallback-toggle";
 import { Panel } from "@/components/ui/panel";
 import { Pill } from "@/components/ui/pill";
 import { missingOuraScopes } from "@/lib/oura/oauth";
 import { formatOuraScopeList } from "@/lib/oura/scope-labels";
 import { loadOuraConnectionHealth } from "@/lib/oura/connection-health-data";
 import { PageHeader } from "@/components/page-header";
+import { isAdminEmail } from "@/lib/access";
+import { loadFallbackSetting } from "@/lib/thoughts-fallback-setting";
 
 function savedPresetOf(config: DetectionConfigValues): SensitivityPreset | null {
   const presets = Object.keys(SENSITIVITY_PRESETS) as SensitivityPreset[];
@@ -61,10 +64,17 @@ export default async function SettingsPage() {
   const needsReconnect = connectionHealth?.needsReconnect ?? false;
   const isMissingData = missingScopes.length > 0;
   const showDetection = isConnected && canManageOura;
+  const isAdmin = isAdminEmail(session?.user?.email);
 
-  const [recentSyncs, activeConfig] = await Promise.all([
+  const [recentSyncs, activeConfig, fallbackSetting] = await Promise.all([
     db.select().from(syncLog).orderBy(desc(syncLog.createdAt)).limit(5),
     showDetection ? loadActiveConfig() : null,
+    isAdmin
+      ? loadFallbackSetting().catch((error) => {
+          console.error("Failed to load the automatic thought switch:", error);
+          return null;
+        })
+      : null,
   ]);
 
   let bipolarType = "unspecified";
@@ -119,6 +129,19 @@ export default async function SettingsPage() {
       >
         <NotificationSettings />
       </Panel>
+
+      {fallbackSetting && (
+        <Panel
+          id="automatic-thoughts"
+          title="Automatic Thoughts"
+          description="Logs a “Thought of you” when nothing has been logged for 6–12 hours, between 8 AM and 10 PM ET. Only admins see this."
+        >
+          <FallbackToggle
+            initial={fallbackSetting}
+            overriddenByEnv={process.env.THOUGHTS_FALLBACK_ENABLED === "0"}
+          />
+        </Panel>
+      )}
 
       <div id="oura" className="scroll-mt-6">
         <Panel

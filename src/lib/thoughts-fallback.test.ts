@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getIsoTimeZoneClockMinutes } from "./date-utils";
 import {
   DEFAULT_FALLBACK_OPTIONS,
+  fallbackClockStart,
   fallbackDueAt,
   fallbackPingDue,
   isWakingTime,
@@ -81,5 +82,32 @@ describe("fallbackPingDue", () => {
     const now = Date.parse("2026-09-30T07:00:00Z") / 1000;
     expect(isWakingTime(now, OPTIONS)).toBe(false);
     expect(fallbackPingDue(MORNING, now, OPTIONS)).toBeNull();
+  });
+});
+
+describe("fallbackClockStart", () => {
+  it("is the last activity when the switch was never changed", () => {
+    expect(fallbackClockStart(MORNING, null)).toBe(MORNING);
+    expect(fallbackClockStart(null, null)).toBeNull();
+  });
+
+  it("restarts the wait from the moment the switch went back on", () => {
+    // Off for two days, back on at 11:00 AM ET: the stretch that ran out
+    // while it was off no longer counts.
+    const reenabled = Date.parse("2026-09-30T15:00:00Z") / 1000;
+    const start = fallbackClockStart(MORNING, reenabled)!;
+    expect(start).toBe(reenabled);
+    expect(fallbackPingDue(start, reenabled + 60, OPTIONS)).toBeNull();
+    expect(fallbackDueAt(start, OPTIONS)! - reenabled).toBeGreaterThanOrEqual(
+      OPTIONS.minGapHours * HOUR
+    );
+  });
+
+  it("keeps newer activity when something was logged after switching on", () => {
+    expect(fallbackClockStart(MORNING + HOUR, MORNING)).toBe(MORNING + HOUR);
+  });
+
+  it("still waits for a first entry before ever pinging", () => {
+    expect(fallbackClockStart(null, MORNING)).toBeNull();
   });
 });

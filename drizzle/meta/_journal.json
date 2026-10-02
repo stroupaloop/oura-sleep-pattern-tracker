@@ -134,6 +134,13 @@
       "when": 1790667734573,
       "tag": "0018_thought_reactions",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "6",
+      "when": 1790960212865,
+      "tag": "0019_app_settings",
+      "breakpoints": true
     }
   ]
 }
