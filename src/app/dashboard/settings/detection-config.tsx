@@ -11,9 +11,6 @@ import {
 
 export type SensitivityPreset = keyof typeof SENSITIVITY_PRESETS;
 
-const FORTY_PIXEL_OPTIONS_ON_PHONES =
-  "[&>button]:min-h-10 sm:[&>button]:min-h-7";
-
 type Choice = SensitivityPreset | "custom";
 
 const PRESET_OPTIONS: SegmentedOption<Choice>[] = [
@@ -134,7 +131,6 @@ export function DetectionConfig({
           options={options}
           value={choice}
           onValueChange={setChoice}
-          className={FORTY_PIXEL_OPTIONS_ON_PHONES}
         />
         <p className="text-xs text-muted-foreground">
           {choice === "low" && "Fewer alerts — only strong, sustained patterns trigger warnings."}

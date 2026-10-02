@@ -66,7 +66,7 @@ export function SegmentedControl<T extends string>({
               }
             }}
             className={cn(
-              "min-h-9 rounded-md px-3 text-sm transition-colors sm:min-h-7",
+              "min-h-10 rounded-md px-3 text-sm transition-colors sm:min-h-8",
               "outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
               checked
                 ? "bg-secondary font-medium text-foreground"

@@ -16,9 +16,6 @@ const options: SegmentedOption<BPType>[] = [
   { value: "unspecified", label: "Not specified" },
 ];
 
-const FORTY_PIXEL_OPTIONS_ON_PHONES =
-  "[&>button]:min-h-10 sm:[&>button]:min-h-7";
-
 function toBPType(value: string): BPType {
   return value === "bp1" || value === "bp2" ? value : "unspecified";
 }
@@ -85,7 +82,6 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
           options={options}
           value={selected}
           onValueChange={setSelected}
-          className={FORTY_PIXEL_OPTIONS_ON_PHONES}
         />
       </div>
 
