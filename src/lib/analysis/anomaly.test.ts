@@ -230,3 +230,27 @@ describe("daily analysis source and missingness", () => {
     expect(contextualized!.direction).toBe(wearableOnly!.direction);
   });
 });
+
+describe("baseline spread with a far-off night", () => {
+  const night = (index: number, totalSleepMinutes: number): DayMetrics => ({
+    ...dayMetrics(`2000-01-${String(index + 1).padStart(2, "0")}`, 0),
+    totalSleepMinutes,
+  });
+  const steady = Array.from({ length: 20 }, (_, index) =>
+    night(index, index % 2 === 0 ? 400 : 440)
+  );
+  const shortNight = night(21, 360);
+
+  it("flags a short night against a steady baseline", () => {
+    const result = computeDailyAnalysis(shortNight, steady, DEFAULT_CONFIG);
+    expect(result?.zScores.sleep).toBeCloseTo(-2.88, 2);
+    expect(result?.isAnomaly).toBe(true);
+  });
+
+  it("still flags it after one long recovery night joins the baseline", () => {
+    const withRecovery = [...steady, night(20, 600)];
+    const result = computeDailyAnalysis(shortNight, withRecovery, DEFAULT_CONFIG);
+    expect(result?.zScores.sleep).toBeCloseTo(-2.94, 2);
+    expect(result?.isAnomaly).toBe(true);
+  });
+});
