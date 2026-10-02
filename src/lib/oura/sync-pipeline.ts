@@ -5,6 +5,7 @@ import {
 } from "@/lib/analysis/cycle";
 import { runHealthSignalDetection } from "@/lib/analysis/health-signals";
 import { reprocessAll, type ReprocessResult } from "@/lib/analysis/reprocess";
+import { renewOuraTokenIfDue } from "./client";
 import type { OuraSyncWarning } from "./contracts";
 import { syncDateRange, syncSensitiveDateRange } from "./sync";
 
@@ -55,6 +56,7 @@ export async function runOuraSyncPipeline(
   options: SyncPipelineOptions
 ): Promise<SyncPipelineResult> {
   const { startDate, endDate, syncType, includePrivate } = options;
+  await renewOuraTokenIfDue();
   const core = await syncDateRange(startDate, endDate, syncType);
 
   const warnings = [...core.warnings];

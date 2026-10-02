@@ -7,6 +7,11 @@ const mocks = vi.hoisted(() => ({
   runCyclePredictions: vi.fn(),
   runHealthSignalDetection: vi.fn(),
   reprocessAll: vi.fn(),
+  renewOuraTokenIfDue: vi.fn(),
+}));
+
+vi.mock("./client", () => ({
+  renewOuraTokenIfDue: mocks.renewOuraTokenIfDue,
 }));
 
 vi.mock("./sync", () => ({
@@ -51,6 +56,9 @@ function fail(name: string) {
 beforeEach(() => {
   mocks.calls.length = 0;
   vi.spyOn(console, "error").mockImplementation(() => {});
+  mocks.renewOuraTokenIfDue
+    .mockReset()
+    .mockImplementation(track("renew", "not_due"));
   mocks.syncDateRange
     .mockReset()
     .mockImplementation(
@@ -89,7 +97,7 @@ describe("runOuraSyncPipeline", () => {
 
     const result = await runOuraSyncPipeline(BACKFILL);
 
-    expect(mocks.calls).toEqual(["core", "private", "cycles", "analysis", "signals"]);
+    expect(mocks.calls).toEqual(["renew", "core", "private", "cycles", "analysis", "signals"]);
     expect(mocks.syncDateRange).toHaveBeenCalledWith(
       "2026-07-05",
       "2026-10-02",
@@ -125,7 +133,7 @@ describe("runOuraSyncPipeline", () => {
 
     const result = await runOuraSyncPipeline(BACKFILL);
 
-    expect(mocks.calls).toEqual(["core", "private", "cycles", "analysis", "signals"]);
+    expect(mocks.calls).toEqual(["renew", "core", "private", "cycles", "analysis", "signals"]);
     expect(result.status).toBe("partial");
     expect(result.failedSteps).toEqual([
       { step: "private_sync", message: "private broke" },
@@ -139,7 +147,7 @@ describe("runOuraSyncPipeline", () => {
 
     const result = await runOuraSyncPipeline(BACKFILL);
 
-    expect(mocks.calls).toEqual(["core", "private", "cycles", "analysis"]);
+    expect(mocks.calls).toEqual(["renew", "core", "private", "cycles", "analysis"]);
     expect(result.failedSteps.map((failure) => failure.step)).toEqual([
       "cycle_predictions",
     ]);
@@ -152,7 +160,7 @@ describe("runOuraSyncPipeline", () => {
 
     const result = await runOuraSyncPipeline(BACKFILL);
 
-    expect(mocks.calls).toEqual(["core", "private", "cycles", "analysis", "signals"]);
+    expect(mocks.calls).toEqual(["renew", "core", "private", "cycles", "analysis", "signals"]);
     expect(result.analysis).toBeNull();
     expect(result.failedSteps.map((failure) => failure.step)).toEqual([
       "pattern_checks",
@@ -164,7 +172,7 @@ describe("runOuraSyncPipeline", () => {
     const { runOuraSyncPipeline } = await import("./sync-pipeline");
 
     await expect(runOuraSyncPipeline(BACKFILL)).rejects.toThrow("core broke");
-    expect(mocks.calls).toEqual(["core"]);
+    expect(mocks.calls).toEqual(["renew", "core"]);
   });
 
   it("leaves private data and what depends on it alone when asked to", async () => {
@@ -172,7 +180,7 @@ describe("runOuraSyncPipeline", () => {
 
     const result = await runOuraSyncPipeline({ ...BACKFILL, includePrivate: false });
 
-    expect(mocks.calls).toEqual(["core", "analysis"]);
+    expect(mocks.calls).toEqual(["renew", "core", "analysis"]);
     expect(result.status).toBe("success");
   });
 });
