@@ -8,6 +8,7 @@ const DATASET_LABELS: Record<string, string> = {
   daily_cardiovascular_age: "Cardiovascular Age",
   vO2_max: "VO₂ max",
   sleep_time: "Bedtime Guidance",
+  personal_info: "Profile",
 };
 
 interface SyncSummaryOptions {
@@ -59,15 +60,18 @@ export function formatOuraSyncSummary(
   const coreRecords = readCount(data.records);
   const privateRecords = readCount(data.sensitiveRecords);
   const warnings = Array.isArray(data.warnings) ? data.warnings : [];
-  const unavailableDatasets = [
+  const labelsFor = (notGranted: boolean) => [
     ...new Set(
       warnings.flatMap((warning) => {
         if (!isRecord(warning)) return [];
+        if ((warning.code === "not_granted") !== notGranted) return [];
         const dataset = readString(warning.dataset);
         return dataset ? [formatDatasetLabel(dataset)] : [];
       })
     ),
   ];
+  const notSharedDatasets = labelsFor(true);
+  const unavailableDatasets = labelsFor(false);
   const startDate = readString(data.startDate);
   const endDate = readString(data.endDate);
   const range =
@@ -75,7 +79,9 @@ export function formatOuraSyncSummary(
       ? ` (${startDate} to ${endDate})`
       : "";
   const isPartial =
-    data.status === "partial" || unavailableDatasets.length > 0;
+    data.status === "partial" ||
+    unavailableDatasets.length > 0 ||
+    notSharedDatasets.length > 0;
   const coverage = isPartial ? " with partial coverage" : "";
   const records = `${formatRecordCount(
     coreRecords,
@@ -86,10 +92,20 @@ export function formatOuraSyncSummary(
     return `${options.operation} complete${range}: processed ${records}.`;
   }
 
+  const notShared =
+    notSharedDatasets.length > 0
+      ? ` Not shared by Oura: ${formatList(notSharedDatasets)}. Enable ${
+          notSharedDatasets.length === 1 ? "it" : "them"
+        } for this app in Oura, then reconnect.`
+      : "";
+  if (unavailableDatasets.length === 0 && notSharedDatasets.length > 0) {
+    return `${options.operation} complete${coverage}${range}: processed ${records}.${notShared}`;
+  }
+
   const unavailable =
     unavailableDatasets.length > 0
       ? `Optional datasets not fully updated: ${formatList(unavailableDatasets)}.`
       : "Some optional datasets were not fully updated.";
 
-  return `${options.operation} complete${coverage}${range}: processed ${records}. ${unavailable} The sync did not delete previously stored source rows for those datasets.`;
+  return `${options.operation} complete${coverage}${range}: processed ${records}. ${unavailable} The sync did not delete previously stored source rows for those datasets.${notShared}`;
 }

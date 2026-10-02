@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aggregateHeartRateSamples,
   getHeartRateQueryRange,
+  splitHeartRateDays,
 } from "./heartrate";
 
 describe("aggregateHeartRateSamples", () => {
@@ -73,5 +74,28 @@ describe("getHeartRateQueryRange", () => {
       startDatetime: "2026-03-08T05:00:00.000Z",
       endDatetime: "2026-03-09T03:59:59.000Z",
     });
+  });
+});
+
+describe("splitHeartRateDays", () => {
+  it("covers an inclusive range in consecutive pieces of at most the limit", () => {
+    expect(splitHeartRateDays("2026-07-04", "2026-08-01", 14)).toEqual([
+      { startDay: "2026-07-04", endDay: "2026-07-17" },
+      { startDay: "2026-07-18", endDay: "2026-07-31" },
+      { startDay: "2026-08-01", endDay: "2026-08-01" },
+    ]);
+  });
+
+  it("keeps a short range whole and an empty range empty", () => {
+    expect(splitHeartRateDays("2026-09-30", "2026-10-01")).toEqual([
+      { startDay: "2026-09-30", endDay: "2026-10-01" },
+    ]);
+    expect(splitHeartRateDays("2026-10-02", "2026-10-01")).toEqual([]);
+  });
+
+  it("rejects a non-positive piece size", () => {
+    expect(() => splitHeartRateDays("2026-10-01", "2026-10-02", 0)).toThrow(
+      RangeError
+    );
   });
 });

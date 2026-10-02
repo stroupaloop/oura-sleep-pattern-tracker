@@ -129,6 +129,32 @@ export function getOuraTimeZone(): string {
   return DEFAULT_OURA_TIME_ZONE;
 }
 
+/**
+ * Oura answers 400 for heart-rate windows longer than 30 days, so a backfill
+ * asks in pieces. Fourteen days keeps a DST hour from tipping one over.
+ */
+export const HEART_RATE_QUERY_MAX_DAYS = 14;
+
+/** Splits an inclusive ET day range into consecutive inclusive pieces. */
+export function splitHeartRateDays(
+  startDay: string,
+  endDay: string,
+  maxDays = HEART_RATE_QUERY_MAX_DAYS
+): Array<{ startDay: string; endDay: string }> {
+  if (!Number.isInteger(maxDays) || maxDays < 1) {
+    throw new RangeError("Heart-rate chunk size must be a positive integer");
+  }
+  const chunks: Array<{ startDay: string; endDay: string }> = [];
+  let chunkStart = startDay;
+  while (chunkStart <= endDay) {
+    const fullEnd = shiftIsoDay(chunkStart, maxDays - 1);
+    const chunkEnd = fullEnd < endDay ? fullEnd : endDay;
+    chunks.push({ startDay: chunkStart, endDay: chunkEnd });
+    chunkStart = shiftIsoDay(chunkEnd, 1);
+  }
+  return chunks;
+}
+
 export function getHeartRateQueryRange(
   startDay: string,
   endDay: string,

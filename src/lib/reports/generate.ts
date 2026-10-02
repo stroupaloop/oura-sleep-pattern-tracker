@@ -7,13 +7,18 @@ import {
   medications,
   sleepPeriods,
 } from "@/lib/db/schema";
-import { gte, lte, and, desc, eq } from "drizzle-orm";
+import { gte, lte, lt, and, desc, inArray } from "drizzle-orm";
 import {
   loadActiveConfig,
   loadBipolarType,
 } from "@/lib/analysis/config";
 import { filterCurrentPatternAssessments } from "@/lib/analysis/provenance";
 import { summarizeRecordedMedicationLogs } from "./medication-adherence";
+import { getTodayET } from "@/lib/date-utils";
+import {
+  NIGHT_SLEEP_TYPES,
+  selectNightSleepByDay,
+} from "@/lib/oura/main-sleep";
 
 export type ReportTrend =
   | "increasing"
@@ -76,7 +81,7 @@ export async function generateReport(
   endDate: string
 ): Promise<ReportData> {
   const [
-    sleepRows,
+    sleepPeriodRows,
     activityRows,
     moodRows,
     assessmentRows,
@@ -88,13 +93,17 @@ export async function generateReport(
     db
       .select({
         day: sleepPeriods.day,
-        totalSleepSeconds: sleepPeriods.totalSleepDuration,
-        avgHrv: sleepPeriods.averageHrv,
+        type: sleepPeriods.type,
+        bedtimeStart: sleepPeriods.bedtimeStart,
+        bedtimeEnd: sleepPeriods.bedtimeEnd,
+        totalSleepDuration: sleepPeriods.totalSleepDuration,
+        timeInBed: sleepPeriods.timeInBed,
+        averageHrv: sleepPeriods.averageHrv,
       })
       .from(sleepPeriods)
       .where(
         and(
-          eq(sleepPeriods.type, "long_sleep"),
+          inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES]),
           gte(sleepPeriods.day, startDate),
           lte(sleepPeriods.day, endDate)
         )
@@ -109,7 +118,9 @@ export async function generateReport(
       .where(
         and(
           gte(dailyActivity.day, startDate),
-          lte(dailyActivity.day, endDate)
+          lte(dailyActivity.day, endDate),
+          // Today's count is still climbing.
+          lt(dailyActivity.day, getTodayET())
         )
       )
       .orderBy(dailyActivity.day),
@@ -159,6 +170,13 @@ export async function generateReport(
   }
   const totalDays = Math.floor((end - start) / 86_400_000) + 1;
 
+  const sleepRows = [...selectNightSleepByDay(sleepPeriodRows).values()].map(
+    (night) => ({
+      day: night.day,
+      totalSleepSeconds: night.totalSleepDuration,
+      avgHrv: night.averageHrv,
+    })
+  );
   const sleepValues = sleepRows
     .map((row) => row.totalSleepSeconds)
     .filter(
@@ -175,7 +193,8 @@ export async function generateReport(
     .map((row) => row.steps)
     .filter(
       (value): value is number =>
-        value != null && Number.isFinite(value) && value >= 0
+        // A zero-step day is a day the ring was off, not a still one.
+        value != null && Number.isFinite(value) && value > 0
     );
   const moodValues = moodRows.map((r) => r.moodScore);
 

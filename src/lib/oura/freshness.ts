@@ -24,6 +24,7 @@ export interface DatasetFreshness {
 }
 
 const WARNING_CODES = new Set<OuraSyncWarningCode>([
+  "not_granted",
   "unauthorized",
   "forbidden",
   "rate_limited",

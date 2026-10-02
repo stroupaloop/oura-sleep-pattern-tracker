@@ -1,6 +1,15 @@
-import { OURA_SCOPE, OuraRequestError } from "./contracts";
+import {
+  OURA_SCOPE,
+  OuraRequestError,
+  readOAuthErrorCode,
+} from "./contracts";
 
-export { OURA_SCOPE, OURA_SCOPES, resolveOuraScope } from "./contracts";
+export {
+  OURA_SCOPE,
+  OURA_SCOPES,
+  missingOuraScopes,
+  resolveOuraScope,
+} from "./contracts";
 
 const AUTHORIZE_URL = "https://cloud.ouraring.com/oauth/authorize";
 const TOKEN_URL = "https://api.ouraring.com/oauth/token";
@@ -38,7 +47,11 @@ export async function exchangeCodeForTokens(code: string) {
   });
 
   if (!response.ok) {
-    throw new OuraRequestError(response.status, "token_exchange");
+    throw new OuraRequestError(
+      response.status,
+      "token_exchange",
+      await readOAuthErrorCode(response)
+    );
   }
 
   return response.json() as Promise<OuraTokenResponse>;
@@ -57,7 +70,11 @@ export async function refreshAccessToken(refreshToken: string) {
   });
 
   if (!response.ok) {
-    throw new OuraRequestError(response.status, "token_refresh");
+    throw new OuraRequestError(
+      response.status,
+      "token_refresh",
+      await readOAuthErrorCode(response)
+    );
   }
 
   return response.json() as Promise<OuraTokenResponse>;

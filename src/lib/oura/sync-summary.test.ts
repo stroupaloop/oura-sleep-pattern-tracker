@@ -25,6 +25,40 @@ describe("Oura sync summary", () => {
     );
   });
 
+  it("tells data Oura did not share apart from data that failed", () => {
+    expect(
+      formatOuraSyncSummary(
+        {
+          records: 36,
+          sensitiveRecords: 3,
+          status: "partial",
+          warnings: [
+            { dataset: "daily_resilience", code: "not_granted" },
+            { dataset: "daily_spo2", code: "not_granted" },
+          ],
+        },
+        { operation: "Sync" }
+      )
+    ).toBe(
+      "Sync complete with partial coverage: processed 36 core records and 3 private records. Not shared by Oura: Resilience and Blood Oxygen. Enable them for this app in Oura, then reconnect."
+    );
+    expect(
+      formatOuraSyncSummary(
+        {
+          records: 36,
+          sensitiveRecords: 3,
+          warnings: [
+            { dataset: "vO2_max", code: "not_granted" },
+            { dataset: "heartrate", code: "rate_limited" },
+          ],
+        },
+        { operation: "Sync" }
+      )
+    ).toBe(
+      "Sync complete with partial coverage: processed 36 core records and 3 private records. Optional datasets not fully updated: Heart Rate. The sync did not delete previously stored source rows for those datasets. Not shared by Oura: VO₂ max. Enable it for this app in Oura, then reconnect."
+    );
+  });
+
   it("includes a backfill range without implying partial coverage", () => {
     expect(
       formatOuraSyncSummary(

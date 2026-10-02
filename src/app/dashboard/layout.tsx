@@ -8,6 +8,9 @@ import { db } from "@/lib/db";
 import { syncLog } from "@/lib/db/schema";
 import { desc, ne } from "drizzle-orm";
 import { selectLatestDashboardSyncAttempt } from "@/lib/oura/freshness";
+import { shouldShowOuraConnectionProblem } from "@/lib/oura/connection-health";
+import { loadOuraConnectionHealth } from "@/lib/oura/connection-health-data";
+import { OuraConnectionBanner } from "@/components/oura-connection-banner";
 
 function formatAttemptStatus(status: string): string {
   if (status === "success") return "Attempt complete";
@@ -28,18 +31,21 @@ export default async function DashboardLayout({
   // Authors use the dashboard constantly; logging them would bury other visits.
   const trackVisits = !isAuthorEmail(session.user.email);
 
-  const recentSyncRows = await db
-    .select({
-      syncType: syncLog.syncType,
-      status: syncLog.status,
-      errorMessage: syncLog.errorMessage,
-      createdAt: syncLog.createdAt,
-    })
-    .from(syncLog)
-    .where(ne(syncLog.syncType, "cron-hr"))
-    .orderBy(desc(syncLog.createdAt))
-    .limit(100)
-    .catch(() => []);
+  const [recentSyncRows, connectionHealth] = await Promise.all([
+    db
+      .select({
+        syncType: syncLog.syncType,
+        status: syncLog.status,
+        errorMessage: syncLog.errorMessage,
+        createdAt: syncLog.createdAt,
+      })
+      .from(syncLog)
+      .where(ne(syncLog.syncType, "cron-hr"))
+      .orderBy(desc(syncLog.createdAt))
+      .limit(100)
+      .catch(() => []),
+    loadOuraConnectionHealth().catch(() => null),
+  ]);
   const lastSyncAttempt = selectLatestDashboardSyncAttempt(
     recentSyncRows,
     sensitive
@@ -89,6 +95,12 @@ export default async function DashboardLayout({
           </Link>
         )}
       </header>
+      {connectionHealth && shouldShowOuraConnectionProblem(connectionHealth) && (
+        <OuraConnectionBanner
+          health={connectionHealth}
+          canReconnect={sensitive}
+        />
+      )}
       <main className="flex-1 p-4 md:p-6">{children}</main>
       <footer className="border-t px-4 md:px-6 py-3 text-xs text-muted-foreground">
         This tool tracks sleep patterns for personal awareness. It is not a

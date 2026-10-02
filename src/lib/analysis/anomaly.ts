@@ -337,7 +337,9 @@ export function computeDailyAnalysis(
     effectiveWeights.sleepEfficiency * Math.abs(zScores.efficiency) +
     effectiveWeights.deepPct * Math.abs(zScores.deepPct) +
     effectiveWeights.remPct * Math.abs(zScores.remPct) +
-    effectiveWeights.withinNightVariability * Math.abs(withinNightVarZ) +
+    // Only a choppier night than usual is a concern; an unusually steady one
+    // is not, matching the notes and drivers.
+    effectiveWeights.withinNightVariability * Math.max(0, withinNightVarZ) +
     effectiveWeights.activityLevel * Math.abs(activityZ) +
     effectiveWeights.circadianRegularity * Math.abs(circadianZ);
 

@@ -6,7 +6,7 @@
     },
     {
       "path": "/api/cron/hr-sync",
-      "schedule": "0 * * * *"
+      "schedule": "30 * * * *"
     },
     {
       "path": "/api/cron/remind",
