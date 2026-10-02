@@ -3,7 +3,7 @@ import {
   coefficientOfVariation,
   isNextCalendarDay,
   zScore,
-  standardDeviation,
+  robustStandardDeviation,
   trimmedMean,
 } from "./baseline";
 import { DetectionConfigValues, BipolarType, getBipolarProfile } from "./config";
@@ -185,7 +185,7 @@ export function analyzeWindow(
     priorLatencyCVs.length > 0 ? trimmedMean(priorLatencyCVs) : Number.NaN;
   const latencyCVStd =
     priorLatencyCVs.length > 1
-      ? standardDeviation(priorLatencyCVs, baselineLatencyCV)
+      ? robustStandardDeviation(priorLatencyCVs, baselineLatencyCV)
       : Number.NaN;
   const latCVZ = zScore(latencyCV, baselineLatencyCV, latencyCVStd);
 
@@ -198,7 +198,7 @@ export function analyzeWindow(
     priorBedtimeCVs.length > 0 ? trimmedMean(priorBedtimeCVs) : Number.NaN;
   const bedtimeCVStd =
     priorBedtimeCVs.length > 1
-      ? standardDeviation(priorBedtimeCVs, baselineBedtimeCV)
+      ? robustStandardDeviation(priorBedtimeCVs, baselineBedtimeCV)
       : Number.NaN;
   const bedtimeCVZ = zScore(bedtimeCV, baselineBedtimeCV, bedtimeCVStd);
 

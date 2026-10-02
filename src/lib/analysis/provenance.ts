@@ -6,9 +6,10 @@ import type { BipolarType } from "./config";
  * runs one). 2026.10.1: a night is the day's overnight periods, short nights
  * typed `sleep` included; today's partial activity waits; only choppier
  * nights add within-night variability to the score. 2026.10.2: nights far
- * from a metric's baseline center no longer widen its spread.
+ * from a metric's baseline center no longer widen its spread. 2026.10.3: the
+ * same for prior windows' sleep-onset and bedtime variability.
  */
-export const PATTERN_ALGORITHM_VERSION = "2026.10.2";
+export const PATTERN_ALGORITHM_VERSION = "2026.10.3";
 export const PATTERN_SIGNAL_MODE = "wearable-only";
 
 export interface PatternProvenance {

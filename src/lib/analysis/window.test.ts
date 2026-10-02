@@ -189,3 +189,54 @@ describe("window analysis coverage", () => {
     expect(labelledWindow!.direction).toBe(wearableWindow!.direction);
   });
 });
+
+describe("variability against prior windows with a far-off one", () => {
+  const night = (
+    index: number,
+    overrides: Partial<DayMetrics>,
+    direction: DailyAnalysisResult["direction"] = "hyper"
+  ): DailyAnalysisResult => {
+    const day = new Date(Date.UTC(2000, 0, 1 + index)).toISOString().slice(0, 10);
+    return { ...result(day), metrics: { ...metrics(day), ...overrides }, direction };
+  };
+
+  it("still scores unsettled sleep onsets after one far-off prior window", () => {
+    const usual = [10, 14, 20, 12];
+    const steady = Array.from({ length: 20 }, (_, index) =>
+      night(index, { onsetLatencyMinutes: usual[index % usual.length] })
+    );
+    const farOff = [5, 60, 5].map((minutes, offset) =>
+      night(22 + offset, { onsetLatencyMinutes: minutes })
+    );
+    const unsettled = [8, 25, 10].map((minutes, offset) =>
+      night(30 + offset, { onsetLatencyMinutes: minutes }, "hypo")
+    );
+
+    const clean = analyzeWindow(unsettled, 3, steady, DEFAULT_CONFIG, 3);
+    const withFarOff = analyzeWindow(unsettled, 3, [...steady, ...farOff], DEFAULT_CONFIG, 3);
+
+    expect(withFarOff!.latencyCVZScore).toBeCloseTo(4.31, 2);
+    expect(withFarOff!.confidence).toBeCloseTo(7.93, 2);
+    expect(clean!.latencyCVZScore).toBeCloseTo(4.39, 2);
+  });
+
+  it("still scores scattered bedtimes after one far-off prior window", () => {
+    const usual = [-30, 10, 30, -20];
+    const steady = Array.from({ length: 20 }, (_, index) =>
+      night(index, { bedtimeMinutes: usual[index % usual.length] })
+    );
+    const farOff = [-20, 240, -10].map((minutes, offset) =>
+      night(22 + offset, { bedtimeMinutes: minutes })
+    );
+    const scattered = [-45, 30, -30].map((minutes, offset) =>
+      night(30 + offset, { bedtimeMinutes: minutes })
+    );
+
+    const clean = analyzeWindow(scattered, 3, steady, DEFAULT_CONFIG, 3);
+    const withFarOff = analyzeWindow(scattered, 3, [...steady, ...farOff], DEFAULT_CONFIG, 3);
+
+    expect(withFarOff!.bedtimeCVZScore).toBeCloseTo(3.29, 2);
+    expect(withFarOff!.confidence).toBeCloseTo(8.12, 2);
+    expect(clean!.bedtimeCVZScore).toBeCloseTo(3.37, 2);
+  });
+});
