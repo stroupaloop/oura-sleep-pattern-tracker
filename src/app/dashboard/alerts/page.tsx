@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { ChevronDown, CircleCheck, History } from "lucide-react";
+import { ChevronDown, History } from "lucide-react";
 import { db } from "@/lib/db";
 import {
   dailyAnalysis,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/db/schema";
 import { desc } from "drizzle-orm";
 import { AnalyzeButton } from "./analyze-button";
+import { AlertsCheckStatus } from "./check-status";
 import { EpisodeTimeline } from "@/components/charts/episode-timeline";
 import { RESEARCH_REFERENCES } from "@/lib/research/references";
 import type { AlertResearchContext } from "@/lib/analysis/episode";
@@ -35,6 +36,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Panel } from "@/components/ui/panel";
 import { Pill } from "@/components/ui/pill";
 import { Stat } from "@/components/ui/stat";
+import { describePatternAdvice } from "@/lib/design/pattern-advice";
 import { describePatternDirection } from "@/lib/design/pattern-direction";
 import { tierColor, tierLabel, tierTone } from "@/lib/design/pattern-tiers";
 import { formatNightLabel } from "@/lib/health/format";
@@ -212,21 +214,19 @@ function ResearchContextCard({
         </div>
       )}
 
-      {ctx.whatYouCanDo.length > 0 && (
-        <div>
-          <h3 className="mb-1 text-xs font-medium text-muted-foreground">
-            What you can do
-          </h3>
-          <ul className="text-sm space-y-1">
-            {ctx.whatYouCanDo.map((item, i) => (
-              <li key={i} className="flex gap-2">
-                <span className="text-muted-foreground">•</span>
-                <span>{item}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <div>
+        <h3 className="mb-1 text-xs font-medium text-muted-foreground">
+          What you can do
+        </h3>
+        <ul className="text-sm space-y-1">
+          {describePatternAdvice(direction).map((item, i) => (
+            <li key={i} className="flex gap-2">
+              <span className="text-muted-foreground">•</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }
@@ -281,7 +281,8 @@ export default async function AlertsPage() {
   const latestEvaluatedAt = formatEvaluatedAt(
     latestAssessment?.evaluatedAt ?? null
   );
-  const currentYear = getTodayET().slice(0, 4);
+  const today = getTodayET();
+  const currentYear = today.slice(0, 4);
 
   const timelineEpisodes = currentAssessments.map((e) => ({
     day: e.day,
@@ -360,13 +361,11 @@ export default async function AlertsPage() {
         </EmptyState>
       )}
 
-      {episodes.length === 0 && currentAssessments.length > 0 && (
-        <Callout
-          icon={CircleCheck}
-          title="No sustained pattern flags from the available data"
-        >
-          This is not a clinical assessment.
-        </Callout>
+      {episodes.length === 0 && latestAssessment && (
+        <AlertsCheckStatus
+          latestCheckedDay={latestAssessment.day}
+          today={today}
+        />
       )}
 
       {episodes.map((storedEpisode) => {
