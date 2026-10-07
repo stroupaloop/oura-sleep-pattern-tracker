@@ -125,7 +125,7 @@ export default async function SettingsPage() {
       <Panel
         id="notifications"
         title="Notification Preferences"
-        description="Daily log reminders by email or SMS, sent only if the day's log is still empty."
+        description="Reminders by email or SMS, sent only if a dose due by then or the day's check-in is not logged yet."
       >
         <NotificationSettings />
       </Panel>
