@@ -146,7 +146,7 @@ export function NotificationSettings() {
           </NativeSelect>
         </div>
         <p id="reminder-hour-note" className="text-xs text-muted-foreground">
-          {`Get a reminder at ${selectedLabel} ET if you haven't checked in yet.`}
+          {`Get a reminder at ${selectedLabel} ET if a dose due by then or the check-in isn't logged yet.`}
         </p>
       </div>
 
