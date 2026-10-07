@@ -21,10 +21,17 @@ import {
 } from "@/components/ui/card";
 import { ResearchTooltip } from "@/components/research-tooltip";
 import { tierColor, tierLabel } from "@/lib/design/pattern-tiers";
+import {
+  GapNote,
+  type GapRow,
+  NoNightTooltip,
+  hasValues,
+  isolatedDot,
+} from "./chart-gaps";
 import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
-interface CircadianPoint {
+interface CircadianPoint extends GapRow {
   day: string;
   is: number | null;
   iv: number | null;
@@ -45,16 +52,18 @@ const SERIES = {
   ra: { color: "var(--faint-foreground)", dash: "2 3" },
 } as const;
 
-function CircadianTooltipContent({
+export function CircadianTooltipContent({
   active,
   payload,
 }: {
   active?: boolean;
-  payload?: ReadonlyArray<{ payload: CircadianPoint }>;
+  payload?: ReadonlyArray<{ value?: unknown; payload: CircadianPoint }>;
   label?: string;
 }) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
+  if (p.noNight) return <NoNightTooltip title={p.day} />;
+  if (!hasValues(payload)) return null;
   return (
     <ChartTooltipFrame title={p.day}>
       {p.is != null && (
@@ -170,7 +179,7 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
                 fill: CHART.axis,
               }}
             />
-            <Tooltip content={<CircadianTooltipContent />} />
+            <Tooltip content={<CircadianTooltipContent />} filterNull={false} />
             <Legend formatter={legendLabel} />
             {episodeRanges.map((r, i) => (
               <ReferenceArea
@@ -202,7 +211,7 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               dataKey="is"
               stroke={SERIES.is.color}
               strokeWidth={2}
-              dot={false}
+              dot={isolatedDot}
               name="IS (Stability)"
               connectNulls={false}
             />
@@ -213,7 +222,7 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               stroke={SERIES.iv.color}
               strokeDasharray={SERIES.iv.dash}
               strokeWidth={2}
-              dot={false}
+              dot={isolatedDot}
               name="IV (Variability)"
               connectNulls={false}
             />
@@ -224,13 +233,14 @@ export function CircadianChart({ data, limitations }: CircadianChartProps) {
               stroke={SERIES.ra.color}
               strokeDasharray={SERIES.ra.dash}
               strokeWidth={2}
-              dot={false}
+              dot={isolatedDot}
               name="RA (Amplitude)"
               connectNulls={false}
             />
             </LineChart>
           </ResponsiveContainer>
         )}
+        {hasCircadianData && <GapNote rows={data} />}
         {hasCircadianData && (
           <p className="mt-2 text-xs text-muted-foreground">
             The IV 2.0 line is a mathematical reference, not a clinical cutoff.

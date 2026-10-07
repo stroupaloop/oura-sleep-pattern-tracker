@@ -23,12 +23,39 @@ import {
   NIGHT_SLEEP_TYPES,
   selectNightGroupsByDay,
 } from "@/lib/oura/main-sleep";
+import { fillCalendarDays } from "./calendar-rows";
 import { buildNightWindow } from "./night-window";
 import { buildSignals } from "./signals";
 
 const TREND_DAYS = 30;
-const COMPOSITION_NIGHTS = 14;
+const COMPOSITION_DAYS = 14;
 const PATTERN_DAYS = 14;
+
+/** A day on the trend charts; `noNight` marks one with no night recorded. */
+interface TrendRow {
+  day: string;
+  hours: number | null;
+  deep: number | null;
+  rem: number | null;
+  light: number | null;
+  efficiency: number | null;
+  hrv: number | null;
+  hr: number | null;
+  noNight?: boolean;
+}
+
+interface CompositionRow {
+  day: string;
+  deep: number | null;
+  rem: number | null;
+  light: number | null;
+  awake: number | null;
+  deepMin: number | null;
+  remMin: number | null;
+  lightMin: number | null;
+  awakeMin: number | null;
+  noNight?: boolean;
+}
 
 export type HealthDashboardData = NonNullable<
   Awaited<ReturnType<typeof loadHealthDashboard>>
@@ -161,6 +188,21 @@ export async function loadHealthDashboard() {
         hr: summarizeStoredSamples(night.hr5min).average ?? night.averageHeartRate,
       };
     });
+  const trendRows = fillCalendarDays<TrendRow>(
+    chartData,
+    { start: trendStart, end: today },
+    (day) => ({
+      day,
+      hours: null,
+      deep: null,
+      rem: null,
+      light: null,
+      efficiency: null,
+      hrv: null,
+      hr: null,
+      noNight: true,
+    })
+  );
   const analysisChartData = [...analysisRows].reverse().map((row) => ({
     day: row.day,
     baselineHrv: row.baselineHrv,
@@ -173,8 +215,9 @@ export async function loadHealthDashboard() {
     hrvZScore: row.hrvZScore,
     heartRateZScore: row.heartRateZScore,
   }));
-  const compositionData = trendNights
-    .slice(-COMPOSITION_NIGHTS)
+  const compositionStart = shiftIsoDay(today, -(COMPOSITION_DAYS - 1)) ?? today;
+  const compositionNights = trendNights
+    .filter((night) => night.day >= compositionStart)
     .flatMap((night) => {
       const asleep = night.totalSleepDuration;
       const awake = night.awakeTime;
@@ -198,6 +241,22 @@ export async function loadHealthDashboard() {
         },
       ];
     });
+  const compositionData = fillCalendarDays<CompositionRow>(
+    compositionNights,
+    { start: compositionStart, end: today },
+    (day) => ({
+      day,
+      deep: null,
+      rem: null,
+      light: null,
+      awake: null,
+      deepMin: null,
+      remMin: null,
+      lightMin: null,
+      awakeMin: null,
+      noNight: true,
+    })
+  );
 
   return {
     today,
@@ -232,7 +291,7 @@ export async function loadHealthDashboard() {
     latestCheckedDay: currentAssessments[0]?.day ?? null,
     scores: { sleep: sleepScore, readiness },
     trends: {
-      chartData,
+      chartData: trendRows,
       analysisChartData,
       compositionData,
       averageSleepSeconds: averagePresent(

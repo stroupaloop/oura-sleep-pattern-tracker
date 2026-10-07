@@ -12,6 +12,13 @@ import {
   Legend,
   ComposedChart,
 } from "recharts";
+import {
+  GapNote,
+  type GapRow,
+  NoNightTooltip,
+  hasValues,
+  isolatedDot,
+} from "./chart-gaps";
 import { CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 import { formatNightLabel } from "@/lib/health/format";
@@ -25,9 +32,9 @@ import {
 import { computeCalendarRollingAverage } from "@/lib/dashboard-metrics";
 
 
-interface SleepData {
+interface SleepData extends GapRow {
   day: string;
-  hours: number;
+  hours: number | null;
   deep: number | null;
   rem: number | null;
   light: number | null;
@@ -60,6 +67,7 @@ interface MergedHrvPoint {
   hrvAvg: number | null;
   baselineHrv: number | null;
   isDeviation: boolean;
+  noNight: boolean;
 }
 
 interface MergedHrPoint {
@@ -68,9 +76,10 @@ interface MergedHrPoint {
   hrAvg: number | null;
   baselineHr: number | null;
   isDeviation: boolean;
+  noNight: boolean;
 }
 
-function mergeHrvData(
+export function mergeHrvData(
   data: SleepData[],
   analysis: AnalysisPoint[] | undefined,
   threshold: number
@@ -90,14 +99,15 @@ function mergeHrvData(
     return {
       day: d.day,
       hrv: d.hrv,
-      hrvAvg: rollingAvg[i],
+      hrvAvg: d.noNight ? null : rollingAvg[i],
       baselineHrv: baseline,
       isDeviation: Math.abs(a?.hrvZScore ?? 0) >= threshold,
+      noNight: d.noNight ?? false,
     };
   });
 }
 
-function mergeHrData(
+export function mergeHrData(
   data: SleepData[],
   analysis: AnalysisPoint[] | undefined,
   threshold: number
@@ -117,21 +127,22 @@ function mergeHrData(
     return {
       day: d.day,
       hr: d.hr,
-      hrAvg: rollingAvg[i],
+      hrAvg: d.noNight ? null : rollingAvg[i],
       baselineHr: baseline,
       isDeviation: Math.abs(a?.heartRateZScore ?? 0) >= threshold,
+      noNight: d.noNight ?? false,
     };
   });
 }
 
 interface HrvTooltipItem {
   dataKey: string;
-  value: number;
+  value: number | null;
   color: string;
   payload: MergedHrvPoint;
 }
 
-function HrvTooltipContent({
+export function HrvTooltipContent({
   active,
   payload,
 }: {
@@ -141,6 +152,10 @@ function HrvTooltipContent({
 }) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
+  if (p.noNight) {
+    return <NoNightTooltip title={formatNightLabel(p.day, { weekday: false })} />;
+  }
+  if (!hasValues(payload)) return null;
   return (
     <ChartTooltipFrame title={formatNightLabel(p.day, { weekday: false })}>
       <ChartTooltipRow
@@ -165,12 +180,12 @@ function HrvTooltipContent({
 
 interface HrTooltipItem {
   dataKey: string;
-  value: number;
+  value: number | null;
   color: string;
   payload: MergedHrPoint;
 }
 
-function HrTooltipContent({
+export function HrTooltipContent({
   active,
   payload,
 }: {
@@ -180,6 +195,10 @@ function HrTooltipContent({
 }) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
+  if (p.noNight) {
+    return <NoNightTooltip title={formatNightLabel(p.day, { weekday: false })} />;
+  }
+  if (!hasValues(payload)) return null;
   return (
     <ChartTooltipFrame title={formatNightLabel(p.day, { weekday: false })}>
       <ChartTooltipRow
@@ -202,10 +221,33 @@ function HrTooltipContent({
   );
 }
 
+const formatHours = (hours: number | null) =>
+  hours == null ? "--" : `${hours.toFixed(1)}h`;
+
+export function DurationTooltipContent({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: ReadonlyArray<{ value?: unknown; payload: SleepData }>;
+}) {
+  if (!active || !payload?.length) return null;
+  const p = payload[0].payload;
+  if (p.noNight) return <NoNightTooltip title={`Date: ${p.day}`} />;
+  if (!hasValues(payload)) return null;
+  return (
+    <ChartTooltipFrame title={`Date: ${p.day}`}>
+      <ChartTooltipRow color={CHART.deep} label="Deep" value={formatHours(p.deep)} />
+      <ChartTooltipRow color={CHART.rem} label="REM" value={formatHours(p.rem)} />
+      <ChartTooltipRow color={CHART.light} label="Light" value={formatHours(p.light)} />
+    </ChartTooltipFrame>
+  );
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function AnomalyDot(props: any) {
   const { cx, cy, payload } = props;
-  if (!payload?.isDeviation) return null;
+  if (!payload?.isDeviation) return isolatedDot(props);
   return (
     <circle
       cx={cx}
@@ -257,18 +299,8 @@ export function SleepTrendChart({
                 tick={{ fill: "var(--muted-foreground)" }}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: "var(--popover)",
-                  borderColor: "var(--border)",
-                  borderRadius: "0.5rem",
-                  color: "var(--popover-foreground)",
-                }}
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                formatter={(value: any, name: any) => [
-                  `${Number(value).toFixed(1)}h`,
-                  String(name).charAt(0).toUpperCase() + String(name).slice(1),
-                ]}
-                labelFormatter={(label) => `Date: ${label}`}
+                content={<DurationTooltipContent />}
+                filterNull={false}
               />
               <Legend formatter={legendLabel} />
               <Area
@@ -278,6 +310,7 @@ export function SleepTrendChart({
                 stroke="var(--stage-deep)"
                 fill="var(--stage-deep)"
                 fillOpacity={0.6}
+                dot={isolatedDot}
                 name="Deep"
               />
               <Area
@@ -287,6 +320,7 @@ export function SleepTrendChart({
                 stroke="var(--stage-rem)"
                 fill="var(--stage-rem)"
                 fillOpacity={0.6}
+                dot={isolatedDot}
                 name="REM"
               />
               <Area
@@ -296,10 +330,12 @@ export function SleepTrendChart({
                 stroke="var(--stage-light)"
                 fill="var(--stage-light)"
                 fillOpacity={0.4}
+                dot={isolatedDot}
                 name="Light"
               />
             </AreaChart>
           </ResponsiveContainer>
+          <GapNote rows={data} />
         </CardContent>
       </Card>
 
@@ -330,7 +366,7 @@ export function SleepTrendChart({
                   fontSize={11}
                   tick={{ fill: "var(--muted-foreground)" }}
                 />
-                <Tooltip content={<HrvTooltipContent />} />
+                <Tooltip content={<HrvTooltipContent />} filterNull={false} />
                 <Line
                   type="monotone"
                   dataKey="hrv"
@@ -366,6 +402,7 @@ export function SleepTrendChart({
                 )}
               </ComposedChart>
             </ResponsiveContainer>
+            <GapNote rows={data} />
           </CardContent>
         </Card>
 
@@ -395,7 +432,7 @@ export function SleepTrendChart({
                   fontSize={11}
                   tick={{ fill: "var(--muted-foreground)" }}
                 />
-                <Tooltip content={<HrTooltipContent />} />
+                <Tooltip content={<HrTooltipContent />} filterNull={false} />
                 <Line
                   type="monotone"
                   dataKey="hr"
@@ -431,6 +468,7 @@ export function SleepTrendChart({
                 )}
               </ComposedChart>
             </ResponsiveContainer>
+            <GapNote rows={data} />
           </CardContent>
         </Card>
       </div>
