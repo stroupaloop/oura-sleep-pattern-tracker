@@ -7,6 +7,7 @@ import {
 } from "@/lib/research/references";
 import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/ui/callout";
+import { SupportLine } from "@/components/support-line";
 
 export default function MethodologyPage() {
   return (
@@ -240,6 +241,8 @@ export default function MethodologyPage() {
           .
         </p>
       </section>
+
+      <SupportLine />
 
       {/* Disclaimer */}
       <Callout tone="info" icon={Info}>

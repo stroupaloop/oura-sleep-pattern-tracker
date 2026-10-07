@@ -14,6 +14,8 @@ import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 import { EPISODE_STATES } from "@/lib/episode-states";
 import { moodLabel } from "@/lib/design/mood-scale";
 import { MoodScalePicker } from "@/components/mood-scale-picker";
+import { SupportNote } from "@/components/support-line";
+import { moodNeedsSupportLine } from "@/lib/support-line";
 
 const TAGS = [
   "travel",
@@ -382,6 +384,9 @@ function DailyLogCardForDay({
             disabled={loading}
             dense={dense}
           />
+          {moodNeedsSupportLine(moodScore) && (
+            <SupportNote className="mt-3" />
+          )}
         </div>
 
         {dayMeds.length > 0 && (
