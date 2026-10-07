@@ -12,103 +12,108 @@ export interface ResearchReference {
 export const RESEARCH_REFERENCES: ResearchReference[] = [
   {
     id: "oura-hypomania-2025",
-    title: "Within-night sleep-stage variability before hypomanic episodes",
-    authors: "Luykx et al.",
+    title:
+      "Day-to-day variability in sleep and activity predict the onset of a hypomanic episode in patients with bipolar disorder",
+    authors: "Ortiz et al.",
     journal: "Journal of Affective Disorders",
     year: 2025,
-    url: "https://pubmed.ncbi.nlm.nih.gov/39793618/",
+    url: "https://doi.org/10.1016/j.jad.2025.01.026",
     finding:
-      "A study-specific time-frequency signal derived from within-night sleep-stage variability preceded some hypomanic episodes by about three days. It does not validate this app's HR/HRV coefficient-of-variation metrics.",
-    relevantMetrics: ["sleepStageTransitions"],
+      "In 50 Oura Ring users with bipolar disorder who had a hypomanic episode, unusual variability in sleep stages was picked up a median of 3 days, and in activity 2.5 days, before a weekly self-rating first reached the study's hypomania cut-off. Only people who had an episode were analysed, and a research algorithm was used; it does not validate this app's metrics.",
+    relevantMetrics: ["withinNightVariability", "sleepStageTransitions"],
   },
   {
     id: "activity-depression-2025",
-    title: "Frequency-domain step variability before depressive symptoms",
-    authors: "Study authors",
+    title:
+      "Day-to-day variability in activity levels detects transitions to depressive symptoms in bipolar disorder earlier than changes in sleep and mood",
+    authors: "Ortiz et al.",
     journal: "International Journal of Bipolar Disorders",
     year: 2025,
-    url: "https://journalbipolardisorders.springeropen.com/articles/10.1186/s40345-025-00379-6",
+    url: "https://doi.org/10.1186/s40345-025-00379-6",
     finding:
-      "A frequency-domain step-variability method anticipated PHQ-9-defined depressive symptom onset by up to seven days with 79% sensitivity. It does not validate a simple drop in steps or active minutes.",
+      "In 127 Oura Ring users with bipolar disorder, spikes in day-to-day variability in step counts were detected a median of 7 days (IQR 9) before self-rated depressive symptoms (weekly PHQ-9) set in, earlier than deep-sleep changes. Sensitivity was about 0.79 and specificity 0.86 in a 2-week window. Its outcome was depressive symptoms and it measured variability, so it does not validate a simple drop in steps.",
     relevantMetrics: ["activityLevel", "steps"],
   },
   {
     id: "hrv-bipolar-2024",
-    title: "Bayesian analysis of HRV changes over acute bipolar episodes",
-    authors: "Study authors",
+    title:
+      "A Bayesian analysis of heart rate variability changes over acute episodes of bipolar disorder",
+    authors: "Corponi et al.",
     journal: "npj Mental Health Research",
     year: 2024,
-    url: "https://www.nature.com/articles/s44184-024-00090-x",
+    url: "https://doi.org/10.1038/s44184-024-00090-x",
     finding:
-      "In Empatica E4 data, lnRMSSD tended to increase as acute symptoms resolved toward euthymia; the study did not establish a polarity-specific 17-18% mania increase or validate Oura thresholds.",
+      "In 23 people followed from the start of a manic or depressive episode to recovery, overnight HRV from a research wristband (Empatica E4) tended to rise as symptoms eased, with no clear difference between mania and depression; the estimate was imprecise and its range still included no change. The authors suggest HRV change may not tell mania from depression. It does not validate Oura thresholds.",
     relevantMetrics: ["hrv"],
   },
   {
     id: "temp-mania-2025",
-    title: "State-dependent skin temperature increase during manic episodes",
-    authors: "Study authors",
+    title:
+      "State-dependent skin temperature increase during manic episodes of bipolar disorder",
+    authors: "Valenzuela-Pascual et al.",
     journal: "Journal of Affective Disorders",
     year: 2025,
-    url: "https://www.sciencedirect.com/science/article/abs/pii/S0165032725310857",
+    url: "https://doi.org/10.1016/j.jad.2025.119643",
     finding:
-      "Waking wrist temperature measured with Empatica E4 was elevated during manic episodes in a study of 104 participants. This does not validate thresholds for Oura's overnight temperature deviation.",
+      "In 104 people with bipolar disorder and 35 healthy controls wearing a research wristband (Empatica E4), waking-hours wrist skin temperature was about 0.8 °C higher in mania than in euthymia (95% CI 0.02 to 1.62) and fell after remission; depression showed no difference. It compares different groups of people and does not validate Oura's overnight temperature deviation.",
     relevantMetrics: ["temperatureDeviation"],
   },
   {
     id: "circadian-relapse-2021",
-    title: "Circadian activity rhythms predict mood episode relapse",
-    authors: "Study authors",
+    title:
+      "Association between circadian activity rhythms and mood episode relapse in bipolar disorder: a 12-month prospective cohort study",
+    authors: "Esaki et al.",
     journal: "Translational Psychiatry",
     year: 2021,
-    url: "https://www.nature.com/articles/s41398-021-01652-9",
+    url: "https://doi.org/10.1038/s41398-021-01652-9",
     finding:
-      "Actiwatch-derived circadian timing and fragmentation measures were associated with depressive relapse timing. The paper reports hazard associations, not AUC 0.75-0.82, and does not validate this app's implementation.",
+      "In 189 outpatients with bipolar disorder (mostly type II) wearing a wrist accelerometer for 7 days, a stronger daily activity rhythm went with fewer mood episodes over the next 12 months; later-starting activity went with more depressive episodes, and higher intradaily variability (a more fragmented rhythm) with more manic, hypomanic or mixed ones (37 people). Interdaily stability showed no clear link. It measures long-term risk, not near-term change, and does not validate this app's implementation.",
     relevantMetrics: [
       "circadianIS",
       "circadianIV",
       "circadianRA",
-      "bedtimeShift",
+      "activityLevel",
     ],
   },
   {
     id: "composite-accuracy-2024",
     title:
-      "Accurately predicting mood episodes with combined sleep and circadian features",
-    authors: "Study authors",
+      "Accurately predicting mood episodes in mood disorder patients using wearable sleep and circadian rhythm features",
+    authors: "Lim et al.",
     journal: "npj Digital Medicine",
     year: 2024,
-    url: "https://www.nature.com/articles/s41746-024-01333-z",
+    url: "https://doi.org/10.1038/s41746-024-01333-z",
     finding:
-      "A Fitbit XGBoost model using 36 features plus prior mood history reported next-day AUCs of 0.80 for depression, 0.98 for mania, and 0.95 for hypomania. Those results do not validate this app's weighted score.",
+      "In 168 people with depression or bipolar disorder wearing a Fitbit, a gradient-boosted model using 36 sleep and estimated circadian-phase features plus each person's past mood episodes reported next-day AUCs of 0.80 (depressive), 0.98 (manic) and 0.95 (hypomanic episodes). AUC does not show how many alerts would be false, and the results do not validate this app's weighted score.",
     relevantMetrics: [
+      "bedtimeShift",
+      "wakeTimeShift",
+      "sleepTimingScore",
       "sleepDuration",
-      "circadianRegularity",
-      "withinNightVariability",
     ],
   },
   {
     id: "sleep-architecture-bipolar",
-    title:
-      "Sleep architecture as correlate and predictor of bipolar symptoms",
+    title: "The role of sleep in bipolar disorder",
     authors: "Gold & Sylvia",
     journal: "Nature and Science of Sleep",
     year: 2016,
     url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC4935164/",
     finding:
-      "This narrative review supports sleep disturbance as clinically important across bipolar states, but it does not validate Oura sleep-stage percentages or this app's thresholds.",
-    relevantMetrics: ["sleepDuration", "latency", "remPct", "deepPct"],
+      "This review describes sleep disturbance at every stage of bipolar disorder and links it to dysregulation of the body clock and of sleep pressure. It lists shorter total sleep time among markers of manic episodes and cites one study in which poor sleep predicted an earlier recurrence. Its sleep-stage findings come from lab sleep studies, so it does not validate Oura stage percentages or this app's thresholds.",
+    relevantMetrics: ["sleepDuration", "latency"],
   },
   {
     id: "circadian-causal-2024",
     title:
-      "Circadian phase disruptions precede mood symptom variations",
-    authors: "Study authors",
+      "Causal dynamics of sleep, circadian rhythm, and mood symptoms in patients with major depression and bipolar disorder: insights from longitudinal wearable device data",
+    authors: "Song et al.",
     journal: "eBioMedicine",
     year: 2024,
-    url: "https://www.thelancet.com/journals/ebiom/article/PIIS2352-3964(24)00129-4/fulltext",
+    url: "https://doi.org/10.1016/j.ebiom.2024.105094",
     finding:
-      "Model-estimated circadian phase showed temporal associations with later mood variation. The causal interpretation is model-based and does not validate Oura activity-class IS/IV or this app's sleep timing score.",
-    relevantMetrics: ["circadianIS", "circadianIV", "sleepTimingScore"],
+      "In 139 patients with major depression or bipolar disorder wearing a Fitbit and rating their mood daily, disturbances in a circadian phase estimated from sleep times came before mood symptoms in major depression and bipolar I, but not bipolar II; sleep timing alone showed no such link. The phase was estimated by a mathematical model, not measured, so this does not validate this app's sleep-timing or activity-rhythm scores.",
+    relevantMetrics: [],
   },
 ];
 
@@ -125,13 +130,13 @@ export const METRIC_LIMITATIONS: Record<string, string> = {
 };
 
 export const OURA_LIMITATIONS = [
-  { missing: "Subjective mood", impact: "Cannot distinguish euthymia from hypomania without self-report", mitigation: "Daily mood check-in" },
-  { missing: "Medication adherence", impact: "Cannot assess if sleep changes are medication-related", mitigation: "Medication tracking" },
-  { missing: "Life events/context", impact: "Cannot distinguish episode signals from external stressors", mitigation: "Tags on mood entries" },
-  { missing: "Speech patterns", impact: "Rate/volume changes are strong mania indicators", mitigation: "Acknowledged limitation" },
-  { missing: "Cognitive performance", impact: "Attention/reaction time changes", mitigation: "Acknowledged limitation" },
-  { missing: "Social activity", impact: "Social rhythm disruption is a key trigger", mitigation: "Add as mood tag" },
-  { missing: "Phone usage patterns", impact: "Screen time correlates with episodes", mitigation: "Outside Oura domain" },
+  { missing: "Subjective mood", impact: "Sleep and activity data cannot show how you feel", mitigation: "Daily mood check-in" },
+  { missing: "Medication adherence", impact: "Cannot tell whether a change in sleep follows a medication change", mitigation: "Doses are logged separately and are not part of the pattern score" },
+  { missing: "Life events/context", impact: "Cannot tell whether a change comes from an outside event such as travel, illness or a late night", mitigation: "Tags on mood entries" },
+  { missing: "Speech patterns", impact: "Cannot see changes in how fast or loud you talk", mitigation: "Acknowledged limitation" },
+  { missing: "Cognitive performance", impact: "Cannot see changes in attention or reaction time", mitigation: "Acknowledged limitation" },
+  { missing: "Social activity", impact: "Cannot see changes in how much time you spend with other people", mitigation: "Add as mood tag" },
+  { missing: "Phone usage patterns", impact: "Cannot see how you use your phone", mitigation: "Outside Oura domain" },
 ];
 
 export function getReferencesForMetric(metric: string): ResearchReference[] {
@@ -146,7 +151,7 @@ export function getReferencesForDirection(
   const hyperMetrics = [
     "withinNightVariability",
     "sleepStageTransitions",
-    "hrv",
+    "circadianIV",
     "withinNightHrvCV",
     "temperatureDelta",
     "temperatureDeviation",
@@ -155,9 +160,6 @@ export function getReferencesForDirection(
   const hypoMetrics = [
     "activityLevel",
     "steps",
-    "circadianIS",
-    "circadianIV",
-    "circadianRA",
     "sleepDuration",
     "bedtimeShift",
   ];
