@@ -21,6 +21,17 @@ export interface MetricWeights {
   circadianRegularity: number;
 }
 
+/**
+ * A night counts at most this many standard deviations from her usual in the
+ * daily score and in the multi-day evidence. One extreme night, an all-nighter
+ * or a flight, then says "very unusual" without being able to outweigh the
+ * rest of the picture; the stored z-scores and the charts are not capped.
+ */
+export const Z_SCORE_CAP = 3;
+
+/** A night is unusual on sleep duration alone this far past the daily threshold. */
+export const SLEEP_ALONE_MARGIN = 0.5;
+
 export type BipolarType = "bp1" | "bp2" | "unspecified";
 
 export interface BipolarProfile {

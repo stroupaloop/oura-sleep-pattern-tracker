@@ -14,6 +14,8 @@ import {
   DetectionConfigValues,
   BipolarType,
   getBipolarProfile,
+  SLEEP_ALONE_MARGIN,
+  Z_SCORE_CAP,
 } from "./config";
 
 export interface DayMetrics {
@@ -69,7 +71,10 @@ export interface DailyAnalysisResult {
   isAnomaly: boolean;
   direction: "hyper" | "hypo" | null;
   notes: string;
-  hrvCrash: boolean;
+}
+
+function cappedAbs(z: number): number {
+  return Math.min(Math.abs(z), Z_SCORE_CAP);
 }
 
 function finiteValues(values: number[]): number[] {
@@ -325,28 +330,23 @@ export function computeDailyAnalysis(
   };
 
   let compositeScore =
-    effectiveWeights.sleepDuration * Math.abs(zScores.sleep) +
-    effectiveWeights.bedtimeShift * Math.abs(zScores.bedtime) +
-    effectiveWeights.wakeTimeShift * Math.abs(zScores.wake) +
-    effectiveWeights.hrv * Math.abs(zScores.hrv) +
-    effectiveWeights.heartRate * Math.abs(zScores.hr) +
-    effectiveWeights.latency * Math.abs(zScores.latency) +
-    effectiveWeights.temperatureDelta * Math.abs(zScores.temperature) +
-    effectiveWeights.restlessPeriods * Math.abs(zScores.restlessness) +
-    effectiveWeights.sleepEfficiency * Math.abs(zScores.efficiency) +
-    effectiveWeights.deepPct * Math.abs(zScores.deepPct) +
-    effectiveWeights.remPct * Math.abs(zScores.remPct) +
+    effectiveWeights.sleepDuration * cappedAbs(zScores.sleep) +
+    effectiveWeights.bedtimeShift * cappedAbs(zScores.bedtime) +
+    effectiveWeights.wakeTimeShift * cappedAbs(zScores.wake) +
+    effectiveWeights.hrv * cappedAbs(zScores.hrv) +
+    effectiveWeights.heartRate * cappedAbs(zScores.hr) +
+    effectiveWeights.latency * cappedAbs(zScores.latency) +
+    effectiveWeights.temperatureDelta * cappedAbs(zScores.temperature) +
+    effectiveWeights.restlessPeriods * cappedAbs(zScores.restlessness) +
+    effectiveWeights.sleepEfficiency * cappedAbs(zScores.efficiency) +
+    effectiveWeights.deepPct * cappedAbs(zScores.deepPct) +
+    effectiveWeights.remPct * cappedAbs(zScores.remPct) +
     // Only a choppier night than usual is a concern; an unusually steady one
     // is not, matching the notes and drivers.
-    effectiveWeights.withinNightVariability * Math.max(0, withinNightVarZ) +
-    effectiveWeights.activityLevel * Math.abs(activityZ) +
-    effectiveWeights.circadianRegularity * Math.abs(circadianZ);
-
-  const hrvCrash =
-    Number.isFinite(metrics.avgHrv) &&
-    Number.isFinite(baselines.hrv) &&
-    metrics.avgHrv < baselines.hrv * 0.7 &&
-    zScores.hr > 1.0;
+    effectiveWeights.withinNightVariability *
+      Math.min(Math.max(0, withinNightVarZ), Z_SCORE_CAP) +
+    effectiveWeights.activityLevel * cappedAbs(activityZ) +
+    effectiveWeights.circadianRegularity * cappedAbs(circadianZ);
 
   const abs = config.absoluteThresholds;
   let absoluteBonus = 0;
@@ -366,7 +366,7 @@ export function computeDailyAnalysis(
 
   const isAnomaly =
     compositeScore > config.dailyAnomalyThreshold ||
-    Math.abs(zScores.sleep) > 2.0;
+    Math.abs(zScores.sleep) > config.dailyAnomalyThreshold + SLEEP_ALONE_MARGIN;
 
   const direction = isAnomaly ? classifyDirection(zScores, config) : null;
   const notes = isAnomaly
@@ -382,7 +382,6 @@ export function computeDailyAnalysis(
     isAnomaly,
     direction,
     notes,
-    hrvCrash,
   };
 }
 

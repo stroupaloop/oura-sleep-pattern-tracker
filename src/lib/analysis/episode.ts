@@ -75,58 +75,60 @@ function countConsecutiveConcerning(
 
 function computePrimaryDrivers(
   result: DailyAnalysisResult,
-  baselines: Record<string, number>
+  baselines: Record<string, number>,
+  config: DetectionConfigValues
 ): string[] {
   const drivers: string[] = [];
   const z = result.zScores;
   const m = result.metrics;
+  const threshold = config.dailyAnomalyThreshold;
 
-  if (Math.abs(z.sleep) > 1.5) {
+  if (Math.abs(z.sleep) > threshold) {
     const delta = m.totalSleepMinutes - baselines.sleep;
     const dir = delta > 0 ? "increased" : "reduced";
     drivers.push(`Sleep duration ${dir} ~${Math.abs(delta).toFixed(0)}min`);
   }
-  if (Math.abs(z.hrv) > 1.5) {
+  if (Math.abs(z.hrv) > threshold) {
     const delta = m.avgHrv - baselines.hrv;
     const dir = delta > 0 ? "elevated" : "reduced";
     drivers.push(`HRV ${dir} ${Math.abs(delta).toFixed(0)}ms`);
   }
-  if (Math.abs(z.hr) > 1.5) {
+  if (Math.abs(z.hr) > threshold) {
     const delta = m.avgHeartRate - baselines.hr;
     const dir = delta > 0 ? "elevated" : "reduced";
     drivers.push(`Heart rate ${dir} ${Math.abs(delta).toFixed(0)}bpm`);
   }
-  if (Math.abs(z.temperature) > 1.0) {
+  if (Math.abs(z.temperature) > threshold) {
     const dir = m.temperatureDelta > 0 ? "elevated" : "reduced";
     drivers.push(`Temperature ${dir} ${Math.abs(m.temperatureDelta).toFixed(1)}\u00b0`);
   }
-  if (Math.abs(z.bedtime) > 1.5) {
+  if (Math.abs(z.bedtime) > threshold) {
     const dir = z.bedtime > 0 ? "later" : "earlier";
     drivers.push(`Bedtime shifted ${dir}`);
   }
-  if (Math.abs(z.efficiency) > 1.5) {
+  if (Math.abs(z.efficiency) > threshold) {
     const dir = z.efficiency < 0 ? "decreased" : "increased";
     drivers.push(`Sleep efficiency ${dir}`);
   }
-  if (Math.abs(z.latency) > 1.5) {
+  if (Math.abs(z.latency) > threshold) {
     const dir = z.latency > 0 ? "increased" : "decreased";
     drivers.push(`Sleep onset latency ${dir}`);
   }
-  if ((z.withinNightVar ?? 0) > 1.5) {
+  if ((z.withinNightVar ?? 0) > threshold) {
     drivers.push("Within-night sleep variability elevated");
   }
-  if (Math.abs(z.activity ?? 0) > 1.5) {
+  if (Math.abs(z.activity ?? 0) > threshold) {
     const dir = (z.activity ?? 0) > 0 ? "increased" : "decreased";
     drivers.push(`Activity level ${dir}`);
   }
-  if ((z.circadianIV ?? 0) > 1.5) {
+  if ((z.circadianIV ?? 0) > threshold) {
     drivers.push("Circadian rhythm fragmentation increased");
   }
-  if (Math.abs(z.deepPct ?? 0) > 1.5) {
+  if (Math.abs(z.deepPct ?? 0) > threshold) {
     const dir = (z.deepPct ?? 0) < 0 ? "decreased" : "increased";
     drivers.push(`Deep sleep ${dir}`);
   }
-  if (Math.abs(z.remPct ?? 0) > 1.5) {
+  if (Math.abs(z.remPct ?? 0) > threshold) {
     const dir = (z.remPct ?? 0) < 0 ? "decreased" : "increased";
     drivers.push(`REM sleep ${dir}`);
   }
@@ -185,6 +187,7 @@ function buildResearchContext(
   consecutiveDays: number,
   drivers: string[],
   result: DailyAnalysisResult,
+  config: DetectionConfigValues,
   moodCoverage?: number
 ): AlertResearchContext | null {
   if (tier === "none") return null;
@@ -200,32 +203,33 @@ function buildResearchContext(
     `Your available data over the last ${consecutiveDays} day${consecutiveDays !== 1 ? "s" : ""} matched this app's ${dirLabel} pattern rule`;
 
   const whatWeDetected: string[] = [];
+  const detected = config.concernThreshold;
   const z = result.zScores;
   const m = result.metrics;
   const b = result.baselines;
 
-  if (Math.abs(z.sleep) > 1.0) {
+  if (Math.abs(z.sleep) > detected) {
     const delta = Math.abs(m.totalSleepMinutes - b.sleep);
     const dir = z.sleep < 0 ? "decreased" : "increased";
     whatWeDetected.push(`Sleep duration ${dir} ${delta.toFixed(0)} min ${z.sleep < 0 ? "below" : "above"} your baseline`);
   }
-  if ((z.withinNightVar ?? 0) > 1.0) {
+  if ((z.withinNightVar ?? 0) > detected) {
     whatWeDetected.push(
       `Within-night sleep variability was ${(z.withinNightVar ?? 0).toFixed(1)} standard deviations above baseline`
     );
   }
-  if (Math.abs(z.hrv) > 1.0) {
+  if (Math.abs(z.hrv) > detected) {
     const dir = z.hrv > 0 ? "elevated" : "decreased";
     whatWeDetected.push(`HRV ${dir} compared to your baseline`);
   }
-  if (Math.abs(z.bedtime) > 1.0) {
+  if (Math.abs(z.bedtime) > detected) {
     const dir = z.bedtime > 0 ? "later" : "earlier";
     whatWeDetected.push(`Bedtime shifted ${dir} than usual`);
   }
-  if (Math.abs(z.temperature) > 1.0) {
+  if (Math.abs(z.temperature) > detected) {
     whatWeDetected.push(`Temperature ${z.temperature > 0 ? "elevated" : "lower"} compared to baseline`);
   }
-  if (Math.abs(z.activity ?? 0) > 1.0) {
+  if (Math.abs(z.activity ?? 0) > detected) {
     whatWeDetected.push(`Activity levels ${(z.activity ?? 0) > 0 ? "increased" : "decreased"} from baseline`);
   }
 
@@ -263,7 +267,12 @@ function buildResearchContext(
     whyItMatters,
     whatYouCanDo,
     researchIds: refs.slice(0, 3).map((r) => r.id),
-    confidence: confidence >= 5 ? "high" : confidence >= 2 ? "moderate" : "low",
+    confidence:
+      confidence >= config.alertMinConfidence
+        ? "high"
+        : confidence >= config.watchMinConfidence
+          ? "moderate"
+          : "low",
     disclaimer:
       "This tool tracks patterns for personal awareness. It is not a medical device and does not provide diagnoses. Always consult your healthcare provider for medical decisions.",
     dataCompleteness,
@@ -311,7 +320,11 @@ export function assessEpisode(
 
   const confidence = best.confidence;
   const confounderLikelihood = Math.min(1, best.bounceBackScore);
-  const drivers = computePrimaryDrivers(latestResult, latestResult.baselines);
+  const drivers = computePrimaryDrivers(
+    latestResult,
+    latestResult.baselines,
+    config
+  );
 
   let tier: Tier = "none";
   if (
@@ -340,7 +353,15 @@ export function assessEpisode(
 
   const direction = best.direction;
   const summary = buildSummary(tier, direction, confidence, confounderLikelihood, consecutiveDays, drivers);
-  const researchContext = buildResearchContext(tier, direction, confidence, consecutiveDays, drivers, latestResult);
+  const researchContext = buildResearchContext(
+    tier,
+    direction,
+    confidence,
+    consecutiveDays,
+    drivers,
+    latestResult,
+    config
+  );
 
   return {
     day,
