@@ -196,7 +196,7 @@ describe("daily analysis source and missingness", () => {
     expect(result?.isAnomaly).toBe(false);
   });
 
-  it("applies the documented BP2 daily weight overrides while unspecified keeps base weights", () => {
+  it("scores a night the same under every profile: no profile changes the daily weights", () => {
     const variablePrior = prior.map((metric, index) => ({
       ...metric,
       totalSleepMinutes: 390 + (index % 5) * 15,
@@ -228,7 +228,7 @@ describe("daily analysis source and missingness", () => {
       bp1!.compositeScore,
       10
     );
-    expect(bp2!.compositeScore).toBeGreaterThan(bp1!.compositeScore);
+    expect(bp2!.compositeScore).toBeCloseTo(bp1!.compositeScore, 10);
   });
 
   it("keeps self-report context independent from the persisted pattern score", () => {

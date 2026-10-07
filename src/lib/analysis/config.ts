@@ -40,6 +40,14 @@ export interface BipolarProfile {
   hypoBounceBackMultiplier: number;
 }
 
+/**
+ * No profile changes a night's daily weights: nothing in the research supports
+ * weighting the measures differently by type, and the earlier Bipolar II
+ * override (more weight on within-night variability) raised ordinary nights'
+ * scores enough to add about a third more false flags on simulated years.
+ * The profiles differ only in how much a recovered night takes off the
+ * evidence of a higher-activation pattern.
+ */
 const BIPOLAR_PROFILES: Record<BipolarType, BipolarProfile> = {
   bp1: {
     dailyWeightOverrides: {},
@@ -47,10 +55,7 @@ const BIPOLAR_PROFILES: Record<BipolarType, BipolarProfile> = {
     hypoBounceBackMultiplier: 0.35,
   },
   bp2: {
-    dailyWeightOverrides: {
-      sleepDuration: 0.11,
-      withinNightVariability: 0.10,
-    },
+    dailyWeightOverrides: {},
     hyperBounceBackMultiplier: 0.50,
     hypoBounceBackMultiplier: 0.35,
   },
