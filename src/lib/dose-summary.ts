@@ -27,12 +27,14 @@ export interface DoseSummary {
 /**
  * The day's scheduled doses, split by whether they were marked taken. An
  * as-needed dose is listed only once taken; weekly and inactive medications
- * are left out, as they are on the check-in.
+ * are left out, as they are on the check-in. When `dueSlots` is given, doses
+ * in other slots are left out too.
  */
 export function summarizeDoses(
   medications: readonly DoseMedication[],
   logs: readonly DoseLog[],
-  day: string
+  day: string,
+  dueSlots?: ReadonlySet<string>
 ): DoseSummary {
   const takenKeys = new Set(
     logs
@@ -54,6 +56,7 @@ export function summarizeDoses(
       continue;
     }
     for (const slot of slots) {
+      if (dueSlots && !dueSlots.has(slot)) continue;
       const label = `${med.name} (${doseSlotLabel(slot)})`;
       if (takenKeys.has(`${med.id}:${slot}`)) summary.taken.push(label);
       else summary.notTaken.push(label);
