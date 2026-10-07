@@ -32,9 +32,13 @@ export function scoreHistory(
     const metrics = metricsByDay.get(day);
     if (!metrics) continue;
 
-    const baselineStart = shiftCalendarDay(day, -config.baselineDays);
+    const baselineStart = shiftCalendarDay(
+      day,
+      -(config.baselineDays + config.baselineGuardDays)
+    );
+    const baselineEnd = shiftCalendarDay(day, -config.baselineGuardDays);
     const priorMetrics = sortedDays
-      .filter((priorDay) => priorDay >= baselineStart && priorDay < day)
+      .filter((priorDay) => priorDay >= baselineStart && priorDay < baselineEnd)
       .map((priorDay) => metricsByDay.get(priorDay))
       .filter((m): m is DayMetrics => m !== undefined);
 

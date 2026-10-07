@@ -71,11 +71,24 @@ function history(count: number, change?: (index: number) => Partial<DayMetrics>)
 }
 
 describe("scoreHistory", () => {
-  it("scores a night only once the baseline has enough earlier nights", () => {
-    const { daily } = scoreHistory(history(20), DEFAULT_CONFIG, "unspecified");
+  it("scores a night only once enough earlier nights sit before the guard", () => {
+    const firstScored =
+      DEFAULT_CONFIG.minBaselineDays + DEFAULT_CONFIG.baselineGuardDays;
+    const { daily } = scoreHistory(history(40), DEFAULT_CONFIG, "unspecified");
     const days = [...daily.keys()].sort();
-    expect(days).toHaveLength(20 - DEFAULT_CONFIG.minBaselineDays);
-    expect(days[0]).toBe(shiftDay("2026-01-01", DEFAULT_CONFIG.minBaselineDays));
+    expect(days).toHaveLength(40 - firstScored);
+    expect(days[0]).toBe(shiftDay("2026-01-01", firstScored));
+  });
+
+  it("keeps the latest nights out of a night's baseline", () => {
+    const shifted = history(80, (index) =>
+      index >= 70 ? { totalSleepMinutes: 200 } : {}
+    );
+    const { daily } = scoreHistory(shifted, DEFAULT_CONFIG, "unspecified");
+    const lastDay = shiftDay("2026-01-01", 79);
+    const baseline = daily.get(lastDay)?.baselines.sleep ?? Number.NaN;
+    expect(baseline).toBeGreaterThan(400);
+    expect(daily.get(lastDay)?.zScores.sleep).toBeLessThan(-3);
   });
 
   it("assesses only the days asked for, from results for every scored night", () => {
@@ -86,7 +99,9 @@ describe("scoreHistory", () => {
       "unspecified",
       wanted
     );
-    expect(daily.size).toBe(40 - DEFAULT_CONFIG.minBaselineDays);
+    expect(daily.size).toBe(
+      40 - DEFAULT_CONFIG.minBaselineDays - DEFAULT_CONFIG.baselineGuardDays
+    );
     expect([...assessments.keys()].sort()).toEqual(wanted);
   });
 

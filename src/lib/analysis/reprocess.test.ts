@@ -78,11 +78,13 @@ async function storedDays() {
   };
 }
 
-// Forty nights, eight weeks without the ring, then fifteen nights back. The
-// first fourteen nights back have no baseline yet; the fifteenth does.
+// Forty nights, almost five months without the ring (longer than the baseline
+// reaches back), then thirty nights back. The first twenty-eight nights back
+// have no baseline yet (fourteen nights, set before the latest fourteen); the
+// twenty-ninth does.
 const BEFORE = nights("2025-03-01", 40);
-const AFTER = nights("2025-06-10", 15);
-const SCORED_AFTER_GAP = "2025-06-24";
+const AFTER = nights("2025-09-01", 30);
+const SCORED_AFTER_GAP = "2025-09-29";
 
 describe("reprocessAll", () => {
   beforeAll(async () => {
@@ -94,7 +96,7 @@ describe("reprocessAll", () => {
     await db.delete(episodeAssessments);
     await db.delete(sleepPeriods);
     await db.insert(sleepPeriods).values([...BEFORE, ...AFTER]);
-    for (const day of ["2025-04-01", "2025-06-12", "2025-06-20"]) {
+    for (const day of ["2025-04-01", "2025-09-12", "2025-09-20"]) {
       const older = olderResult(day);
       await db.insert(dailyAnalysis).values(older.analysis);
       await db.insert(episodeAssessments).values(older.assessment);
@@ -102,13 +104,13 @@ describe("reprocessAll", () => {
   });
 
   it("drops older results for days the current algorithm no longer scores", async () => {
-    const result = await reprocessAll(DEFAULT_CONFIG, undefined, "2025-06-30");
+    const result = await reprocessAll(DEFAULT_CONFIG, undefined, "2025-09-30");
     const stored = await storedDays();
 
-    expect(stored.analysis).not.toContain("2025-06-12");
-    expect(stored.analysis).not.toContain("2025-06-20");
-    expect(stored.assessments.has("2025-06-12")).toBe(false);
-    expect(stored.assessments.has("2025-06-20")).toBe(false);
+    expect(stored.analysis).not.toContain("2025-09-12");
+    expect(stored.analysis).not.toContain("2025-09-20");
+    expect(stored.assessments.has("2025-09-12")).toBe(false);
+    expect(stored.assessments.has("2025-09-20")).toBe(false);
     expect(stored.assessments.get("2025-04-01")).toBe(PATTERN_ALGORITHM_VERSION);
     expect(stored.assessments.get(SCORED_AFTER_GAP)).toBe(
       PATTERN_ALGORITHM_VERSION
@@ -122,26 +124,26 @@ describe("reprocessAll", () => {
   });
 
   it("leaves results outside the recomputed window alone", async () => {
-    const result = await reprocessAll(DEFAULT_CONFIG, "2025-06-15", "2025-06-30");
+    const result = await reprocessAll(DEFAULT_CONFIG, "2025-09-15", "2025-09-30");
     const stored = await storedDays();
 
-    expect(stored.assessments.has("2025-06-20")).toBe(false);
-    expect(stored.assessments.get("2025-06-12")).toBeNull();
+    expect(stored.assessments.has("2025-09-20")).toBe(false);
+    expect(stored.assessments.get("2025-09-12")).toBeNull();
     expect(stored.assessments.get("2025-04-01")).toBeNull();
-    expect(stored.analysis).toContain("2025-06-12");
+    expect(stored.analysis).toContain("2025-09-12");
     expect(result.resultsRemoved).toBe(1);
   });
 
   it("keeps results for a night synced after it read the nights", async () => {
     // As if the hourly sync scored a new night while a backfill was running.
-    const later = olderResult("2025-06-26");
+    const later = olderResult("2025-10-03");
     await db.insert(dailyAnalysis).values(later.analysis);
     await db.insert(episodeAssessments).values(later.assessment);
 
-    await reprocessAll(DEFAULT_CONFIG, undefined, "2025-06-30");
+    await reprocessAll(DEFAULT_CONFIG, undefined, "2025-10-05");
     const stored = await storedDays();
 
-    expect(stored.analysis).toContain("2025-06-26");
-    expect(stored.assessments.has("2025-06-26")).toBe(true);
+    expect(stored.analysis).toContain("2025-10-03");
+    expect(stored.assessments.has("2025-10-03")).toBe(true);
   });
 });

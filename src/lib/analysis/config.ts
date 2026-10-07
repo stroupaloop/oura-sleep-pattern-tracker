@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { detectionConfig, users } from "@/lib/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { getPrimarySensitiveEmail } from "@/lib/access";
+import { BASELINE_DAYS, BASELINE_GUARD_DAYS } from "./baseline-window";
 
 export interface MetricWeights {
   sleepDuration: number;
@@ -62,6 +63,8 @@ export interface AbsoluteThresholds {
 export interface DetectionConfigValues {
   version: number;
   baselineDays: number;
+  /** Nights just before a day that are kept out of its baseline; not stored. */
+  baselineGuardDays: number;
   minBaselineDays: number;
   baselineTrimPct: number;
   concernThreshold: number;
@@ -102,7 +105,8 @@ export const DEFAULT_ABSOLUTE_THRESHOLDS: AbsoluteThresholds = {
 
 export const DEFAULT_CONFIG: DetectionConfigValues = {
   version: 1,
-  baselineDays: 30,
+  baselineDays: BASELINE_DAYS,
+  baselineGuardDays: BASELINE_GUARD_DAYS,
   minBaselineDays: 14,
   baselineTrimPct: 0.10,
   concernThreshold: 1.0,
@@ -166,6 +170,7 @@ export async function loadActiveConfig(): Promise<DetectionConfigValues> {
   return {
     version: row.version,
     baselineDays: row.baselineDays,
+    baselineGuardDays: BASELINE_GUARD_DAYS,
     minBaselineDays: row.minBaselineDays,
     baselineTrimPct: row.baselineTrimPct,
     concernThreshold: row.concernThreshold,
