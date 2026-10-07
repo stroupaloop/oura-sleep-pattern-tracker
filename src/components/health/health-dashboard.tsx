@@ -56,7 +56,7 @@ export function HealthDashboard({
                 : "Oura hasn't synced yet"}
             </p>
           </div>
-          {canSync && <SyncNowButton />}
+          {canSync && <SyncNowButton latestNight={data.shownDay} />}
         </header>
 
         {!data.isLastNight && !paused && (

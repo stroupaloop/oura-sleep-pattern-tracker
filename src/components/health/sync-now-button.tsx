@@ -1,46 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getNowUnixSeconds, getTodayET } from "@/lib/date-utils";
+import {
+  formatSyncNowFailure,
+  formatSyncNowResult,
+} from "@/lib/oura/sync-summary";
 import { cn } from "@/lib/utils";
 
-function describeFailure(error: unknown): string {
-  return typeof error === "string" && /token_refresh|HTTP 401|daily scope/.test(error)
-    ? "Oura rejected the connection. Reconnect it in Settings."
-    : "Sync didn't finish. Try again in a minute.";
-}
+type Outcome =
+  | { kind: "failed"; message: string }
+  | {
+      kind: "synced";
+      result: unknown;
+      latestBefore: string | null;
+      syncedAt: number;
+    };
 
 /**
  * Pulls the past week from Oura now instead of waiting for the next
- * scheduled sync, then re-renders the page with what arrived.
+ * scheduled sync, then re-renders the page with what arrived. `latestNight`
+ * is the newest night on the page, so the message can say when the sync
+ * brought nothing newer; it is read again once the page has refreshed.
  */
-export function SyncNowButton() {
+export function SyncNowButton({ latestNight }: { latestNight: string | null }) {
   const router = useRouter();
   const [syncing, setSyncing] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [refreshing, startRefresh] = useTransition();
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
 
   async function sync() {
     setSyncing(true);
-    setMessage(null);
+    setOutcome(null);
     try {
       const response = await fetch("/api/oura/sync", { method: "POST" });
-      const body: { error?: unknown } = await response
+      const body: { error?: unknown } | null = await response
         .json()
-        .catch(() => ({}));
+        .catch(() => null);
       if (!response.ok) {
-        setMessage(describeFailure(body.error));
+        setOutcome({
+          kind: "failed",
+          message: formatSyncNowFailure(body?.error),
+        });
         return;
       }
-      setMessage("Up to date.");
-      router.refresh();
+      setOutcome({
+        kind: "synced",
+        result: body,
+        latestBefore: latestNight,
+        syncedAt: getNowUnixSeconds(),
+      });
+      startRefresh(() => router.refresh());
     } catch {
-      setMessage("Sync didn't finish. Check the connection and try again.");
+      setOutcome({
+        kind: "failed",
+        message: "Sync didn't finish. Check the connection and try again.",
+      });
     } finally {
       setSyncing(false);
     }
   }
+
+  const busy = syncing || refreshing;
+  const message =
+    busy || !outcome
+      ? null
+      : outcome.kind === "failed"
+        ? outcome.message
+        : formatSyncNowResult(outcome.result, {
+            latestBefore: outcome.latestBefore,
+            latestAfter: latestNight,
+            syncedAt: outcome.syncedAt,
+            today: getTodayET(),
+          });
 
   return (
     <div className="flex flex-col items-end gap-1">
@@ -48,14 +83,14 @@ export function SyncNowButton() {
         type="button"
         variant="outline"
         onClick={sync}
-        disabled={syncing}
+        disabled={busy}
         className="h-10 sm:h-9"
       >
         <RefreshCw
           aria-hidden="true"
-          className={cn("size-4", syncing && "animate-spin motion-reduce:animate-none")}
+          className={cn("size-4", busy && "animate-spin motion-reduce:animate-none")}
         />
-        {syncing ? "Syncing…" : "Sync now"}
+        {busy ? "Syncing…" : "Sync now"}
       </Button>
       <p
         role="status"
