@@ -38,6 +38,10 @@ export interface ReportData {
     stepDays: number;
     moodEntries: number;
     avgMood: number | null;
+    moodMin: number | null;
+    moodMax: number | null;
+    moodHighDays: number;
+    moodLowDays: number;
   };
   trends: {
     sleepTrend: ReportTrend;
@@ -65,15 +69,99 @@ export interface ReportData {
   };
 }
 
+const TREND_MIN_VALUES = 7;
+const TREND_Z_CUTOFF = 1.96;
+const TREND_MIN_EFFECT = 0.05;
+const HIGH_MOOD_FROM = 2;
+const LOW_MOOD_UP_TO = -2;
+
+function sortedMedian(sorted: ArrayLike<number>): number {
+  const middle = sorted.length >> 1;
+  return sorted.length % 2 === 1
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function mannKendallScore(series: number[]): number {
+  let score = 0;
+  for (let i = 0; i < series.length - 1; i++) {
+    for (let j = i + 1; j < series.length; j++) {
+      score += Math.sign(series[j] - series[i]);
+    }
+  }
+  return score;
+}
+
+function mannKendallVariance(series: number[]): number {
+  const n = series.length;
+  const tieGroups = new Map<number, number>();
+  for (const value of series) {
+    tieGroups.set(value, (tieGroups.get(value) ?? 0) + 1);
+  }
+  let tieTerm = 0;
+  for (const size of tieGroups.values()) {
+    tieTerm += size * (size - 1) * (2 * size + 5);
+  }
+  return (n * (n - 1) * (2 * n + 5) - tieTerm) / 18;
+}
+
+function theilSenSlope(series: number[]): number {
+  const slopes = new Float64Array((series.length * (series.length - 1)) / 2);
+  let next = 0;
+  for (let i = 0; i < series.length - 1; i++) {
+    for (let j = i + 1; j < series.length; j++) {
+      slopes[next++] = (series[j] - series[i]) / (j - i);
+    }
+  }
+  slopes.sort();
+  return sortedMedian(slopes);
+}
+
+/**
+ * Which way a window of nightly values drifted. A rise or fall is called only
+ * when the Mann-Kendall test is clear (tie-corrected, |z| >= 1.96, p < 0.05)
+ * and the Theil-Sen slope carries the series at least 5% of its median from
+ * first value to last. Otherwise the answer is "stable": no clear change, not
+ * proof that nothing changed.
+ */
 export function computeTrend(values: number[]): ReportTrend {
-  if (values.length < 7) return "insufficient_data";
-  const firstHalf = values.slice(0, Math.floor(values.length / 2));
-  const secondHalf = values.slice(Math.floor(values.length / 2));
-  const avg1 = firstHalf.reduce((a, b) => a + b, 0) / firstHalf.length;
-  const avg2 = secondHalf.reduce((a, b) => a + b, 0) / secondHalf.length;
-  const diff = (avg2 - avg1) / avg1;
-  if (Math.abs(diff) < 0.05) return "stable";
-  return diff > 0 ? "increasing" : "decreasing";
+  const series = values.filter(Number.isFinite);
+  if (series.length < TREND_MIN_VALUES) return "insufficient_data";
+
+  const score = mannKendallScore(series);
+  const variance = mannKendallVariance(series);
+  if (score === 0 || variance <= 0) return "stable";
+  const z = (score - Math.sign(score)) / Math.sqrt(variance);
+  if (Math.abs(z) < TREND_Z_CUTOFF) return "stable";
+
+  const slope = theilSenSlope(series);
+  const level = Math.abs(sortedMedian([...series].sort((a, b) => a - b)));
+  if (level === 0 || Math.sign(slope) !== Math.sign(score)) return "stable";
+  if ((Math.abs(slope) * (series.length - 1)) / level < TREND_MIN_EFFECT) {
+    return "stable";
+  }
+  return score > 0 ? "increasing" : "decreasing";
+}
+
+export function summarizeMood(values: number[]) {
+  if (values.length === 0) {
+    return {
+      entries: 0,
+      average: null,
+      lowest: null,
+      highest: null,
+      highDays: 0,
+      lowDays: 0,
+    };
+  }
+  return {
+    entries: values.length,
+    average: values.reduce((a, b) => a + b, 0) / values.length,
+    lowest: Math.min(...values),
+    highest: Math.max(...values),
+    highDays: values.filter((value) => value >= HIGH_MOOD_FROM).length,
+    lowDays: values.filter((value) => value <= LOW_MOOD_UP_TO).length,
+  };
 }
 
 export async function generateReport(
@@ -196,7 +284,7 @@ export async function generateReport(
         // A zero-step day is a day the ring was off, not a still one.
         value != null && Number.isFinite(value) && value > 0
     );
-  const moodValues = moodRows.map((r) => r.moodScore);
+  const mood = summarizeMood(moodRows.map((r) => r.moodScore));
 
   const medAdherence = summarizeRecordedMedicationLogs(medRows, medLogRows);
 
@@ -230,10 +318,12 @@ export async function generateReport(
       sleepDays: sleepValues.length,
       hrvDays: hrvValues.length,
       stepDays: stepValues.length,
-      moodEntries: moodValues.length,
-      avgMood: moodValues.length > 0
-        ? moodValues.reduce((a, b) => a + b, 0) / moodValues.length
-        : null,
+      moodEntries: mood.entries,
+      avgMood: mood.average,
+      moodMin: mood.lowest,
+      moodMax: mood.highest,
+      moodHighDays: mood.highDays,
+      moodLowDays: mood.lowDays,
     },
     trends: {
       sleepTrend: computeTrend(sleepValues),

@@ -23,10 +23,11 @@ function trendArrow(trend: ReportTrend): string | null {
   return null;
 }
 
-function trendWords(trend: ReportTrend): string {
-  if (trend === "increasing") return "rising";
-  if (trend === "decreasing") return "falling";
-  return "steady";
+function trendNote(trend: ReportTrend): string {
+  if (trend === "increasing") return "rising across the window";
+  if (trend === "decreasing") return "falling across the window";
+  if (trend === "stable") return "no clear change";
+  return "Trend unavailable: fewer than 7 measured nights";
 }
 
 function TrendValue({ value, trend }: { value: string; trend: ReportTrend }) {
@@ -38,7 +39,6 @@ function TrendValue({ value, trend }: { value: string; trend: ReportTrend }) {
         <>
           {" "}
           <span aria-hidden="true">{arrow}</span>
-          <span className="sr-only">, {trendWords(trend)}</span>
         </>
       )}
     </>
@@ -86,9 +86,8 @@ export function ReportView({ data }: { data: ReportData }) {
             note={
               <>
                 {data.summary.sleepDays} measured{" "}
-                {data.summary.sleepDays === 1 ? "night" : "nights"}
-                {data.trends.sleepTrend === "insufficient_data" &&
-                  " · Trend unavailable: fewer than 7 measured nights"}
+                {data.summary.sleepDays === 1 ? "night" : "nights"} ·{" "}
+                {trendNote(data.trends.sleepTrend)}
               </>
             }
           />
@@ -107,9 +106,8 @@ export function ReportView({ data }: { data: ReportData }) {
             note={
               <>
                 {data.summary.hrvDays} measured{" "}
-                {data.summary.hrvDays === 1 ? "night" : "nights"}
-                {data.trends.hrvTrend === "insufficient_data" &&
-                  " · Trend unavailable: fewer than 7 measured nights"}
+                {data.summary.hrvDays === 1 ? "night" : "nights"} ·{" "}
+                {trendNote(data.trends.hrvTrend)}
               </>
             }
           />
@@ -122,15 +120,51 @@ export function ReportView({ data }: { data: ReportData }) {
             }
             note={`${data.summary.stepDays} measured days`}
           />
-          <Stat label="Mood Entries" value={data.summary.moodEntries} />
-          {data.summary.avgMood != null && (
-            <Stat
-              label="Avg Mood"
-              value={formatMoodValue(Number(data.summary.avgMood.toFixed(1)))}
-            />
-          )}
+          <Stat
+            label="Mood Entries"
+            value={data.summary.moodEntries}
+            note={`of ${data.summary.totalDays} days`}
+          />
+          {data.summary.avgMood != null &&
+            data.summary.moodMin != null &&
+            data.summary.moodMax != null && (
+              <>
+                <Stat
+                  label="Avg Mood"
+                  value={formatMoodValue(
+                    Number(data.summary.avgMood.toFixed(1))
+                  )}
+                  note={`mean of daily ratings, ${formatMoodValue(-3)} to ${formatMoodValue(3)}`}
+                />
+                <Stat
+                  label="Mood Range"
+                  value={
+                    data.summary.moodMin === data.summary.moodMax
+                      ? formatMoodValue(data.summary.moodMin)
+                      : `${formatMoodValue(data.summary.moodMin)} to ${formatMoodValue(data.summary.moodMax)}`
+                  }
+                  note="lowest to highest logged"
+                />
+                <Stat
+                  label={`Days at ${formatMoodValue(2)} or above`}
+                  value={data.summary.moodHighDays}
+                  note={`of ${data.summary.moodEntries} logged ${data.summary.moodEntries === 1 ? "day" : "days"}`}
+                />
+                <Stat
+                  label={`Days at ${formatMoodValue(-2)} or below`}
+                  value={data.summary.moodLowDays}
+                  note={`of ${data.summary.moodEntries} logged ${data.summary.moodEntries === 1 ? "day" : "days"}`}
+                />
+              </>
+            )}
           <Stat label="Report Window" value={`${data.summary.totalDays} days`} />
         </div>
+        <p className="mt-4 text-xs text-muted-foreground">
+          Arrows compare the whole window. A rise or fall is shown only when the
+          nights drift one way clearly (Mann-Kendall test, p &lt; 0.05) and by
+          at least 5% of their typical value (Theil-Sen slope). Otherwise the
+          report says no clear change, which does not mean nothing changed.
+        </p>
       </Panel>
 
       {data.episodes.length > 0 && (
