@@ -87,6 +87,27 @@ describe("buildDailyLogAlert", () => {
     ).toContain("Also: Energy 4/5 · Sleep quality 2/5");
   });
 
+  it("leaves the optional row out entirely when none were answered", () => {
+    const alert = buildDailyLogAlert(BASE);
+    expect(alert.text).not.toContain("Also");
+    expect(alert.html).not.toContain("Also");
+    for (const word of ["Energy", "Irritability", "Anxiety", "Sleep quality"]) {
+      expect(alert.text).not.toContain(word);
+      expect(alert.html).not.toContain(word);
+    }
+    expect(alert.text).toContain("Tags: poor sleep");
+  });
+
+  it("names only the optional scores that were answered", () => {
+    const alert = buildDailyLogAlert({ ...BASE, irritabilityScore: 2 });
+    expect(alert.text).toContain("Also: Irritability 2/5\n");
+    expect(alert.html).toContain(">Also</td><td");
+    expect(alert.html).toContain("Irritability 2/5");
+    for (const word of ["Energy", "Anxiety", "Sleep quality"]) {
+      expect(alert.text).not.toContain(word);
+    }
+  });
+
   it("escapes medication names and tags", () => {
     const alert = buildDailyLogAlert({
       ...BASE,

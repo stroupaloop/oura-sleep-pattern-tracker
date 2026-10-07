@@ -1,3 +1,4 @@
+import type { ComponentProps } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { MoodForm } from "./mood-form";
@@ -18,11 +19,13 @@ const MOOD = {
   createdAt: null,
 };
 
-function render() {
+function render(
+  existingMood: ComponentProps<typeof MoodForm>["existingMood"] = MOOD
+) {
   return renderToStaticMarkup(
     <MoodForm
       initialDay="2026-01-15"
-      existingMood={MOOD}
+      existingMood={existingMood}
       medications={[]}
       existingMedLogs={[]}
       episodePattern={null}
@@ -60,6 +63,37 @@ describe("MoodForm", () => {
     const html = render();
     expect(html).toMatch(/<details(?![^>]*\bopen\b)[^>]*>\s*<summary/);
     expect(html).toContain("Show optional details");
+  });
+
+  it("starts every optional score unanswered when the entry has none", () => {
+    const html = render();
+    expect(html.match(/>Not set</g)).toHaveLength(4);
+    expect(html.match(/aria-valuetext="Not set"/g)).toHaveLength(4);
+    expect(html).not.toMatch(/>\d\/5</);
+    expect(html).not.toContain(">Clear<");
+  });
+
+  it("shows saved answers as they were saved and leaves the rest unanswered", () => {
+    const html = render({ ...MOOD, energyScore: 4, sleepSubjective: 2 });
+    expect(html.match(/>\d\/5</g)).toEqual([">4/5<", ">2/5<"]);
+    expect(html).toMatch(/>Energy<[\s\S]*?>4\/5</);
+    expect(html).toMatch(/>Sleep quality<[\s\S]*?>2\/5</);
+    expect(html.match(/>Not set</g)).toHaveLength(2);
+    expect(html).toContain('aria-label="Clear energy"');
+    expect(html).toContain('aria-label="Clear sleep quality"');
+    expect(html).not.toContain('aria-label="Clear irritability"');
+    expect(html).not.toContain('aria-label="Clear anxiety"');
+  });
+
+  it("labels the ends of each score so the number never carries the meaning alone", () => {
+    const ends = [
+      ...render().matchAll(/<span class="w-10 shrink-0[^"]*">([^<]+)<\/span>/g),
+    ].map((match) => match[1]);
+    expect(ends).toEqual(["Low", "High", "None", "A lot", "None", "A lot", "Poor", "Great"]);
+  });
+
+  it("says that a score left as Not set is not saved", () => {
+    expect(render()).toContain("Anything left as Not set");
   });
 
   it("names the day in words, never as a raw date", () => {

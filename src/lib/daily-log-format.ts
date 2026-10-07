@@ -1,3 +1,5 @@
+import { OPTIONAL_SCORES, type OptionalScores } from "@/lib/optional-scores";
+
 /** Mood tags are stored as a JSON array; anything else reads as no tags. */
 export function parseMoodTags(raw: string | null | undefined): string[] {
   if (!raw) return [];
@@ -20,19 +22,9 @@ export function formatMoodScore(score: number): string {
 }
 
 /** The optional 1-5 check-in scores that were filled in, e.g. "Energy 4/5". */
-export function formatOptionalScores(scores: {
-  energyScore: number | null;
-  irritabilityScore: number | null;
-  anxietyScore: number | null;
-  sleepSubjective: number | null;
-}): string[] {
-  const entries: [string, number | null][] = [
-    ["Energy", scores.energyScore],
-    ["Irritability", scores.irritabilityScore],
-    ["Anxiety", scores.anxietyScore],
-    ["Sleep quality", scores.sleepSubjective],
-  ];
-  return entries
-    .filter((entry): entry is [string, number] => entry[1] !== null)
-    .map(([label, value]) => `${label} ${value}/5`);
+export function formatOptionalScores(scores: OptionalScores): string[] {
+  return OPTIONAL_SCORES.flatMap(({ key, label }) => {
+    const value = scores[key];
+    return value === null ? [] : [`${label} ${value}/5`];
+  });
 }

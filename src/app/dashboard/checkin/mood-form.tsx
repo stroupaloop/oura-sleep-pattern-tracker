@@ -22,7 +22,14 @@ import { EPISODE_STATES } from "@/lib/episode-states";
 import { formatMoodValue, moodLabel } from "@/lib/design/mood-scale";
 import { MoodScalePicker } from "@/components/mood-scale-picker";
 import type { EpisodePatternSummary } from "@/lib/episode-pattern";
+import {
+  OPTIONAL_SCORES,
+  changedOptionalScores,
+  optionalScoresOf,
+  type OptionalScores,
+} from "@/lib/optional-scores";
 import { PatternStatus } from "@/components/pattern-status";
+import { ScoreSlider } from "./score-slider";
 
 const TAGS = [
   "travel",
@@ -194,10 +201,12 @@ function MoodFormForDay({
 }: MoodFormProps) {
   const [selectedDay, setSelectedDay] = useState(initialDay);
   const [moodScore, setMoodScore] = useState<number | null>(existingMood?.moodScore ?? null);
-  const [energy, setEnergy] = useState(existingMood?.energyScore ?? 3);
-  const [irritability, setIrritability] = useState(existingMood?.irritabilityScore ?? 1);
-  const [anxiety, setAnxiety] = useState(existingMood?.anxietyScore ?? 1);
-  const [sleepSubjective, setSleepSubjective] = useState(existingMood?.sleepSubjective ?? 3);
+  const [scores, setScores] = useState<OptionalScores>(() =>
+    optionalScoresOf(existingMood)
+  );
+  const [savedScores, setSavedScores] = useState<OptionalScores>(() =>
+    optionalScoresOf(existingMood)
+  );
   const [episodeState, setEpisodeState] = useState<string | null>(existingMood?.episodeState ?? null);
   const [notes, setNotes] = useState(existingMood?.notes ?? "");
   const [selectedTags, setSelectedTags] = useState<string[]>(parseTags(existingMood?.tags ?? null));
@@ -235,13 +244,13 @@ function MoodFormForDay({
       const moodData = await moodRes.json();
       const medData = await medRes.json();
 
+      const loadedScores = optionalScoresOf(moodData);
+      setScores(loadedScores);
+      setSavedScores(loadedScores);
+
       if (moodData) {
         setMoodScore(moodData.moodScore ?? null);
         setEpisodeState(moodData.episodeState ?? null);
-        setEnergy(moodData.energyScore ?? 3);
-        setIrritability(moodData.irritabilityScore ?? 1);
-        setAnxiety(moodData.anxietyScore ?? 1);
-        setSleepSubjective(moodData.sleepSubjective ?? 3);
         setNotes(moodData.notes ?? "");
         setSelectedTags(parseTags(moodData.tags));
         setShowOptional(
@@ -258,10 +267,6 @@ function MoodFormForDay({
       } else {
         setMoodScore(null);
         setEpisodeState(null);
-        setEnergy(3);
-        setIrritability(1);
-        setAnxiety(1);
-        setSleepSubjective(3);
         setNotes("");
         setSelectedTags([]);
         setShowOptional(false);
@@ -308,16 +313,14 @@ function MoodFormForDay({
         body: JSON.stringify({
           day: selectedDay,
           moodScore,
-          energyScore: showOptional ? energy : undefined,
-          irritabilityScore: showOptional ? irritability : undefined,
-          anxietyScore: showOptional ? anxiety : undefined,
-          sleepSubjective: showOptional ? sleepSubjective : undefined,
+          ...changedOptionalScores(scores, savedScores),
           notes: notes || null,
           tags: selectedTags,
           episodeState: episodeState ?? null,
         }),
       });
-      if (!moodRes.ok) failed.push("mood");
+      if (moodRes.ok) setSavedScores(scores);
+      else failed.push("mood");
 
       async function saveMedLog(medId: number, slot: string | null, taken: boolean, label: string) {
         const res = await fetch("/api/medications/log", {
@@ -492,25 +495,22 @@ function MoodFormForDay({
                   />
                 </summary>
                 <div className="space-y-4 border-t px-4 py-4 md:px-5">
-                  {[
-                    { label: "Energy", value: energy, set: setEnergy },
-                    { label: "Irritability", value: irritability, set: setIrritability },
-                    { label: "Anxiety", value: anxiety, set: setAnxiety },
-                    { label: "Sleep Quality", value: sleepSubjective, set: setSleepSubjective },
-                  ].map(({ label, value, set }) => (
-                    <div key={label} className="flex items-center gap-3">
-                      <span className="w-24 shrink-0 text-sm">{label}</span>
-                      <input
-                        type="range"
-                        min={1}
-                        max={5}
-                        value={value}
-                        aria-label={label}
-                        onChange={(e) => set(Number(e.target.value))}
-                        className="h-10 min-w-0 flex-1 accent-primary sm:h-8"
-                      />
-                      <span className="w-8 text-right text-sm tabular-nums">{value}/5</span>
-                    </div>
+                  <p className="text-xs text-muted-foreground">
+                    Answer only what you want to. Anything left as Not set
+                    isn&apos;t saved.
+                  </p>
+                  {OPTIONAL_SCORES.map(({ key, label, low, high }) => (
+                    <ScoreSlider
+                      key={key}
+                      label={label}
+                      low={low}
+                      high={high}
+                      value={scores[key]}
+                      disabled={loadingDay}
+                      onChange={(value) =>
+                        setScores((prev) => ({ ...prev, [key]: value }))
+                      }
+                    />
                   ))}
                 </div>
               </details>
