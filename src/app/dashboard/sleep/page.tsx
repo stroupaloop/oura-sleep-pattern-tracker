@@ -8,10 +8,13 @@ import {
   dailyReadiness,
   episodeAssessments,
 } from "@/lib/db/schema";
-import { desc, sql } from "drizzle-orm";
+import { and, desc, gte, inArray } from "drizzle-orm";
 import { SleepCalendar } from "./sleep-calendar";
-import type { NightData, AnalysisData } from "./night-card";
-import { summarizeStoredSamples } from "@/lib/dashboard-metrics";
+import type { AnalysisData } from "./night-card";
+import {
+  buildSleepPageNights,
+  SLEEP_PAGE_LOOKBACK_DAYS,
+} from "./sleep-page-data";
 import {
   loadActiveConfig,
   loadBipolarType,
@@ -20,12 +23,16 @@ import {
   currentDailyPatternFields,
   filterCurrentPatternAssessments,
 } from "@/lib/analysis/provenance";
+import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { buildSignals } from "@/lib/health/signals";
+import { NIGHT_SLEEP_TYPES } from "@/lib/oura/main-sleep";
 import { PageHeader } from "@/components/page-header";
 
 export default async function SleepPage() {
+  const today = getTodayET();
+  const periodsFrom = shiftIsoDay(today, -SLEEP_PAGE_LOOKBACK_DAYS) ?? today;
   const [
-    nights,
+    periodRows,
     scores,
     analysisRows,
     readiness,
@@ -36,9 +43,12 @@ export default async function SleepPage() {
     db
       .select()
       .from(sleepPeriods)
-      .where(sql`${sleepPeriods.type} = 'long_sleep'`)
-      .orderBy(desc(sleepPeriods.day))
-      .limit(35),
+      .where(
+        and(
+          gte(sleepPeriods.day, periodsFrom),
+          inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES])
+        )
+      ),
     db.select().from(dailySleep).orderBy(desc(dailySleep.day)).limit(35),
     // Whole rows: the comparisons with her usual need each baseline.
     db
@@ -92,33 +102,7 @@ export default async function SleepPage() {
     readiness.map((row) => [row.day, row.temperatureDeviation])
   );
 
-  const nightsRecord: Record<string, NightData> = Object.fromEntries(
-    nights.map((night) => {
-      const heartRate = summarizeStoredSamples(night.hr5min);
-      return [
-        night.day,
-        {
-          id: night.id,
-          day: night.day,
-          bedtimeStart: night.bedtimeStart,
-          bedtimeEnd: night.bedtimeEnd,
-          totalSleepDuration: night.totalSleepDuration,
-          deepSleepDuration: night.deepSleepDuration,
-          lightSleepDuration: night.lightSleepDuration,
-          remSleepDuration: night.remSleepDuration,
-          efficiency: night.efficiency,
-          latency: night.latency,
-          restlessPeriods: night.restlessPeriods,
-          averageHeartRate: heartRate.average ?? night.averageHeartRate,
-          lowestHeartRate: heartRate.minimum ?? night.lowestHeartRate,
-          averageHrv: night.averageHrv,
-          temperatureDelta: readinessTemperature.get(night.day) ?? null,
-          hypnogram5min: night.hypnogram5min,
-          hr5min: night.hr5min,
-        },
-      ];
-    })
-  );
+  const nightsRecord = buildSleepPageNights(periodRows, readinessTemperature);
 
   const scoresRecord: Record<string, number> = Object.fromEntries(
     scores

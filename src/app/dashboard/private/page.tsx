@@ -19,14 +19,9 @@ import {
   dailyMood,
   syncLog,
 } from "@/lib/db/schema";
-import { desc, gte, lte, eq, and, isNotNull, ne, sql } from "drizzle-orm";
+import { desc, gte, lte, and, inArray, isNotNull, ne, sql } from "drizzle-orm";
 import { format, parseISO, subDays } from "date-fns";
-import {
-  APP_TIME_ZONE,
-  getIsoTimeZoneClockMinutes,
-  getTodayET,
-  shiftIsoDay,
-} from "@/lib/date-utils";
+import { APP_TIME_ZONE, getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import {
   buildRestModeDaySet,
   buildCycleTemperatureDisplayData,
@@ -35,14 +30,20 @@ import {
 } from "@/lib/analysis/cycle";
 import { projectActivityToCalendarDays } from "@/lib/oura/activity";
 import { HR_ANOMALY_BASELINE_DAYS } from "@/lib/hr-anomalies";
-import { getOuraSleepDayForTimestamp } from "@/lib/oura/sleep-day";
-import { getSleepTimeClockMinutes } from "@/lib/oura/sleep-time";
+import { NIGHT_SLEEP_TYPES } from "@/lib/oura/main-sleep";
 import {
   projectLatestSyncAttempts,
   resolveDatasetFreshness,
 } from "@/lib/oura/freshness";
 import { PrivateTabs } from "./private-tabs";
+import { buildBedtimeData, latestNightSourceDay } from "./sleep-timing-data";
 import { PageHeader } from "@/components/page-header";
+
+/**
+ * Newest night-type sleep periods read to find the latest night: enough to
+ * reach back past a run of daytime naps.
+ */
+const LATEST_NIGHT_PERIOD_ROWS = 40;
 
 function parseIndicators(value: string | null): string[] {
   if (!value) return [];
@@ -78,16 +79,18 @@ export default async function PrivatePage() {
   const thirtyDayCutoff = format(subDays(today, 29), "yyyy-MM-dd");
   const sourceDaysPromise = Promise.all([
     db
-      .select({ bedtimeEnd: sleepPeriods.bedtimeEnd })
+      .select({
+        day: sleepPeriods.day,
+        type: sleepPeriods.type,
+        bedtimeStart: sleepPeriods.bedtimeStart,
+        bedtimeEnd: sleepPeriods.bedtimeEnd,
+        totalSleepDuration: sleepPeriods.totalSleepDuration,
+      })
       .from(sleepPeriods)
-      .where(eq(sleepPeriods.type, "long_sleep"))
+      .where(inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES]))
       .orderBy(desc(sleepPeriods.day), desc(sleepPeriods.bedtimeEnd))
-      .limit(1)
-      .then((rows) =>
-        rows[0]?.bedtimeEnd
-          ? getOuraSleepDayForTimestamp(rows[0].bedtimeEnd)
-          : null
-      ),
+      .limit(LATEST_NIGHT_PERIOD_ROWS)
+      .then(latestNightSourceDay),
     db
       .select({
         day: sql<string | null>`max(${dailyCardiovascularAge.day})`,
@@ -138,11 +141,18 @@ export default async function PrivatePage() {
     db
       .select({
         day: sleepPeriods.day,
+        type: sleepPeriods.type,
         bedtimeStart: sleepPeriods.bedtimeStart,
         bedtimeEnd: sleepPeriods.bedtimeEnd,
+        totalSleepDuration: sleepPeriods.totalSleepDuration,
       })
       .from(sleepPeriods)
-      .where(and(gte(sleepPeriods.day, cutoff), eq(sleepPeriods.type, "long_sleep")))
+      .where(
+        and(
+          gte(sleepPeriods.day, cutoff),
+          inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES])
+        )
+      )
       .orderBy(sleepPeriods.day),
     db
       .select({
@@ -290,40 +300,7 @@ export default async function PrivatePage() {
 
   const person = personalInfoData[0] ?? null;
 
-  function normalizeOffsetMinutes(
-    storedOffset: string | null | undefined,
-    day: string
-  ): number | null {
-    let mins = getSleepTimeClockMinutes(day, storedOffset);
-    if (mins == null) return null;
-    if (mins < 720) mins += 1440;
-    return mins;
-  }
-
-  const bedtimeData = sleepData.flatMap((t) => {
-    const sleepDayET = getOuraSleepDayForTimestamp(t.bedtimeEnd);
-    if (sleepDayET == null) return [];
-
-    const st = sleepTimeData.find((s) => s.day === t.day);
-    let actualMinutes: number | null = null;
-    if (t.bedtimeStart) {
-      const etClockMinutes = getIsoTimeZoneClockMinutes(t.bedtimeStart);
-      if (etClockMinutes != null) {
-        actualMinutes =
-          etClockMinutes < 720
-            ? etClockMinutes + 1440
-            : etClockMinutes;
-      }
-    }
-    return [
-      {
-        day: sleepDayET,
-        actualBedtime: actualMinutes,
-        optimalStart: normalizeOffsetMinutes(st?.optimalBedtimeStart, t.day),
-        optimalEnd: normalizeOffsetMinutes(st?.optimalBedtimeEnd, t.day),
-      },
-    ];
-  });
+  const bedtimeData = buildBedtimeData(sleepData, sleepTimeData);
   const [
     latestSleepSourceDay,
     latestCardiovascularAgeSourceDay,
