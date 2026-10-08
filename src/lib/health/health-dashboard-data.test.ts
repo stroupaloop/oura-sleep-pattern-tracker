@@ -184,6 +184,46 @@ describe("loadHealthDashboard trends", () => {
     expect(data.isLastNight).toBe(false);
   });
 
+  it("does not draw this morning's night as a gap before it has had time to sync", async () => {
+    vi.setSystemTime(new Date("2026-10-06T10:00:00Z"));
+    await db
+      .insert(sleepPeriods)
+      .values(nightsBetween("2026-09-07", "2026-10-05"));
+
+    const { trends } = (await loadHealthDashboard())!;
+
+    expect(trends.chartData.at(-1)).toMatchObject({ day: "2026-10-05", hours: 7 });
+    expect(trends.chartData.some((row) => row.noNight)).toBe(false);
+    expect(trends.compositionData.at(-1)).toMatchObject({ day: "2026-10-05" });
+    expect(trends.compositionData).toHaveLength(14);
+    expect(trends.compositionData.some((row) => row.noNight)).toBe(false);
+  });
+
+  it("includes this morning's night as soon as it has arrived", async () => {
+    vi.setSystemTime(new Date("2026-10-06T10:00:00Z"));
+    await db
+      .insert(sleepPeriods)
+      .values(nightsBetween("2026-09-07", TODAY));
+
+    const { trends } = (await loadHealthDashboard())!;
+
+    expect(trends.chartData.at(-1)).toMatchObject({ day: TODAY, hours: 7 });
+    expect(trends.compositionData.at(-1)).toMatchObject({ day: TODAY });
+  });
+
+  it("still draws a missing night before this morning as a gap", async () => {
+    vi.setSystemTime(new Date("2026-10-06T10:00:00Z"));
+    await db
+      .insert(sleepPeriods)
+      .values(nightsBetween("2026-09-07", "2026-10-05", ["2026-10-04"]));
+
+    const { trends } = (await loadHealthDashboard())!;
+
+    expect(trends.chartData.filter((row) => row.noNight).map((row) => row.day)).toEqual([
+      "2026-10-04",
+    ]);
+  });
+
   it("draws nothing before any night is recorded", async () => {
     const { trends } = (await loadHealthDashboard())!;
 

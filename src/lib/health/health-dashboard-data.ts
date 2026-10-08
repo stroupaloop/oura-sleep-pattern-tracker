@@ -24,6 +24,7 @@ import {
   selectNightGroupsByDay,
 } from "@/lib/oura/main-sleep";
 import { fillCalendarDays } from "./calendar-rows";
+import { currentEtHour, MORNING_ENDS_ET_HOUR } from "./format";
 import { buildNightWindow } from "./night-window";
 import { buildSignals } from "./signals";
 
@@ -142,6 +143,12 @@ export async function loadHealthDashboard() {
     .sort();
   const shownDay = nightDays.at(-1) ?? null;
   const shown = shownDay ? groups.get(shownDay)! : null;
+  // Until noon ET today's night may simply not have synced, and the notice at
+  // the top says so, so the charts end at the last night that is due.
+  const lastDueNight =
+    nightDays.includes(today) || currentEtHour() >= MORNING_ENDS_ET_HOUR
+      ? today
+      : (shiftIsoDay(today, -1) ?? today);
 
   const currentAssessments = filterCurrentPatternAssessments(
     assessmentRows,
@@ -190,7 +197,7 @@ export async function loadHealthDashboard() {
     });
   const trendRows = fillCalendarDays<TrendRow>(
     chartData,
-    { start: trendStart, end: today },
+    { start: trendStart, end: lastDueNight },
     (day) => ({
       day,
       hours: null,
@@ -215,7 +222,8 @@ export async function loadHealthDashboard() {
     hrvZScore: row.hrvZScore,
     heartRateZScore: row.heartRateZScore,
   }));
-  const compositionStart = shiftIsoDay(today, -(COMPOSITION_DAYS - 1)) ?? today;
+  const compositionStart =
+    shiftIsoDay(lastDueNight, -(COMPOSITION_DAYS - 1)) ?? lastDueNight;
   const compositionNights = trendNights
     .filter((night) => night.day >= compositionStart)
     .flatMap((night) => {
@@ -243,7 +251,7 @@ export async function loadHealthDashboard() {
     });
   const compositionData = fillCalendarDays<CompositionRow>(
     compositionNights,
-    { start: compositionStart, end: today },
+    { start: compositionStart, end: lastDueNight },
     (day) => ({
       day,
       deep: null,

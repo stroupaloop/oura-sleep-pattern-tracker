@@ -36,6 +36,9 @@ export function formatSyncedAt(seconds: number, today: string): string {
   });
 }
 
+/** Before this ET hour, last night may simply not have synced yet. */
+export const MORNING_ENDS_ET_HOUR = 12;
+
 /** The current hour in ET, 0-23. */
 export function currentEtHour(now = new Date()): number {
   return Number(

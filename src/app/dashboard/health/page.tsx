@@ -4,7 +4,7 @@ import Link from "next/link";
 import { auth, isSensitiveUser } from "@/lib/auth";
 import { loadDailyLog } from "@/lib/daily-log-data";
 import { getTodayET } from "@/lib/date-utils";
-import { currentEtHour } from "@/lib/health/format";
+import { currentEtHour, MORNING_ENDS_ET_HOUR } from "@/lib/health/format";
 import { loadHealthDashboard } from "@/lib/health/health-dashboard-data";
 import { shouldShowOuraConnectionProblem } from "@/lib/oura/connection-health";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ export default async function HealthPage() {
           ? shouldShowOuraConnectionProblem(data.connection)
           : false
       }
-      morning={currentEtHour() < 12}
+      morning={currentEtHour() < MORNING_ENDS_ET_HOUR}
     />
   );
 }
