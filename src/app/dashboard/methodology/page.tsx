@@ -6,8 +6,8 @@ import {
   METRIC_LIMITATIONS,
 } from "@/lib/research/references";
 import { PageHeader } from "@/components/page-header";
-import { Callout } from "@/components/ui/callout";
 import { SupportLine } from "@/components/support-line";
+import { Callout } from "@/components/ui/callout";
 
 export default function MethodologyPage() {
   return (
