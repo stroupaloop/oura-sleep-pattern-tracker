@@ -19,14 +19,9 @@ import {
   NIGHT_SLEEP_TYPES,
   selectNightSleepByDay,
 } from "@/lib/oura/main-sleep";
-import {
-  extractMetrics,
-  computeDailyAnalysis,
-  upsertDailyAnalysis,
-  DayMetrics,
-  DailyAnalysisResult,
-} from "./anomaly";
-import { assessEpisode, upsertEpisodeAssessment } from "./episode";
+import { extractMetrics, upsertDailyAnalysis, DayMetrics } from "./anomaly";
+import { upsertEpisodeAssessment } from "./episode";
+import { scoreHistory } from "./score-history";
 import {
   computeWithinNightCV,
   parseHypnogram5min,
@@ -106,12 +101,6 @@ async function removeResultsNotRecomputed(
       );
   }
   return staleAssessments.length;
-}
-
-function shiftCalendarDay(day: string, offset: number): string {
-  const date = new Date(`${day}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + offset);
-  return date.toISOString().slice(0, 10);
 }
 
 function trailingConsecutiveDays(
@@ -299,67 +288,36 @@ export async function reprocessAll(
     }
   }
 
-  const dailyResults = new Map<string, DailyAnalysisResult>();
+  const { daily, assessments } = scoreHistory(
+    allMetricsByDay,
+    config,
+    bipolarType,
+    uniqueFilteredDays
+  );
+
   const analysedDays = new Set<string>();
   const assessedDays = new Set<string>();
   let daysProcessed = 0;
   const episodeCounts = { watch: 0, warning: 0, alert: 0 };
 
-  for (const day of sortedDays) {
-    const metrics = allMetricsByDay.get(day);
-    if (!metrics) continue;
-
-    const baselineStart = shiftCalendarDay(day, -config.baselineDays);
-    const priorDays = sortedDays.filter(
-      (priorDay) => priorDay >= baselineStart && priorDay < day
-    );
-    const priorMetrics = priorDays
-      .map((d) => allMetricsByDay.get(d))
-      .filter((m): m is DayMetrics => m !== undefined);
-
-    const result = computeDailyAnalysis(metrics, priorMetrics, config, bipolarType);
+  for (const day of uniqueFilteredDays) {
+    const result = daily.get(day);
     if (result) {
-      dailyResults.set(day, result);
-
-      if (uniqueFilteredDays.includes(day)) {
-        await upsertDailyAnalysis(result);
-        analysedDays.add(day);
-        daysProcessed++;
-      }
+      await upsertDailyAnalysis(result);
+      analysedDays.add(day);
+      daysProcessed++;
     }
   }
 
   for (const day of uniqueFilteredDays) {
-    const dayIndex = sortedDays.indexOf(day);
-    if (dayIndex < 0) continue;
+    const episode = assessments.get(day);
+    if (!episode) continue;
+    await upsertEpisodeAssessment(episode);
+    assessedDays.add(day);
 
-    const expectedDaysByWindow: Record<number, number> = {};
-    for (const size of [3, 5, 7]) {
-      expectedDaysByWindow[size] = size;
-    }
-
-    const recentStart = shiftCalendarDay(day, -6);
-    const recentDays = sortedDays.filter(
-      (recentDay) => recentDay >= recentStart && recentDay <= day
-    );
-    const recentResults = recentDays
-      .map((d) => dailyResults.get(d))
-      .filter((r): r is DailyAnalysisResult => r !== undefined);
-
-    const allPriorDays = sortedDays.slice(0, dayIndex);
-    const allPriorResults = allPriorDays
-      .map((d) => dailyResults.get(d))
-      .filter((r): r is DailyAnalysisResult => r !== undefined);
-
-    if (recentResults.length > 0) {
-      const episode = assessEpisode(day, recentResults, allPriorResults, config, expectedDaysByWindow, bipolarType);
-      await upsertEpisodeAssessment(episode);
-      assessedDays.add(day);
-
-      if (episode.tier === "watch") episodeCounts.watch++;
-      else if (episode.tier === "warning") episodeCounts.warning++;
-      else if (episode.tier === "alert") episodeCounts.alert++;
-    }
+    if (episode.tier === "watch") episodeCounts.watch++;
+    else if (episode.tier === "warning") episodeCounts.warning++;
+    else if (episode.tier === "alert") episodeCounts.alert++;
   }
 
   // A night synced while this ran is the next run's to score, so nothing

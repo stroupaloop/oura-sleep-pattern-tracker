@@ -113,6 +113,15 @@ describe("Methodology page measure count", () => {
   });
 });
 
+describe("Methodology page baseline", () => {
+  it("says which nights make a night's usual, from the window the detector uses", () => {
+    expect(text).toContain(
+      `the ${DEFAULT_CONFIG.baselineDays} nights before the latest ${DEFAULT_CONFIG.baselineGuardDays}`
+    );
+    expect(text).not.toMatch(/30-day/);
+  });
+});
+
 describe("Methodology page fixed rules", () => {
   const prior = Array.from({ length: 14 }, (_, i) => metrics(day(i)));
 
@@ -167,7 +176,6 @@ describe("Methodology page easing rule", () => {
       isAnomaly: true,
       direction,
       notes: "",
-      hrvCrash: false,
     };
   }
 
@@ -207,4 +215,32 @@ describe("Methodology page easing rule", () => {
       expect(tierAfterDrop(config, "hypo", room + 0.02)).toBe("none");
     });
   }
+});
+
+describe("Methodology page pattern profiles", () => {
+  const prior = Array.from({ length: 20 }, (_, i) =>
+    metrics(day(i), {
+      totalSleepMinutes: 420 + (i % 5) * 12,
+      withinNightHrvCV: 0.25 + (i % 3) * 0.02,
+      withinNightHrCV: 0.07 + (i % 4) * 0.005,
+      hypnogramFragmentation: 0.2 + (i % 3) * 0.01,
+    })
+  );
+  const unusual = metrics(day(20), {
+    totalSleepMinutes: 300,
+    withinNightHrvCV: 0.5,
+    withinNightHrCV: 0.2,
+    hypnogramFragmentation: 0.4,
+  });
+  const score = (type: "bp1" | "bp2" | "unspecified") =>
+    computeDailyAnalysis(unusual, prior, DEFAULT_CONFIG, type)!.compositeScore;
+
+  it("says every profile scores a night the same way, as they do", () => {
+    expect(score("bp1")).toBeGreaterThan(0);
+    expect(score("bp1")).toBe(score("unspecified"));
+    expect(score("bp2")).toBe(score("unspecified"));
+    expect(text).toContain("Uses the base daily metric weights and the default");
+    expect(text).toContain("scores the same as Not specified");
+    expect(text).not.toMatch(/exploratory within-night variability/);
+  });
 });

@@ -109,12 +109,21 @@ describe("daily analysis source and missingness", () => {
       avgHrv: 45 + (index % 5) * 2,
       avgHeartRate: 52 + (index % 5),
       efficiency: 84 + (index % 5),
+      onsetLatencyMinutes: 12 + (index % 4) * 2,
+      restlessPeriods: 8 + (index % 3) * 2,
+      deepPct: 16 + (index % 3),
+      remPct: 20 + (index % 4),
+      temperatureDeviation: (index % 4) * 0.1,
     }));
     const current = {
-      ...dayMetrics("2026-07-15", 0),
+      ...dayMetrics("2026-07-15", 3),
       avgHrv: 10,
       avgHeartRate: 90,
       efficiency: 60,
+      onsetLatencyMinutes: 120,
+      restlessPeriods: 60,
+      deepPct: 2,
+      remPct: 3,
     };
 
     const result = computeDailyAnalysis(
@@ -124,6 +133,46 @@ describe("daily analysis source and missingness", () => {
     );
     expect(result?.isAnomaly).toBe(true);
     expect(result?.direction).toBeNull();
+  });
+
+  it("keeps one extreme measure from flagging a night by itself", () => {
+    const variablePrior = prior.map((metric, index) => ({
+      ...metric,
+      avgHeartRate: 52 + (index % 5),
+    }));
+    const current = { ...dayMetrics("2026-07-15", 0), avgHeartRate: 200 };
+
+    const result = computeDailyAnalysis(current, variablePrior, DEFAULT_CONFIG);
+    expect(result!.zScores.hr).toBeGreaterThan(20);
+    expect(result!.compositeScore).toBeLessThan(0.3);
+    expect(result!.isAnomaly).toBe(false);
+  });
+
+  it("flags a night on sleep alone 0.5 past the configured daily threshold", () => {
+    const variablePrior = prior.map((metric, index) => ({
+      ...metric,
+      totalSleepMinutes: 380 + (index % 5) * 20,
+    }));
+    const probe = computeDailyAnalysis(
+      { ...dayMetrics("2026-07-15", 0), totalSleepMinutes: 300 },
+      variablePrior,
+      DEFAULT_CONFIG
+    )!;
+    const spread = (probe.baselines.sleep - 300) / Math.abs(probe.zScores.sleep);
+    const night = {
+      ...dayMetrics("2026-07-15", 0),
+      totalSleepMinutes: probe.baselines.sleep - 1.85 * spread,
+    };
+
+    const usual = computeDailyAnalysis(night, variablePrior, DEFAULT_CONFIG);
+    expect(usual!.zScores.sleep).toBeCloseTo(-1.85, 5);
+    expect(usual!.isAnomaly).toBe(false);
+
+    const sensitive = computeDailyAnalysis(night, variablePrior, {
+      ...DEFAULT_CONFIG,
+      dailyAnomalyThreshold: 1.2,
+    });
+    expect(sensitive!.isAnomaly).toBe(true);
   });
 
   it("uses personal baselines instead of universal heart-rate or HRV cutoffs", () => {
@@ -147,7 +196,7 @@ describe("daily analysis source and missingness", () => {
     expect(result?.isAnomaly).toBe(false);
   });
 
-  it("applies the documented BP2 daily weight overrides while unspecified keeps base weights", () => {
+  it("scores a night the same under every profile: no profile changes the daily weights", () => {
     const variablePrior = prior.map((metric, index) => ({
       ...metric,
       totalSleepMinutes: 390 + (index % 5) * 15,
@@ -179,7 +228,7 @@ describe("daily analysis source and missingness", () => {
       bp1!.compositeScore,
       10
     );
-    expect(bp2!.compositeScore).toBeGreaterThan(bp1!.compositeScore);
+    expect(bp2!.compositeScore).toBeCloseTo(bp1!.compositeScore, 10);
   });
 
   it("keeps self-report context independent from the persisted pattern score", () => {

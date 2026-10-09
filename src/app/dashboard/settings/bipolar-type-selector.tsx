@@ -89,16 +89,17 @@ export function BipolarTypeSelector({ initial }: { initial: string }) {
         <p className="font-medium">How this affects detection:</p>
         {selected === "bp1" && (
           <p>
-            Uses the app&apos;s Bipolar I heuristic profile, which changes how
-            sustained activation-leaning patterns are weighted. This profile
-            has not been clinically validated.
+            Uses the app&apos;s Bipolar I heuristic profile. The only
+            difference from the default is that one better night takes less
+            off the evidence of a higher-activation pattern. This profile has
+            not been clinically validated.
           </p>
         )}
         {selected === "bp2" && (
           <p>
-            Uses the app&apos;s Bipolar II heuristic profile, with more weight
-            on within-night variability. That metric is exploratory and is not
-            a validated hypomania detector.
+            Scores the same as the default. The research does not yet support
+            scoring Bipolar II differently, so for now this records which
+            profile you chose and nothing else changes.
           </p>
         )}
         {selected === "unspecified" && (

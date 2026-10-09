@@ -13,6 +13,7 @@ import { PatternStatus } from "@/components/pattern-status";
 import { ScorePanel } from "./score-panel";
 import { SignalList } from "./signal-list";
 import { SyncNowButton } from "./sync-now-button";
+import { describeBaselineWindow } from "@/lib/analysis/baseline-window";
 import { TrendsSection } from "./trends-section";
 
 /**
@@ -92,7 +93,7 @@ export function HealthDashboard({
         <Panel
           id="signals"
           title="Compared with the usual"
-          description="Against the usual range over the past 30 nights. Sleep and its timing come first: they tend to move earliest."
+          description={`Against the usual range over ${describeBaselineWindow()}. Sleep and its timing come first: they tend to move earliest.`}
           meta={nightLabel ?? undefined}
           className="order-4"
         >

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import type { Signal } from "@/lib/health/signals";
+import { describeBaselineWindow } from "@/lib/analysis/baseline-window";
 
 const GAUGE_RANGE = 3;
 
@@ -107,8 +108,8 @@ export function SignalList({
           <span className="absolute inset-0 rounded-full bg-corridor" />
         </span>
         <span>
-          Shaded: the usual range over the past 30 nights. Ticks: where the
-          pattern checks count a night as unusual.
+          Shaded: the usual range over {describeBaselineWindow()}. Ticks:
+          where the pattern checks count a night as unusual.
         </span>
       </p>
     </div>

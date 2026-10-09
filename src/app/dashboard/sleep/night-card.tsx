@@ -6,6 +6,7 @@ import { HypnogramChart } from "@/components/charts/hypnogram-chart";
 import { STAGE_STYLES } from "@/components/health/night-window-chart";
 import { SignalGauge } from "@/components/health/signal-list";
 import { Pill } from "@/components/ui/pill";
+import { describeBaselineWindow } from "@/lib/analysis/baseline-window";
 
 export interface NightData {
   id: string;
@@ -164,8 +165,8 @@ export function NightCardContent({
             className="mt-1 h-2 w-6 shrink-0 rounded-full bg-corridor"
           />
           <span>
-            Shaded: the usual range over the past 30 nights. Ticks: where the
-            pattern checks count a night as unusual.
+            Shaded: the usual range over {describeBaselineWindow()}. Ticks:
+            where the pattern checks count a night as unusual.
           </span>
         </p>
       )}

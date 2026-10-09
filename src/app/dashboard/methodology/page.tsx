@@ -13,6 +13,10 @@ import {
   SENSITIVITY_PRESETS,
   type MetricWeights,
 } from "@/lib/analysis/config";
+import {
+  BASELINE_DAYS,
+  BASELINE_GUARD_DAYS,
+} from "@/lib/analysis/baseline-window";
 
 const SCORED_MEASURES: Record<
   keyof MetricWeights,
@@ -98,9 +102,11 @@ export default function MethodologyPage() {
             <div className="text-sm font-medium">Stage 1: Daily Anomaly Detection</div>
             <p className="text-xs text-muted-foreground">
               Each day, {SCORED_COUNT} measures are compared against your
-              personal 30-day trimmed-mean baseline. A weighted composite
-              z-score identifies days that deviate significantly from your
-              norm.
+              personal trimmed-mean baseline: the {BASELINE_DAYS} nights before
+              the latest {BASELINE_GUARD_DAYS}, so a stretch of unusual nights
+              is measured against how you were before it, not against itself.
+              A weighted composite z-score identifies days that deviate
+              significantly from your norm.
             </p>
             <p className="text-xs text-muted-foreground">
               Two fixed rules are added to that score and do not depend on your
@@ -283,10 +289,10 @@ export default function MethodologyPage() {
               episodes.
             </p>
             <p className="text-xs text-muted-foreground">
-              <strong>BP2 pattern profile:</strong> Gives more daily-score
-              weight to exploratory within-night variability, slightly less to
-              sleep duration, and applies the default higher-activation
-              bounce-back attenuation. It is not a validated hypomania
+              <strong>BP2 pattern profile:</strong> Uses the base daily metric
+              weights and the default bounce-back attenuation, so it scores
+              the same as Not specified. The research does not yet support
+              scoring Bipolar II differently. It is not a validated hypomania
               detector.
             </p>
             <p className="text-xs text-muted-foreground">

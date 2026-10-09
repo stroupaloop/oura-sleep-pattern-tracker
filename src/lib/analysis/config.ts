@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { detectionConfig, users } from "@/lib/db/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { getPrimarySensitiveEmail } from "@/lib/access";
+import { BASELINE_DAYS, BASELINE_GUARD_DAYS } from "./baseline-window";
 
 export interface MetricWeights {
   sleepDuration: number;
@@ -20,6 +21,17 @@ export interface MetricWeights {
   circadianRegularity: number;
 }
 
+/**
+ * A night counts at most this many standard deviations from her usual in the
+ * daily score and in the multi-day evidence. One extreme night, an all-nighter
+ * or a flight, then says "very unusual" without being able to outweigh the
+ * rest of the picture; the stored z-scores and the charts are not capped.
+ */
+export const Z_SCORE_CAP = 3;
+
+/** A night is unusual on sleep duration alone this far past the daily threshold. */
+export const SLEEP_ALONE_MARGIN = 0.5;
+
 export type BipolarType = "bp1" | "bp2" | "unspecified";
 
 export interface BipolarProfile {
@@ -28,6 +40,14 @@ export interface BipolarProfile {
   hypoBounceBackMultiplier: number;
 }
 
+/**
+ * No profile changes a night's daily weights: nothing in the research supports
+ * weighting the measures differently by type, and the earlier Bipolar II
+ * override (more weight on within-night variability) raised ordinary nights'
+ * scores enough to add about a third more false flags on simulated years.
+ * The profiles differ only in how much a recovered night takes off the
+ * evidence of a higher-activation pattern.
+ */
 const BIPOLAR_PROFILES: Record<BipolarType, BipolarProfile> = {
   bp1: {
     dailyWeightOverrides: {},
@@ -35,10 +55,7 @@ const BIPOLAR_PROFILES: Record<BipolarType, BipolarProfile> = {
     hypoBounceBackMultiplier: 0.35,
   },
   bp2: {
-    dailyWeightOverrides: {
-      sleepDuration: 0.11,
-      withinNightVariability: 0.10,
-    },
+    dailyWeightOverrides: {},
     hyperBounceBackMultiplier: 0.50,
     hypoBounceBackMultiplier: 0.35,
   },
@@ -62,6 +79,8 @@ export interface AbsoluteThresholds {
 export interface DetectionConfigValues {
   version: number;
   baselineDays: number;
+  /** Nights just before a day that are kept out of its baseline; not stored. */
+  baselineGuardDays: number;
   minBaselineDays: number;
   baselineTrimPct: number;
   concernThreshold: number;
@@ -102,7 +121,8 @@ export const DEFAULT_ABSOLUTE_THRESHOLDS: AbsoluteThresholds = {
 
 export const DEFAULT_CONFIG: DetectionConfigValues = {
   version: 1,
-  baselineDays: 30,
+  baselineDays: BASELINE_DAYS,
+  baselineGuardDays: BASELINE_GUARD_DAYS,
   minBaselineDays: 14,
   baselineTrimPct: 0.10,
   concernThreshold: 1.0,
@@ -166,6 +186,7 @@ export async function loadActiveConfig(): Promise<DetectionConfigValues> {
   return {
     version: row.version,
     baselineDays: row.baselineDays,
+    baselineGuardDays: BASELINE_GUARD_DAYS,
     minBaselineDays: row.minBaselineDays,
     baselineTrimPct: row.baselineTrimPct,
     concernThreshold: row.concernThreshold,

@@ -67,7 +67,6 @@ function result(day: string): DailyAnalysisResult {
     isAnomaly: true,
     direction: "hyper",
     notes: "",
-    hrvCrash: false,
   };
 }
 
@@ -216,7 +215,7 @@ describe("variability against prior windows with a far-off one", () => {
     const withFarOff = analyzeWindow(unsettled, 3, [...steady, ...farOff], DEFAULT_CONFIG, 3);
 
     expect(withFarOff!.latencyCVZScore).toBeCloseTo(4.31, 2);
-    expect(withFarOff!.confidence).toBeCloseTo(7.93, 2);
+    expect(withFarOff!.confidence).toBeCloseTo(7.14, 2);
     expect(clean!.latencyCVZScore).toBeCloseTo(4.39, 2);
   });
 
@@ -236,7 +235,32 @@ describe("variability against prior windows with a far-off one", () => {
     const withFarOff = analyzeWindow(scattered, 3, [...steady, ...farOff], DEFAULT_CONFIG, 3);
 
     expect(withFarOff!.bedtimeCVZScore).toBeCloseTo(3.29, 2);
-    expect(withFarOff!.confidence).toBeCloseTo(8.12, 2);
+    expect(withFarOff!.confidence).toBeCloseTo(6.78, 2);
     expect(clean!.bedtimeCVZScore).toBeCloseTo(3.37, 2);
+  });
+});
+
+describe("evidence that is not about sleep, timing or activity", () => {
+  const days = ["2026-07-01", "2026-07-02", "2026-07-03", "2026-07-04", "2026-07-05"];
+  const withTemperature = (temperature: number) =>
+    days.map((day) => {
+      const base = result(day);
+      return {
+        ...base,
+        metrics: {
+          ...base.metrics,
+          temperatureDeviation: temperature,
+          temperatureDelta: temperature,
+        },
+      };
+    });
+
+  it("does not add evidence for warm nights, though it still notes them", () => {
+    const warm = analyzeWindow(withTemperature(0.8), 5, [], DEFAULT_CONFIG, 5);
+    const cool = analyzeWindow(withTemperature(0), 5, [], DEFAULT_CONFIG, 5);
+
+    expect(warm!.temperatureElevated).toBe(true);
+    expect(cool!.temperatureElevated).toBe(false);
+    expect(warm!.confidence).toBeCloseTo(cool!.confidence, 10);
   });
 });

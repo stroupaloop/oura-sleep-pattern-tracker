@@ -6,7 +6,12 @@ import {
   robustStandardDeviation,
   trimmedMean,
 } from "./baseline";
-import { DetectionConfigValues, BipolarType, getBipolarProfile } from "./config";
+import {
+  DetectionConfigValues,
+  BipolarType,
+  getBipolarProfile,
+  Z_SCORE_CAP,
+} from "./config";
 import { DailyAnalysisResult } from "./anomaly";
 
 export interface WindowResult {
@@ -24,7 +29,6 @@ export interface WindowResult {
   temperatureMean: number;
   temperatureElevated: boolean;
   missingDaysInWindow: number;
-  hrvCrashDays: number;
   confidence: number;
   direction: "hyper" | "hypo" | null;
 }
@@ -152,8 +156,6 @@ export function analyzeWindow(
   const missingDaysInWindow = Math.max(0, expected - actualDays);
   const missingRatio = expected > 0 ? missingDaysInWindow / expected : 0;
 
-  const hrvCrashDays = windowData.filter((d) => d.hrvCrash).length;
-
   const latencyValues = windowData
     .map((d) => d.metrics.onsetLatencyMinutes)
     .filter(Number.isFinite);
@@ -224,16 +226,11 @@ export function analyzeWindow(
   evidenceScore += dirResult.ratio * 1.5;
 
   if (dirResult.dominant === "hypo" && latCVZ > 0) {
-    evidenceScore += latCVZ * 1.0;
+    evidenceScore += Math.min(latCVZ, Z_SCORE_CAP) * 1.0;
   }
-  if (dirResult.dominant === "hyper" && tempResult.elevated) {
-    evidenceScore += 2.0;
-  }
-
-  evidenceScore += hrvCrashDays * 1.5;
 
   if (bedtimeCVZ > 0) {
-    evidenceScore += bedtimeCVZ * 0.8;
+    evidenceScore += Math.min(bedtimeCVZ, Z_SCORE_CAP) * 0.8;
   }
 
   const withinNightVarValues = windowData
@@ -301,7 +298,6 @@ export function analyzeWindow(
     temperatureMean: tempResult.mean,
     temperatureElevated: tempResult.elevated,
     missingDaysInWindow,
-    hrvCrashDays,
     confidence: normalizeEvidenceScore(evidenceScore),
     direction: dirResult.dominant,
   };
