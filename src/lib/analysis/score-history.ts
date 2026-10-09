@@ -1,6 +1,7 @@
 import { BipolarType, DetectionConfigValues } from "./config";
 import { computeDailyAnalysis, DailyAnalysisResult, DayMetrics } from "./anomaly";
 import { assessEpisode, EpisodeResult } from "./episode";
+import { LOWER_VIEW_DAYS } from "./persistence";
 
 export interface ScoredHistory {
   daily: Map<string, DailyAnalysisResult>;
@@ -47,12 +48,17 @@ export function scoreHistory(
   }
 
   const wanted = assessDays ? new Set(assessDays) : null;
-  const expectedDaysByWindow: Record<number, number> = { 3: 3, 5: 5, 7: 7 };
+  const expectedDaysByWindow: Record<number, number> = {
+    3: 3,
+    5: 5,
+    7: 7,
+    [LOWER_VIEW_DAYS]: LOWER_VIEW_DAYS,
+  };
   const assessments = new Map<string, EpisodeResult>();
   for (const [dayIndex, day] of sortedDays.entries()) {
     if (wanted && !wanted.has(day)) continue;
 
-    const recentStart = shiftCalendarDay(day, -6);
+    const recentStart = shiftCalendarDay(day, -(LOWER_VIEW_DAYS - 1));
     const recentResults = sortedDays
       .filter((recentDay) => recentDay >= recentStart && recentDay <= day)
       .map((recentDay) => daily.get(recentDay))

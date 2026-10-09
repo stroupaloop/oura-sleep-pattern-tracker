@@ -136,7 +136,7 @@ export function DetectionConfig({
           {choice === "low" && "Fewer alerts — only strong, sustained patterns trigger warnings."}
           {choice === "medium" && "Balanced — moderate heuristic thresholds for sustained personal-baseline changes."}
           {choice === "high" &&
-            "More sensitive — uses lower heuristic thresholds and may flag more confounders."}
+            "More sensitive — uses lower heuristic thresholds and may flag more ordinary rough nights."}
           {choice === "custom" &&
             "The saved thresholds match no preset. Saving a preset replaces them."}
         </p>
@@ -144,8 +144,8 @@ export function DetectionConfig({
           Detection combines personal-baseline sleep, physiology, activity,
           and circadian features. Mood and episode check-ins remain context and
           retrospective labels; they do not change the pattern score. The
-          pattern profile applies only the documented heuristic weight and
-          bounce-back adjustments and does not provide a diagnosis.
+          pattern profile changes only how much an eased night takes off a
+          higher-activation flag, and does not provide a diagnosis.
         </p>
       </div>
 

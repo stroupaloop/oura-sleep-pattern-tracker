@@ -11,6 +11,7 @@ import {
   minutesFromMidnight,
 } from "./baseline";
 import {
+  ACTIVATION_WEIGHTS,
   DetectionConfigValues,
   BipolarType,
   getBipolarProfile,
@@ -71,6 +72,28 @@ export interface DailyAnalysisResult {
   isAnomaly: boolean;
   direction: "hyper" | "hypo" | null;
   notes: string;
+  /**
+   * How far the night leans toward higher activation (positive: shorter
+   * sleep, earlier waking, more activity) or lower (negative), in standard
+   * deviations. Not stored; the multi-day direction is read from it.
+   */
+  activation?: number;
+}
+
+/**
+ * Weighted mean of the measures the night has, each held to the same cap as
+ * the daily score so one extreme night cannot decide a window's direction.
+ */
+function activationScore(parts: Array<[weight: number, z: number]>): number | undefined {
+  if (parts.length === 0) return undefined;
+  const totalWeight = parts.reduce((sum, [weight]) => sum + weight, 0);
+  return (
+    parts.reduce(
+      (sum, [weight, z]) =>
+        sum + weight * Math.max(-Z_SCORE_CAP, Math.min(Z_SCORE_CAP, z)),
+      0
+    ) / totalWeight
+  );
 }
 
 function cappedAbs(z: number): number {
@@ -373,6 +396,18 @@ export function computeDailyAnalysis(
     ? buildNotes(metrics, baselines, zScores, config.dailyAnomalyThreshold)
     : "";
 
+  const activationParts: Array<[number, number]> = [];
+  if (Number.isFinite(metrics.totalSleepMinutes)) {
+    activationParts.push([ACTIVATION_WEIGHTS.sleep, -zScores.sleep]);
+  }
+  if (Number.isFinite(metrics.wakeTimeMinutes)) {
+    activationParts.push([ACTIVATION_WEIGHTS.wake, -zScores.wake]);
+  }
+  if (Number.isFinite(metrics.steps) || Number.isFinite(metrics.activeMinutes)) {
+    activationParts.push([ACTIVATION_WEIGHTS.activity, activityZ]);
+  }
+  const activation = activationScore(activationParts);
+
   return {
     day: metrics.day,
     metrics,
@@ -382,6 +417,7 @@ export function computeDailyAnalysis(
     isAnomaly,
     direction,
     notes,
+    activation,
   };
 }
 

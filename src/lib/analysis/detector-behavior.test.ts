@@ -214,6 +214,20 @@ const LOWER: Effect = {
   hrvFactor: 0.9,
   heartRate: 2.5,
 };
+const LOWER_MODERATE: Effect = {
+  sleepMinutes: 72,
+  bedtimeMinutes: 32,
+  stepsFactor: 0.68,
+  hrvFactor: 0.92,
+  heartRate: 2,
+};
+const HIGHER_STRONG: Effect = {
+  sleepMinutes: -180,
+  bedtimeMinutes: 67,
+  stepsFactor: 1.45,
+  hrvFactor: 0.88,
+  heartRate: 3,
+};
 
 describe("detector behaviour on simulated people", () => {
   it("raises few flags in a steady year", () => {
@@ -261,23 +275,96 @@ describe("detector behaviour on simulated people", () => {
     expect(rightWay / SEEDS.length).toBeGreaterThanOrEqual(0.6);
   });
 
+  it("reaches an alert within a week of about three hours less sleep", () => {
+    let alerted = 0;
+    for (const seed of SEEDS) {
+      const history = scoreHistory(
+        simulate(ONSET + 40, seed, episode(ONSET, 3, 4, 2, HIGHER_STRONG)),
+        DEFAULT_CONFIG,
+        "bp2",
+        nightsBetween(ONSET, ONSET + 10)
+      );
+      if (peakTier(history, ONSET, ONSET + 10) >= 3) alerted++;
+    }
+    expect(alerted / SEEDS.length).toBeGreaterThanOrEqual(0.6);
+  });
+
+  it("keeps showing a moderate slide into longer sleep through its third and fourth weeks", () => {
+    let flagged = 0;
+    let nights = 0;
+    for (const seed of SEEDS) {
+      const history = scoreHistory(
+        simulate(ONSET + 70, seed, episode(ONSET, 7, 55, 7, LOWER_MODERATE)),
+        DEFAULT_CONFIG,
+        "bp2",
+        nightsBetween(ONSET + 14, ONSET + 36)
+      );
+      for (let offset = 14; offset < 36; offset++) {
+        nights++;
+        if (flaggedOn(history, ONSET + offset)) flagged++;
+      }
+    }
+    expect(flagged / nights).toBeGreaterThanOrEqual(0.27);
+  });
+
   it("flags a slow slide into longer sleep and fewer steps, and keeps showing it", () => {
     let noticed = 0;
     let stillShowing = 0;
+    let flaggedLate = 0;
+    let lateNights = 0;
+    let calledLower = 0;
     for (const seed of SEEDS) {
       const history = scoreHistory(
-        simulate(ONSET + 70, seed, episode(ONSET, 7, 40, 7, LOWER)),
+        simulate(ONSET + 70, seed, episode(ONSET, 7, 55, 7, LOWER)),
         DEFAULT_CONFIG,
         "bp2",
-        nightsBetween(ONSET, ONSET + 28)
+        nightsBetween(ONSET, ONSET + 36)
       );
       if (peakTier(history, ONSET, ONSET + 14) >= 1) noticed++;
       if ([14, 17, 20, 23, 26].some((offset) => flaggedOn(history, ONSET + offset))) {
         stillShowing++;
       }
+      for (let offset = 14; offset < 36; offset++) {
+        lateNights++;
+        if (flaggedOn(history, ONSET + offset)) {
+          flaggedLate++;
+          if (history.assessments.get(dayAt(ONSET + offset))?.direction === "hypo") {
+            calledLower++;
+          }
+        }
+      }
     }
     expect(noticed / SEEDS.length).toBeGreaterThanOrEqual(0.9);
     expect(stillShowing / SEEDS.length).toBeGreaterThanOrEqual(0.5);
+    expect(flaggedLate / lateNights).toBeGreaterThanOrEqual(0.5);
+    expect(calledLower / flaggedLate).toBeGreaterThanOrEqual(0.95);
+  });
+
+  it("does not go on calling the pattern lower once a lower stretch swings to higher activation", () => {
+    const swing = ONSET + 21;
+    const lower = episode(ONSET, 7, 14, 0, LOWER);
+    const higher = episode(swing, 2, 8, 2, HIGHER_STRONG);
+    let lowerOnSecondNight = 0;
+    let higherByFourthNight = 0;
+    for (const seed of SEEDS) {
+      const history = scoreHistory(
+        simulate(swing + 20, seed, (index) => (index < swing ? lower(index) : higher(index))),
+        DEFAULT_CONFIG,
+        "bp2",
+        nightsBetween(swing, swing + 6)
+      );
+      if (history.assessments.get(dayAt(swing + 1))?.direction === "hypo" && flaggedOn(history, swing + 1)) {
+        lowerOnSecondNight++;
+      }
+      if (
+        flaggedOn(history, swing + 3) &&
+        history.assessments.get(dayAt(swing + 3))?.direction === "hyper"
+      ) {
+        higherByFourthNight++;
+      }
+    }
+    expect(lowerOnSecondNight / SEEDS.length).toBeLessThanOrEqual(0.25);
+    expect(higherByFourthNight / SEEDS.length).toBeGreaterThanOrEqual(0.8);
   });
 
   it("does not let one all-nighter and a recovery sleep reach an alert", () => {

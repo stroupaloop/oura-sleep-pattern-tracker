@@ -9,14 +9,23 @@ import { PageHeader } from "@/components/page-header";
 import { SupportLine } from "@/components/support-line";
 import { Callout } from "@/components/ui/callout";
 import {
+  ACTIVATION_WEIGHTS,
   DEFAULT_ABSOLUTE_THRESHOLDS,
+  DEFAULT_CONFIG,
   SENSITIVITY_PRESETS,
+  Z_SCORE_CAP,
   type MetricWeights,
 } from "@/lib/analysis/config";
 import {
   BASELINE_DAYS,
   BASELINE_GUARD_DAYS,
 } from "@/lib/analysis/baseline-window";
+import {
+  ALERT_SPAN_DAYS,
+  LOWER_VIEW_DAYS,
+  LOWER_VIEW_MIN_NIGHTS,
+} from "@/lib/analysis/persistence";
+import { DIRECTION_LEAN } from "@/lib/analysis/window";
 
 const SCORED_MEASURES: Record<
   keyof MetricWeights,
@@ -126,19 +135,45 @@ export default function MethodologyPage() {
               The system evaluates trend slope, consistency ratio, and
               directional consistency to distinguish noise from real shifts.
             </p>
+            <p className="text-xs text-muted-foreground">
+              Direction comes from a signed score for each night: shorter
+              sleep, earlier waking and more activity lean toward higher
+              activation, the opposite toward lower. Sleep, wake time and
+              activity weigh {percent(ACTIVATION_WEIGHTS.sleep)},{" "}
+              {percent(ACTIVATION_WEIGHTS.wake)} and{" "}
+              {percent(ACTIVATION_WEIGHTS.activity)}, and each counts at most{" "}
+              {Z_SCORE_CAP} standard deviations. A window leans a way when its
+              nights average more than {DIRECTION_LEAN} standard deviations to
+              that side; nights that cancel each other out leave it mixed.
+            </p>
           </div>
           <div className="rounded-lg border p-4 space-y-2">
             <div className="text-sm font-medium">Stage 3: Pattern Flagging</div>
             <p className="text-xs text-muted-foreground">
-              Based on a heuristic evidence score and consecutive flagged days, each
-              day is classified into a tier: none, watch, warning, or alert.
-              Higher- or lower-activation direction describes which inputs
-              dominate; it does not identify a mood episode.
+              Based on a heuristic evidence score and how many nights were
+              outside your usual, each day is classified into a tier: none,
+              watch, warning, or alert. Watch needs {DEFAULT_CONFIG.watchMinDays}{" "}
+              such nights in a row, Warning {DEFAULT_CONFIG.warningMinDays} and
+              Alert {DEFAULT_CONFIG.alertMinDays} of the last {ALERT_SPAN_DAYS},
+              counting only nights that lean the same way as the pattern. A
+              pattern with no clear direction stays at Watch. Higher- or
+              lower-activation direction describes which inputs dominate; it
+              does not identify a mood episode.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              A slower slide has its own check. Over the last {LOWER_VIEW_DAYS}{" "}
+              nights, {LOWER_VIEW_MIN_NIGHTS.watch}, {LOWER_VIEW_MIN_NIGHTS.warning}{" "}
+              or {LOWER_VIEW_MIN_NIGHTS.alert} nights leaning toward lower
+              activation, with enough evidence, raise Watch, Warning or Alert.
+              Two weeks is the span clinicians use for a depressive episode,
+              but this check does not diagnose one, and a long illness or a
+              holiday can look the same.
             </p>
             <p className="text-xs text-muted-foreground">
               A flag is lowered when the latest night has eased. The app
               compares the latest night&apos;s score with the highest score in
-              the 3-, 5- or 7-night stretch that gave the strongest evidence.
+              the 3-, 5- or 7-night stretch (or the 14 nights of the two-week
+              check) that gave the strongest evidence.
               The evidence is reduced in proportion to the drop, and a drop of
               more than {percent(SENSITIVITY_PRESETS.medium.bounceBackThreshold)}{" "}
               of that peak at Medium sensitivity (
@@ -284,20 +319,20 @@ export default function MethodologyPage() {
             <div className="text-sm font-medium">Pattern Profile</div>
             <p className="text-xs text-muted-foreground">
               <strong>BP1 pattern profile:</strong> Uses the base daily metric
-              weights and applies less bounce-back attenuation to
-              higher-activation evidence. It is not validated to detect manic
-              episodes.
+              weights. When the latest night has eased, it takes less off a
+              higher-activation pattern&apos;s evidence than the default does.
+              It is not validated to detect manic episodes.
             </p>
             <p className="text-xs text-muted-foreground">
               <strong>BP2 pattern profile:</strong> Uses the base daily metric
-              weights and the default bounce-back attenuation, so it scores
-              the same as Not specified. The research does not yet support
+              weights and the default easing, so it scores the same as Not
+              specified. The research does not yet support
               scoring Bipolar II differently. It is not a validated hypomania
               detector.
             </p>
             <p className="text-xs text-muted-foreground">
               <strong>Not specified:</strong> Uses the base daily metric
-              weights and default bounce-back attenuation.
+              weights and the default easing.
             </p>
           </div>
           <div className="rounded-lg border p-4 space-y-1">

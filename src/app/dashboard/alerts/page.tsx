@@ -14,6 +14,7 @@ import { AlertsCheckStatus } from "./check-status";
 import { EpisodeTimeline } from "@/components/charts/episode-timeline";
 import { RESEARCH_REFERENCES } from "@/lib/research/references";
 import type { AlertResearchContext } from "@/lib/analysis/episode";
+import { describePersistence } from "@/lib/analysis/persistence";
 import { normalizeEvidenceScore } from "@/lib/analysis/window";
 import {
   loadActiveConfig,
@@ -185,9 +186,9 @@ function ResearchContextCard({
   return (
     <div className="space-y-4">
       <p className="text-sm font-medium">
-        {consecutiveDays != null ? `${consecutiveDays}-day` : "Multi-day"}{" "}
-        {describePatternDirection(direction).adjective.toLowerCase()} pattern
-        flag from the available data
+        {ctx.persistence
+          ? `${describePatternDirection(direction).adjective} pattern flag on ${describePersistence(ctx.persistence)}, from the available data`
+          : `${consecutiveDays != null ? `${consecutiveDays}-day` : "Multi-day"} ${describePatternDirection(direction).adjective.toLowerCase()} pattern flag from the available data`}
       </p>
 
       {ctx.whatWeDetected.length > 0 && (
@@ -509,6 +510,13 @@ export default async function AlertsPage({
                   {ep.bestWindowDays && (
                     <div>Window: {ep.bestWindowDays} days</div>
                   )}
+                  {researchCtx?.persistence && (
+                    <div>
+                      Nights outside your usual:{" "}
+                      {researchCtx.persistence.nights} of{" "}
+                      {researchCtx.persistence.span}
+                    </div>
+                  )}
                   {ep.consecutiveConcerningDays != null && (
                     <div>Consecutive days: {ep.consecutiveConcerningDays}</div>
                   )}
@@ -545,7 +553,7 @@ export default async function AlertsPage({
 
               {(ep.confounderLikelihood ?? 0) > 0.2 && (
                 <p className="text-xs text-muted-foreground tabular-nums">
-                  Bounce-back index:{" "}
+                  Eased from its peak:{" "}
                   {((ep.confounderLikelihood ?? 0) * 100).toFixed(0)}%
                 </p>
               )}
