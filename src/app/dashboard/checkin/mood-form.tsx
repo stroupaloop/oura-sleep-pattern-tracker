@@ -21,6 +21,8 @@ import { classifyMedicationLogsForEditing } from "@/lib/medication-log";
 import { EPISODE_STATES } from "@/lib/episode-states";
 import { formatMoodValue, moodLabel } from "@/lib/design/mood-scale";
 import { MoodScalePicker } from "@/components/mood-scale-picker";
+import { SupportNote } from "@/components/support-line";
+import { moodNeedsSupportLine } from "@/lib/support-line";
 import type { EpisodePatternSummary } from "@/lib/episode-pattern";
 import {
   OPTIONAL_SCORES,
@@ -452,6 +454,9 @@ function MoodFormForDay({
               <p className="mt-2 text-center text-sm text-muted-foreground">
                 {moodLabel(moodScore)}
               </p>
+            )}
+            {moodNeedsSupportLine(moodScore) && (
+              <SupportNote className="mx-auto mt-4 max-w-sm" />
             )}
           </Panel>
 

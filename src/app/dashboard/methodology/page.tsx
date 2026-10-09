@@ -6,6 +6,7 @@ import {
   METRIC_LIMITATIONS,
 } from "@/lib/research/references";
 import { PageHeader } from "@/components/page-header";
+import { SupportLine } from "@/components/support-line";
 import { Callout } from "@/components/ui/callout";
 import {
   DEFAULT_ABSOLUTE_THRESHOLDS,
@@ -320,6 +321,8 @@ export default function MethodologyPage() {
           .
         </p>
       </section>
+
+      <SupportLine />
 
       {/* Disclaimer */}
       <Callout tone="info" icon={Info}>

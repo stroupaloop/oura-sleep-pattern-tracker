@@ -32,6 +32,8 @@ import {
 import { PageHeader } from "@/components/page-header";
 import { PatternDirectionLabel } from "@/components/pattern-direction-label";
 import { Callout } from "@/components/ui/callout";
+import { SupportLine } from "@/components/support-line";
+import { patternNeedsSupportLine } from "@/lib/support-line";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Panel } from "@/components/ui/panel";
 import { Pill } from "@/components/ui/pill";
@@ -353,6 +355,8 @@ export default async function AlertsPage() {
       )}
 
       <RetrospectiveAgreementCard agreement={agreement} />
+
+      {patternNeedsSupportLine(episodes) && <SupportLine />}
 
       {allEpisodes.length === 0 && allAnalysis.length === 0 && (
         <EmptyState title="No analysis has been run yet">
