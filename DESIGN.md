@@ -204,8 +204,8 @@ Panels round at 14px, controls at 8px, meters and the corridor band are pills. T
 - **Short-night run:** under the night's comparison, only from the second night: "3rd night in a row shorter than usual · 3h 5m less sleep in total", with a note when the run ends at a night that was not recorded. A short night is one a standard deviation or more below her usual; the text takes Lamp Amber only when the latest night itself is past the threshold.
 - **Signal row:** label and value on the first line; the comparison in words and the corridor gauge on the second. Unusual rows add a Lamp Amber pill and comparison text.
 - **Corridor gauge:** -3 to +3 standard deviations; band at ±1; ticks at the detector's threshold; Moonlight dot, Lamp Amber once unusual.
-- **Date range:** one control on every page that shows a window of days (Alerts, Life chart, Insights, Reports): the presets that suit the page (7d to 1y, and All) and Custom, which opens From and To date fields. The choice lives in the address (`?range=90d`, or `?from=2026-07-01&to=2026-07-31`), so a view can be shared and a refresh keeps it. A line under it says in words what is shown ("Showing Jul 12 – Oct 9, 2026 · 90 days") with what the page found in it. The page resolves the address and passes the result back, so the choice marked is the one in effect; a malformed address falls back to the page's default, and an end date never passes today.
-- **Charts:** axes, legends and tooltips come from the chart theme; tooltips are a popover surface with a swatch beside readable text; the hover cursor is a muted wash, not the library's bright gray.
+- **Date range:** one control on every page that shows a window of days (Alerts, Life chart, Insights, Reports, and the trends on Health, where last night, the week and the pattern check keep reading the latest days whatever is chosen): the presets that suit the page (7d to 1y, and All) and Custom, which opens From and To date fields. The choice lives in the address (`?range=90d`, or `?from=2026-07-01&to=2026-07-31`), so a view can be shared and a refresh keeps it. A line under it says in words what is shown ("Showing Jul 12 – Oct 9, 2026 · 90 days") with what the page found in it. The page resolves the address and passes the result back, so the choice marked is the one in effect; a malformed address falls back to the page's default, and an end date never passes today.
+- **Charts:** axes, legends and tooltips come from the chart theme; tooltips are a popover surface with a swatch beside readable text; the hover cursor is a muted wash, not the library's bright gray. A date axis names the month ("Oct 9"), adds the year once the days span two ("Mar 27 ’25"), keeps its first and last label and leaves room between the rest.
 - **Pattern status:** always present. Flagged: tinted surface in the tier's color, the tier named in words. Eased (flagged earlier in the 14 days, clear since): neutral surface and when it was last flagged, never the tier's tint. Clear: a Sage check and when the check last ran. Behind (the last check is more than a night old): a Dawn Blue notice with the last night checked and how it catches up, never a check mark, and a line under a flag too. Paused: says why.
 - **Notices:** a missing night is Dawn Blue and explains how the data arrives; a lost Oura connection is an amber banner across every dashboard page with the way to reconnect.
 - **Buttons:** shadcn variants on these tokens. Default, small and icon sizes reach 40px on phones and tighten from `sm`.
@@ -221,7 +221,7 @@ Use these instead of local copies:
 - `components/ui/day-navigator.tsx` `DayNavigator`; `components/ui/empty-state.tsx` `EmptyState`; `components/ui/stat.tsx` `Stat`; `components/ui/form-message.tsx` `FormMessage`; `components/ui/native-select.tsx` `NativeSelect`; plus `Input`, `Textarea`, `Button`.
 - `components/charts/chart-theme.tsx` `CHART`, `AXIS_TICK`, `TOOLTIP_STYLE`, `legendLabel`; `components/charts/chart-tooltip.tsx` `ChartTooltipFrame`, `ChartTooltipRow` (swatch plus readable text).
 - `components/pattern-status.tsx` `PatternStatus`; `components/pattern-direction-label.tsx` `PatternDirectionLabel`.
-- `lib/design/`: `pattern-tiers` (`tierLabel`, `tierTone`, `tierColor`), `pattern-direction`, `mood-scale` (`MOOD_SCALE`, `moodColor`, `moodSwatchClass`, `formatMoodValue`), `score-bands` (`scoreBand`); `lib/episode-states` (`EPISODE_MARKERS`, `episodeLabel`); `lib/health/format` (`formatNightLabel`).
+- `lib/design/`: `pattern-tiers` (`tierLabel`, `tierTone`, `tierColor`), `pattern-direction`, `mood-scale` (`MOOD_SCALE`, `moodColor`, `moodSwatchClass`, `formatMoodValue`), `score-bands` (`scoreBand`); `lib/episode-states` (`EPISODE_MARKERS`, `episodeLabel`); `lib/health/format` (`formatNightLabel`, and `axisDayProps` for every date axis).
 
 ## Do's and Don'ts
 
@@ -234,6 +234,7 @@ Use these instead of local copies:
 ### Don't:
 - **Don't** use diagnostic language on the dashboard; it shows patterns against a personal baseline.
 - **Don't** let a gap render as zero, an empty chart, or a normal-looking night.
+- **Don't** label a date axis with bare numbers (`10-09`): they read as counts and run together. Name the month.
 - **Don't** nest panels, add eyebrow labels above headings, use side-stripe borders, gradient text or glow.
 - **Don't** stand a progress ring in for a number; show the number and what it is compared with.
 - **Don't** put Haze text on Shadow Slate; it falls under 4.5:1.
