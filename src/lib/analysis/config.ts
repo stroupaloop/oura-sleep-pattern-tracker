@@ -32,6 +32,14 @@ export const Z_SCORE_CAP = 3;
 /** A night is unusual on sleep duration alone this far past the daily threshold. */
 export const SLEEP_ALONE_MARGIN = 0.5;
 
+/**
+ * What a night's lean toward higher or lower activation is made of. Shorter
+ * sleep, earlier waking and more activity lean higher; the opposite leans
+ * lower. Bedtime is left out: a later bedtime goes with either pole. A
+ * measure the night lacks drops out and the rest are reweighted.
+ */
+export const ACTIVATION_WEIGHTS = { sleep: 0.4, wake: 0.25, activity: 0.35 } as const;
+
 export type BipolarType = "bp1" | "bp2" | "unspecified";
 
 export interface BipolarProfile {

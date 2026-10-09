@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_CONFIG } from "./config";
 import type { DailyAnalysisResult, DayMetrics } from "./anomaly";
 import {
+  activationDirection,
+  analyzeAllWindows,
   analyzeWindow,
+  DIRECTION_LEAN,
   normalizeEvidenceScore,
   temperatureTrend,
 } from "./window";
@@ -262,5 +265,79 @@ describe("evidence that is not about sleep, timing or activity", () => {
     expect(warm!.temperatureElevated).toBe(true);
     expect(cool!.temperatureElevated).toBe(false);
     expect(warm!.confidence).toBeCloseTo(cool!.confidence, 10);
+  });
+});
+
+describe("direction from the signed activation score", () => {
+  it("leans toward the side most nights sit on", () => {
+    const hyper = activationDirection([1.2, 0.9, 1.4]);
+    expect(hyper.dominant).toBe("hyper");
+    expect(hyper.ratio).toBe(1);
+    expect(hyper.mean).toBeCloseTo(1.17, 2);
+
+    const hypo = activationDirection([-1.1, -0.8, -1.3, -0.2]);
+    expect(hypo.dominant).toBe("hypo");
+    expect(hypo.ratio).toBe(0.75);
+  });
+
+  it("calls a window mixed when opposite nights cancel", () => {
+    expect(activationDirection([1.5, -1.5, 1.5, -1.5])).toMatchObject({
+      dominant: null,
+      ratio: 0,
+    });
+  });
+
+  it("needs a lean of more than half a standard deviation", () => {
+    const edge = activationDirection([DIRECTION_LEAN, DIRECTION_LEAN, DIRECTION_LEAN]);
+    expect(edge.dominant).toBeNull();
+    const just = activationDirection([0.6, 0.6, 0.6]);
+    expect(just.dominant).toBe("hyper");
+  });
+
+  it("gives little weight to one extreme night among quiet ones", () => {
+    const lone = activationDirection([2.4, 0.1, 0.1, 0.1]);
+    expect(lone.dominant).toBe("hyper");
+    expect(lone.ratio).toBe(0.25);
+  });
+
+  it("says nothing with no scored nights", () => {
+    expect(activationDirection([])).toMatchObject({ dominant: null, ratio: 0 });
+  });
+
+  it("reads a window's direction from the nights' scores, not their single-night labels", () => {
+    const nights = ["2026-07-01", "2026-07-02", "2026-07-03"].map((day) => ({
+      ...result(day),
+      direction: "hyper" as const,
+      activation: -0.9,
+    }));
+    expect(analyzeWindow(nights, 3, [], DEFAULT_CONFIG, 3)!.direction).toBe("hypo");
+  });
+
+  it("falls back to the single-night labels for nights stored without a score", () => {
+    const nights = ["2026-07-01", "2026-07-02", "2026-07-03"].map(result);
+    expect(analyzeWindow(nights, 3, [], DEFAULT_CONFIG, 3)!.direction).toBe("hyper");
+  });
+});
+
+describe("the two-week view", () => {
+  const fortnight = (activation: number, score = 1.6) =>
+    Array.from({ length: 14 }, (_, index) => {
+      const day = new Date(Date.UTC(2026, 6, 1 + index)).toISOString().slice(0, 10);
+      return { ...result(day), compositeScore: score, activation };
+    });
+
+  it("is read when the fortnight leans toward lower activation", () => {
+    const { lowerView, best } = analyzeAllWindows(fortnight(-1), [], DEFAULT_CONFIG);
+    expect(best).not.toBeNull();
+    expect(lowerView?.windowDays).toBe(14);
+    expect(lowerView?.direction).toBe("hypo");
+  });
+
+  it("is left out when the fortnight leans toward higher activation", () => {
+    expect(analyzeAllWindows(fortnight(1), [], DEFAULT_CONFIG).lowerView).toBeNull();
+  });
+
+  it("is left out when the fortnight has no clear lean", () => {
+    expect(analyzeAllWindows(fortnight(0.1), [], DEFAULT_CONFIG).lowerView).toBeNull();
   });
 });

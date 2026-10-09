@@ -13,6 +13,7 @@ import {
   Z_SCORE_CAP,
 } from "./config";
 import { DailyAnalysisResult } from "./anomaly";
+import { LOWER_VIEW_DAYS } from "./persistence";
 
 export interface WindowResult {
   windowDays: number;
@@ -66,6 +67,33 @@ export function directionConsistencyScore(directions: (string | null)[]): { rati
   return { ratio: hypoCount / nonNull.length, dominant: hypoCount > 0 ? "hypo" : null };
 }
 
+/** A window leans a way when its nights' mean activation score passes this many standard deviations. */
+export const DIRECTION_LEAN = 0.5;
+/** A night agrees with the window's lean when its own score passes this. */
+export const NIGHT_AGREES_AT = 0.3;
+
+/**
+ * Which way a window leans, from the nights' signed activation scores rather
+ * than from how many single nights crossed a threshold twice over: a steady
+ * lean of a standard deviation or so counts, a mix of opposite nights (an
+ * all-nighter then a long sleep) cancels, and nothing is called "unclear" by
+ * a tie.
+ */
+export function activationDirection(
+  activations: readonly number[]
+): { ratio: number; dominant: "hyper" | "hypo" | null; mean: number } {
+  if (activations.length === 0) return { ratio: 0, dominant: null, mean: 0 };
+  const mean = activations.reduce((sum, a) => sum + a, 0) / activations.length;
+  if (Math.abs(mean) <= DIRECTION_LEAN) return { ratio: 0, dominant: null, mean };
+  const sign = mean > 0 ? 1 : -1;
+  const agreeing = activations.filter((a) => a * sign > NIGHT_AGREES_AT).length;
+  return {
+    ratio: agreeing / activations.length,
+    dominant: sign > 0 ? "hyper" : "hypo",
+    mean,
+  };
+}
+
 export function bounceBackScore(scores: number[]): number {
   if (scores.length < 2) return 0;
   const peak = Math.max(...scores);
@@ -96,7 +124,7 @@ export function normalizeEvidenceScore(value: number): number {
   return Math.min(10, Math.max(0, value));
 }
 
-const WINDOW_MULTIPLIERS: Record<number, number> = { 3: 0.6, 5: 0.85, 7: 1.0 };
+const WINDOW_MULTIPLIERS: Record<number, number> = { 3: 0.6, 5: 0.85, 7: 1.0, 14: 1.0 };
 
 function shiftCalendarDay(day: string, offset: number): string {
   const date = new Date(`${day}T00:00:00Z`);
@@ -148,7 +176,13 @@ export function analyzeWindow(
 
   const slope = trendSlope(scores);
   const consistency = consistencyRatio(scores, config.concernThreshold);
-  const dirResult = directionConsistencyScore(directions);
+  const activations = windowData
+    .map((d) => d.activation)
+    .filter((a): a is number => a != null && Number.isFinite(a));
+  const dirResult =
+    activations.length > 0
+      ? activationDirection(activations)
+      : directionConsistencyScore(directions);
   const bounce = bounceBackScore(scores);
 
   const actualDays = windowData.length;
@@ -309,7 +343,12 @@ export function analyzeAllWindows(
   config: DetectionConfigValues,
   expectedDaysByWindow?: Record<number, number>,
   bipolarType: BipolarType = "unspecified"
-): { best: WindowResult | null; all: WindowResult[] } {
+): {
+  best: WindowResult | null;
+  all: WindowResult[];
+  /** The two-week window, only when it leans toward lower activation. */
+  lowerView: WindowResult | null;
+} {
   const windows: WindowResult[] = [];
 
   for (const size of [3, 5, 7]) {
@@ -318,8 +357,19 @@ export function analyzeAllWindows(
     if (result) windows.push(result);
   }
 
-  if (windows.length === 0) return { best: null, all: [] };
+  if (windows.length === 0) return { best: null, all: [], lowerView: null };
 
   const best = windows.reduce((a, b) => (a.confidence > b.confidence ? a : b));
-  return { best, all: windows };
+
+  const twoWeeks = analyzeWindow(
+    dailyResults,
+    LOWER_VIEW_DAYS,
+    allPriorResults,
+    config,
+    expectedDaysByWindow?.[LOWER_VIEW_DAYS],
+    bipolarType
+  );
+  const lowerView = twoWeeks?.direction === "hypo" ? twoWeeks : null;
+
+  return { best, all: windows, lowerView };
 }
