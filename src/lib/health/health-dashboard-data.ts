@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, or } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   dailyAnalysis,
@@ -8,6 +8,7 @@ import {
   oauthTokens,
   sleepPeriods,
 } from "@/lib/db/schema";
+import { daysBetween } from "@/lib/date-range";
 import { getTodayET, shiftIsoDay } from "@/lib/date-utils";
 import { loadActiveConfig, loadBipolarType } from "@/lib/analysis/config";
 import {
@@ -70,8 +71,15 @@ export type HealthDashboardData = NonNullable<
   Awaited<ReturnType<typeof loadHealthDashboard>>
 >;
 
-/** Everything the Health page shows, or null before Oura is connected. */
-export async function loadHealthDashboard() {
+/**
+ * Everything the Health page shows, or null before Oura is connected. The
+ * trend charts cover `range` (the last 30 days when none is given); last
+ * night, the week strip and the pattern status always read the latest days.
+ */
+export async function loadHealthDashboard(range?: {
+  start: string;
+  end: string;
+}) {
   const [token] = await db
     .select({ scope: oauthTokens.scope })
     .from(oauthTokens)
@@ -79,9 +87,21 @@ export async function loadHealthDashboard() {
   if (!token) return null;
 
   const today = getTodayET();
-  const trendStart = shiftIsoDay(today, -(TREND_DAYS - 1)) ?? today;
-  const periodStart = shiftIsoDay(trendStart, -1) ?? trendStart;
+  const defaultStart = shiftIsoDay(today, -(TREND_DAYS - 1)) ?? today;
+  const trendStart = range?.start ?? defaultStart;
+  const trendEnd = range && range.end < today ? range.end : today;
   const patternStart = shiftIsoDay(today, -(PATTERN_DAYS - 1)) ?? today;
+  // The charts cover the range; last night, the week and the pattern check
+  // read the last 30 days whatever it is, so those rows load with it. For the
+  // last 30 days the two are one span.
+  const inView = (day: Parameters<typeof gte>[0], padDays = 0) =>
+    or(
+      and(
+        gte(day, shiftIsoDay(trendStart, -padDays) ?? trendStart),
+        lte(day, trendEnd)
+      ),
+      gte(day, shiftIsoDay(defaultStart, -padDays) ?? defaultStart)
+    );
 
   const [
     periodRows,
@@ -115,14 +135,14 @@ export async function loadHealthDashboard() {
       .from(sleepPeriods)
       .where(
         and(
-          gte(sleepPeriods.day, periodStart),
+          inView(sleepPeriods.day, 1),
           inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES])
         )
       ),
     db
       .select()
       .from(dailyAnalysis)
-      .where(gte(dailyAnalysis.day, trendStart))
+      .where(inView(dailyAnalysis.day))
       .orderBy(desc(dailyAnalysis.day)),
     loadActiveConfig(),
     loadBipolarType(),
@@ -139,24 +159,32 @@ export async function loadHealthDashboard() {
         signalMode: episodeAssessments.signalMode,
       })
       .from(episodeAssessments)
-      .where(gte(episodeAssessments.day, trendStart))
+      .where(inView(episodeAssessments.day))
       .orderBy(desc(episodeAssessments.day)),
     computeDataAvailability(TREND_DAYS),
     loadOuraConnectionHealth().catch(() => null),
   ]);
 
   const groups = selectNightGroupsByDay(periodRows);
-  const nightDays = [...groups.keys()]
-    .filter((day) => day >= trendStart && day <= today)
-    .sort();
-  const shownDay = nightDays.at(-1) ?? null;
+  // The latest night shown is the latest of the last 30 days, whatever range
+  // the trends cover.
+  const shownDay =
+    [...groups.keys()]
+      .filter((day) => day >= defaultStart && day <= today)
+      .sort()
+      .at(-1) ?? null;
   const shown = shownDay ? groups.get(shownDay)! : null;
+  const nightDays = [...groups.keys()]
+    .filter((day) => day >= trendStart && day <= trendEnd)
+    .sort();
   // Until noon ET today's night may simply not have synced, and the notice at
   // the top says so, so the charts end at the last night that is due.
   const lastDueNight =
-    nightDays.includes(today) || currentEtHour() >= MORNING_ENDS_ET_HOUR
+    groups.has(today) || currentEtHour() >= MORNING_ENDS_ET_HOUR
       ? today
       : (shiftIsoDay(today, -1) ?? today);
+  // A range that ended before today has no night still on its way.
+  const trendLastDay = trendEnd < today ? trendEnd : lastDueNight;
 
   const currentAssessments = filterCurrentPatternAssessments(
     assessmentRows,
@@ -165,6 +193,10 @@ export async function loadHealthDashboard() {
   );
   const currentAssessmentDays = new Set(
     currentAssessments.map((assessment) => assessment.day)
+  );
+  // The pattern status is about now, not about the range being charted.
+  const recentAssessments = currentAssessments.filter(
+    (assessment) => assessment.day >= defaultStart
   );
   const analysisByDay = new Map(analysisRows.map((row) => [row.day, row]));
   const shownAnalysis = shownDay ? analysisByDay.get(shownDay) ?? null : null;
@@ -205,7 +237,7 @@ export async function loadHealthDashboard() {
     });
   const trendRows = fillCalendarDays<TrendRow>(
     chartData,
-    { start: trendStart, end: lastDueNight },
+    { start: trendStart, end: trendLastDay },
     (day) => ({
       day,
       hours: null,
@@ -218,7 +250,10 @@ export async function loadHealthDashboard() {
       noNight: true,
     })
   );
-  const analysisChartData = [...analysisRows].reverse().map((row) => ({
+  const analysisInRange = analysisRows.filter(
+    (row) => row.day >= trendStart && row.day <= trendEnd
+  );
+  const analysisChartData = [...analysisInRange].reverse().map((row) => ({
     day: row.day,
     baselineHrv: row.baselineHrv,
     baselineHeartRate: row.baselineHeartRate,
@@ -230,8 +265,11 @@ export async function loadHealthDashboard() {
     hrvZScore: row.hrvZScore,
     heartRateZScore: row.heartRateZScore,
   }));
-  const compositionStart =
-    shiftIsoDay(lastDueNight, -(COMPOSITION_DAYS - 1)) ?? lastDueNight;
+  // The stage shares cover the last 14 days of the range, or all of a shorter one.
+  const compositionStart = [
+    shiftIsoDay(trendLastDay, -(COMPOSITION_DAYS - 1)) ?? trendLastDay,
+    trendStart,
+  ].sort()[1];
   const compositionNights = trendNights
     .filter((night) => night.day >= compositionStart)
     .flatMap((night) => {
@@ -259,7 +297,7 @@ export async function loadHealthDashboard() {
     });
   const compositionData = fillCalendarDays<CompositionRow>(
     compositionNights,
-    { start: compositionStart, end: lastDueNight },
+    { start: compositionStart, end: trendLastDay },
     (day) => ({
       day,
       deep: null,
@@ -315,6 +353,8 @@ export async function loadHealthDashboard() {
 
   return {
     today,
+    /** How far back "last night" is looked for, whatever range the charts cover. */
+    lookbackDays: TREND_DAYS,
     shownDay,
     isLastNight: shownDay === today,
     week,
@@ -344,8 +384,8 @@ export async function loadHealthDashboard() {
       : null,
     signals: buildSignals(shownAnalysis, config.dailyAnomalyThreshold),
     threshold: config.dailyAnomalyThreshold,
-    pattern: summarizeEpisodePattern(currentAssessments, patternStart),
-    latestCheckedDay: currentAssessments[0]?.day ?? null,
+    pattern: summarizeEpisodePattern(recentAssessments, patternStart),
+    latestCheckedDay: recentAssessments[0]?.day ?? null,
     scores: { sleep: sleepScore, readiness },
     trends: {
       chartData: trendRows,
@@ -355,7 +395,7 @@ export async function loadHealthDashboard() {
         trendNights.map((night) => night.totalSleepDuration)
       ),
       nightsCounted: chartData.length,
-      windowDays: TREND_DAYS,
+      windowDays: daysBetween(trendStart, trendEnd),
     },
     availability,
     missingScopes: missingOuraScopes(token.scope),
