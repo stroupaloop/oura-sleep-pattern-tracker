@@ -26,6 +26,7 @@ import {
   hasValues,
   isolatedDot,
 } from "./chart-gaps";
+import { axisDayProps } from "@/lib/health/format";
 import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
@@ -90,6 +91,7 @@ export function WithinNightTooltipContent({
 }
 
 export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
+  const dayAxis = axisDayProps(data.map((point) => point.day));
   const hasCvData = data.some(
     (point) => point.hrvCV != null || point.hrCV != null
   );
@@ -145,9 +147,8 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                     <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                     <XAxis
                       dataKey="day"
-                      tickFormatter={(d) => d.slice(5)}
+                      {...dayAxis}
                       tick={AXIS_TICK}
-                      interval="preserveStartEnd"
                     />
                     <YAxis
                       tick={AXIS_TICK}
@@ -192,9 +193,8 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                     <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                     <XAxis
                       dataKey="day"
-                      tickFormatter={(d) => d.slice(5)}
+                      {...dayAxis}
                       tick={AXIS_TICK}
-                      interval="preserveStartEnd"
                     />
                     <YAxis
                       domain={[0, "auto"]}

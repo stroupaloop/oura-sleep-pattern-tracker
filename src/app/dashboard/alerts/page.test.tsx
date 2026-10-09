@@ -11,7 +11,9 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ refresh: vi.fn() }),
+  useRouter: () => ({ refresh: vi.fn(), push: vi.fn() }),
+  usePathname: () => "/dashboard/alerts",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock("@/lib/db", async () => {
@@ -70,8 +72,12 @@ const STORED_CONTEXT = JSON.stringify({
   disclaimer: "",
 });
 
-async function renderAlerts(): Promise<string> {
-  return renderToStaticMarkup(await AlertsPage());
+async function renderAlerts(
+  params: Record<string, string> = {}
+): Promise<string> {
+  return renderToStaticMarkup(
+    await AlertsPage({ searchParams: Promise.resolve(params) })
+  );
 }
 
 function flaggedRows(direction: string | null) {
@@ -153,5 +159,71 @@ describe("Alerts page", () => {
     expect(html).toContain("Track your mood and energy levels today");
     expect(html).toContain("Maintain your regular bedtime tonight");
     expect(html).not.toContain("physical activity");
+  });
+
+  describe("date range", () => {
+    const recentFlag = assessment("2026-09-20", {
+      tier: "watch",
+      direction: "hyper",
+      confidence: 3,
+      consecutiveConcerningDays: 2,
+      researchContext: STORED_CONTEXT,
+    });
+    const olderFlag = assessment("2026-05-01", {
+      tier: "warning",
+      direction: "hypo",
+      confidence: 4,
+      consecutiveConcerningDays: 3,
+      researchContext: STORED_CONTEXT,
+    });
+    const checked = [assessment("2026-10-01"), assessment("2026-09-30")];
+
+    it("shows the last 90 days unless told otherwise, and says so", async () => {
+      state.rows.episode_assessments = [...checked, recentFlag, olderFlag];
+      const html = await renderAlerts();
+      expect(html).toContain('role="radiogroup"');
+      expect(html).toContain("Showing Jul 5 – Oct 2, 2026 · 90 days · 1 flagged night");
+      expect(html).toContain("Sep 19 → Sep 20");
+      expect(html).not.toContain("Apr 30 → May 1");
+    });
+
+    it("keeps the page's totals about everything on record", async () => {
+      state.rows.episode_assessments = [...checked, recentFlag, olderFlag];
+      const html = await renderAlerts();
+      expect(html).toContain("4 current days analyzed, 2 in-app pattern flags");
+    });
+
+    it("reaches back to older flags when the range does", async () => {
+      state.rows.episode_assessments = [...checked, recentFlag, olderFlag];
+      const html = await renderAlerts({ range: "1y" });
+      expect(html).toContain("Sep 19 → Sep 20");
+      expect(html).toContain("Apr 30 → May 1");
+      expect(html).toContain("2 flagged nights");
+    });
+
+    it("shows only the dates asked for", async () => {
+      state.rows.episode_assessments = [...checked, recentFlag, olderFlag];
+      const html = await renderAlerts({ from: "2026-04-25", to: "2026-05-05" });
+      expect(html).toContain("Apr 30 → May 1");
+      expect(html).not.toContain("Sep 19 → Sep 20");
+      expect(html).toContain("Showing Apr 25 – May 5, 2026 · 11 days · 1 flagged night");
+      expect(html).toContain('value="2026-04-25"');
+    });
+
+    it("says when no pattern checks fall in the range, rather than showing a quiet chart", async () => {
+      state.rows.episode_assessments = [olderFlag];
+      const html = await renderAlerts();
+      expect(html).toContain("No pattern checks in this range");
+    });
+
+    it("does not give a past range today's all-clear", async () => {
+      state.rows.episode_assessments = [...checked, assessment("2026-09-10")];
+      const past = await renderAlerts({ from: "2026-09-01", to: "2026-09-15" });
+      expect(past).toContain("No pattern flags in this range");
+      expect(past).not.toContain("Checked through the night");
+
+      const current = await renderAlerts({ range: "30d" });
+      expect(current).toContain("Checked through the night of Sep 30 → Oct 1.");
+    });
   });
 });

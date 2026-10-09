@@ -27,6 +27,7 @@ import {
   hasValues,
   isolatedDot,
 } from "./chart-gaps";
+import { axisDayProps } from "@/lib/health/format";
 import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
@@ -123,6 +124,7 @@ export function StressTooltipContent({ active, payload }: ActivityTooltipProps) 
 }
 
 export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryChartProps) {
+  const dayAxis = axisDayProps(data.map((point) => point.day));
   const hasActivityData = data.some(
     (point) => point.steps != null || point.activeMinutes != null
   );
@@ -155,9 +157,8 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                 <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
                 <XAxis
                   dataKey="day"
-                  tickFormatter={(d) => d.slice(5)}
+                  {...dayAxis}
                   tick={AXIS_TICK}
-                  interval="preserveStartEnd"
                 />
                 <YAxis
                   yAxisId="steps"
@@ -240,9 +241,8 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
               <CartesianGrid strokeDasharray="3 3" stroke={CHART.grid} />
               <XAxis
                 dataKey="day"
-                tickFormatter={(d) => d.slice(5)}
+                {...dayAxis}
                 tick={AXIS_TICK}
-                interval="preserveStartEnd"
               />
               <YAxis
                 tick={AXIS_TICK}

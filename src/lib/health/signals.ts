@@ -56,7 +56,7 @@ export interface Signal {
 }
 
 /** Below this many standard deviations a night reads as "about usual". */
-const ABOUT_USUAL_Z = 0.5;
+export const ABOUT_USUAL_Z = 0.5;
 
 function finite(value: number | null | undefined): value is number {
   return value != null && Number.isFinite(value);
@@ -81,7 +81,7 @@ function circularDelta(value: number, center: number): number {
   return ((((value - center + 720) % 1440) + 1440) % 1440) - 720;
 }
 
-function levelFor(z: number | null, threshold: number): SignalLevel {
+export function levelFor(z: number | null, threshold: number): SignalLevel {
   if (!finite(z)) return "unknown";
   const size = Math.abs(z);
   if (size >= threshold) return "unusual";

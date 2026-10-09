@@ -27,7 +27,9 @@ import {
   isEpisodeState,
   type EpisodeState,
 } from "@/lib/episode-states";
-import { formatNightLabel } from "@/lib/health/format";
+import { fillCalendarDays } from "@/lib/health/calendar-rows";
+import { axisDayProps, formatNightLabel } from "@/lib/health/format";
+import { GapNote } from "./chart-gaps";
 import { AXIS_TICK } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
@@ -57,6 +59,8 @@ interface TimelinePoint {
   tier: string | null;
   drivers: string[];
   selfReport: string | null;
+  /** A day between checked days that has no pattern check. */
+  noNight?: boolean;
 }
 
 type MarkedState = Exclude<EpisodeState, "none">;
@@ -167,6 +171,13 @@ function TimelineTooltip({
 }) {
   if (!active || !payload?.length) return null;
   const point = payload[0].payload;
+  if (point.noNight) {
+    return (
+      <ChartTooltipFrame title={formatNightLabel(point.day, { weekday: false })}>
+        <p className="text-muted-foreground">No pattern check for this night</p>
+      </ChartTooltipFrame>
+    );
+  }
   return (
     <ChartTooltipFrame
       title={formatNightLabel(point.day, { weekday: false })}
@@ -245,7 +256,23 @@ function buildTimeline(
       selfReport: report.episodeState,
     });
   }
-  return [...points.values()].sort((a, b) => a.day.localeCompare(b.day));
+  const ordered = [...points.values()].sort((a, b) => a.day.localeCompare(b.day));
+  if (ordered.length === 0) return ordered;
+  // One column for every day, so a stretch with no checks reads as a gap
+  // instead of being squeezed out of the axis.
+  return fillCalendarDays<TimelinePoint>(
+    ordered,
+    { start: ordered[0].day, end: ordered[ordered.length - 1].day },
+    (day) => ({
+      day,
+      score: null,
+      direction: null,
+      tier: null,
+      drivers: [],
+      selfReport: null,
+      noNight: true,
+    })
+  );
 }
 
 export function EpisodeTimeline({
@@ -286,7 +313,7 @@ export function EpisodeTimeline({
           >
             <XAxis
               dataKey="day"
-              tickFormatter={(day: string) => day.slice(5)}
+              {...axisDayProps(data.map((point) => point.day))}
               tick={AXIS_TICK}
             />
             <YAxis
@@ -300,7 +327,7 @@ export function EpisodeTimeline({
                 style: { fontSize: 10 },
               }}
             />
-            <Tooltip content={<TimelineTooltip />} />
+            <Tooltip content={<TimelineTooltip />} filterNull={false} />
             {LEGEND_TIERS.map((tier) => (
               <ReferenceLine
                 key={tier}
@@ -338,6 +365,7 @@ export function EpisodeTimeline({
           </ComposedChart>
         </ResponsiveContainer>
       </div>
+      <GapNote rows={data} />
       <div className="mt-3 space-y-1.5 text-xs text-muted-foreground">
         <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
           <span className="inline-flex items-center gap-1.5">

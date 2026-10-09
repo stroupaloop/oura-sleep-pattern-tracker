@@ -22,6 +22,35 @@ export function formatNightLabel(
   return `${formatDay(evening, weekday)} → ${formatDay(day, weekday)}`;
 }
 
+/**
+ * A day on a chart axis: "Oct 9", or "Oct 9 ’25" when the chart covers more
+ * than one year. The month is named so a label is not mistaken for a count.
+ */
+export function formatAxisDay(day: string, withYear = false): string {
+  const label = formatDay(day, false);
+  return withYear ? `${label} ’${day.slice(2, 4)}` : label;
+}
+
+/**
+ * What a date axis needs, to spread onto Recharts' `XAxis`: month-named labels
+ * (with the year once the days span two), the first and last kept, and room
+ * between the rest so they do not run together.
+ */
+export function axisDayProps(days: ReadonlyArray<string>): {
+  tickFormatter: (day: string) => string;
+  interval: "preserveStartEnd";
+  minTickGap: number;
+} {
+  const first = days[0]?.slice(0, 4);
+  const last = days[days.length - 1]?.slice(0, 4);
+  const withYear = first !== undefined && last !== undefined && first !== last;
+  return {
+    tickFormatter: (day) => formatAxisDay(day, withYear),
+    interval: "preserveStartEnd",
+    minTickGap: withYear ? 36 : 24,
+  };
+}
+
 /** "7:42 AM" today, otherwise "Sep 29, 5:01 PM". */
 export function formatSyncedAt(seconds: number, today: string): string {
   const instant = new Date(seconds * 1000);

@@ -8,8 +8,7 @@ import {
   dailyMood,
   sleepPeriods,
 } from "@/lib/db/schema";
-import { and, gte, inArray } from "drizzle-orm";
-import { format, subDays } from "date-fns";
+import { and, gte, inArray, lte } from "drizzle-orm";
 import Link from "next/link";
 import { InsightsTabs } from "./insights-tabs";
 import { getTodayET } from "@/lib/date-utils";
@@ -26,15 +25,31 @@ import {
   currentDailyPatternFields,
   filterCurrentPatternAssessments,
 } from "@/lib/analysis/provenance";
+import {
+  presetsFor,
+  resolveDateRange,
+  type RangeParams,
+} from "@/lib/date-range";
 import { PageHeader } from "@/components/page-header";
+import { DateRangeSelector } from "@/components/ui/date-range-selector";
 import { EmptyState } from "@/components/ui/empty-state";
 
-export default async function InsightsPage() {
+const RANGE_PRESETS = presetsFor(["30d", "90d", "180d", "1y", "all"]);
+
+export default async function InsightsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<RangeParams>;
+} = {}) {
+  const params = (await searchParams) ?? {};
   const today = getTodayET();
-  const ninetyDaysAgo = format(
-    subDays(new Date(`${today}T12:00:00`), 89),
-    "yyyy-MM-dd"
-  );
+  const requested = resolveDateRange(params, { today, defaultToken: "90d" });
+  // All-time has no first day until the rows are read.
+  const within = (day: Parameters<typeof gte>[0]) =>
+    and(
+      requested.start ? gte(day, requested.start) : undefined,
+      lte(day, requested.end)
+    );
 
   const [
     analysisRows,
@@ -75,7 +90,7 @@ export default async function InsightsPage() {
         anxietyScore: dailyAnalysis.anxietyScore,
       })
       .from(dailyAnalysis)
-      .where(gte(dailyAnalysis.day, ninetyDaysAgo))
+      .where(within(dailyAnalysis.day))
       .orderBy(dailyAnalysis.day),
     db
       .select({
@@ -89,7 +104,7 @@ export default async function InsightsPage() {
         signalMode: episodeAssessments.signalMode,
       })
       .from(episodeAssessments)
-      .where(gte(episodeAssessments.day, ninetyDaysAgo))
+      .where(within(episodeAssessments.day))
       .orderBy(episodeAssessments.day),
     db
       .select({
@@ -102,7 +117,7 @@ export default async function InsightsPage() {
         endDatetime: workouts.endDatetime,
       })
       .from(workouts)
-      .where(gte(workouts.day, ninetyDaysAgo))
+      .where(within(workouts.day))
       .orderBy(workouts.day),
     db
       .select({
@@ -113,7 +128,7 @@ export default async function InsightsPage() {
         anxietyScore: dailyMood.anxietyScore,
       })
       .from(dailyMood)
-      .where(gte(dailyMood.day, ninetyDaysAgo))
+      .where(within(dailyMood.day))
       .orderBy(dailyMood.day),
     loadActiveConfig(),
     loadBipolarType(),
@@ -128,7 +143,7 @@ export default async function InsightsPage() {
       .from(sleepPeriods)
       .where(
         and(
-          gte(sleepPeriods.day, ninetyDaysAgo),
+          within(sleepPeriods.day),
           inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES])
         )
       ),
@@ -156,6 +171,15 @@ export default async function InsightsPage() {
   const episodes = currentAssessments.filter(
     (assessment) => assessment.tier !== "none"
   );
+  // The rows are ordered by day, so the first is the earliest on record in range.
+  const range =
+    requested.kind === "all"
+      ? resolveDateRange(params, {
+          today,
+          defaultToken: "90d",
+          earliest: analysisRows[0]?.day ?? null,
+        })
+      : requested;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
@@ -163,7 +187,7 @@ export default async function InsightsPage() {
         title="Insights"
         description={
           <>
-            Deep analysis of 16+ computed metrics from the last 90 days.{" "}
+            Deep analysis of 16+ computed metrics over the dates below.{" "}
             <Link
               href="/dashboard/methodology"
               className="underline hover:text-foreground"
@@ -174,9 +198,12 @@ export default async function InsightsPage() {
         }
       />
 
+      <DateRangeSelector range={range} presets={RANGE_PRESETS} today={today} />
+
       {analysis.length === 0 ? (
-        <EmptyState title="No analysis data yet.">
-          Sync your Oura data and run analysis to see insights.
+        <EmptyState title="No analysis data in this range.">
+          Try a longer range, or sync your Oura data and run analysis to see
+          insights.
         </EmptyState>
       ) : (
         <InsightsTabs
@@ -187,7 +214,10 @@ export default async function InsightsPage() {
           }))}
           workouts={workoutData}
           moods={moodData}
-          range={{ start: ninetyDaysAgo, end: today }}
+          range={{
+            start: range.start ?? analysisRows[0].day,
+            end: range.end,
+          }}
           nightDays={[...selectNightSleepByDay(periodRows).keys()]}
         />
       )}
