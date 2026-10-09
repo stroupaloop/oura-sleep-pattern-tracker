@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   runCyclePredictions: vi.fn(),
   runHealthSignalDetection: vi.fn(),
   reprocessAll: vi.fn(),
+  hasOutdatedPatternResults: vi.fn(),
   renewOuraTokenIfDue: vi.fn(),
 }));
 
@@ -26,6 +27,9 @@ vi.mock("@/lib/analysis/health-signals", () => ({
 }));
 vi.mock("@/lib/analysis/reprocess", () => ({
   reprocessAll: mocks.reprocessAll,
+}));
+vi.mock("@/lib/analysis/outdated-results", () => ({
+  hasOutdatedPatternResults: mocks.hasOutdatedPatternResults,
 }));
 vi.mock("@/lib/analysis/config", () => ({
   loadActiveConfig: async () => ({ version: 1 }),
@@ -78,6 +82,7 @@ beforeEach(() => {
     .mockReset()
     .mockImplementation(track("cycles", { cyclesDetected: 3, evaluation: EVALUATION }));
   mocks.reprocessAll.mockReset().mockImplementation(track("analysis", ANALYSIS));
+  mocks.hasOutdatedPatternResults.mockReset().mockResolvedValue(false);
   mocks.runHealthSignalDetection
     .mockReset()
     .mockImplementation(track("signals", { signals: 2, resolved: 0 }));
@@ -125,6 +130,50 @@ describe("runOuraSyncPipeline", () => {
 
     await runOuraSyncPipeline({ ...BACKFILL, syncType: "cron", recompute: "window" });
     expect(mocks.reprocessAll.mock.calls[1][1]).toBe("2026-07-05");
+  });
+
+  it("recomputes all history on a window sync once stored results are out of date", async () => {
+    mocks.hasOutdatedPatternResults.mockResolvedValue(true);
+    const { runOuraSyncPipeline } = await import("./sync-pipeline");
+
+    await runOuraSyncPipeline({ ...BACKFILL, syncType: "cron", recompute: "window" });
+
+    expect(mocks.hasOutdatedPatternResults).toHaveBeenCalledWith(1, "unspecified");
+    expect(mocks.reprocessAll.mock.calls[0][1]).toBeUndefined();
+    expect(mocks.reprocessAll.mock.calls[0][2]).toBe("2026-10-02");
+  });
+
+  it("keeps a window sync to its window while stored results are current", async () => {
+    const { runOuraSyncPipeline } = await import("./sync-pipeline");
+
+    await runOuraSyncPipeline({ ...BACKFILL, syncType: "cron", recompute: "window" });
+
+    expect(mocks.reprocessAll.mock.calls[0][1]).toBe("2026-07-05");
+  });
+
+  it("does not look at stored results when the whole history was asked for", async () => {
+    const { runOuraSyncPipeline } = await import("./sync-pipeline");
+
+    await runOuraSyncPipeline(BACKFILL);
+
+    expect(mocks.hasOutdatedPatternResults).not.toHaveBeenCalled();
+    expect(mocks.reprocessAll.mock.calls[0][1]).toBeUndefined();
+  });
+
+  it("reports a failed check of stored results like any failed pattern step, and still finishes", async () => {
+    mocks.hasOutdatedPatternResults.mockRejectedValue(new Error("check broke"));
+    const { runOuraSyncPipeline } = await import("./sync-pipeline");
+
+    const result = await runOuraSyncPipeline({
+      ...BACKFILL,
+      syncType: "cron",
+      recompute: "window",
+    });
+
+    expect(result.failedSteps).toEqual([
+      { step: "pattern_checks", message: "check broke" },
+    ]);
+    expect(mocks.calls).toContain("signals");
   });
 
   it("still recomputes the pattern checks when the private sync fails", async () => {

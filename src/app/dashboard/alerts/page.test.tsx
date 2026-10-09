@@ -122,6 +122,19 @@ describe("Alerts page", () => {
     expect(html).not.toContain("Pattern check is behind");
   });
 
+  it("says results from an older version are hidden, that the next sync recomputes them and that the button does it now", async () => {
+    state.rows.episode_assessments = [
+      assessment("2026-10-01"),
+      assessment("2026-09-30", { algorithmVersion: "2026.01.1" }),
+      assessment("2026-09-29", { algorithmVersion: "2026.01.1" }),
+    ];
+    const html = await renderAlerts();
+    expect(html).toContain("2 older results are hidden");
+    expect(html).toContain("The next sync does that by itself");
+    expect(html).toContain("Update all history");
+    expect(html).not.toContain("Settings → Backfill");
+  });
+
   it("says the check is behind instead of all clear when newer nights are missing", async () => {
     state.rows.episode_assessments = [
       assessment("2026-09-28"),

@@ -1,6 +1,5 @@
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
 import { ChevronDown, CircleCheck, History } from "lucide-react";
 import { db } from "@/lib/db";
 import {
@@ -361,15 +360,8 @@ export default async function AlertsPage({
             {staleAssessmentCount === 1 ? "It was" : "They were"} computed by
             an older version of the pattern checks, or with an earlier profile
             or configuration, so {staleAssessmentCount === 1 ? "it stays" : "they stay"}{" "}
-            hidden here until recomputed.{" "}
-            <Link
-              href="/dashboard/settings"
-              className="font-medium text-foreground underline decoration-border hover:decoration-current"
-            >
-              Settings → Backfill
-            </Link>{" "}
-            recomputes all history, as does “Update all history”
-            above.
+            hidden here until recomputed. The next sync does that by itself;
+            “Update all history” above does it now.
           </p>
         </Callout>
       )}

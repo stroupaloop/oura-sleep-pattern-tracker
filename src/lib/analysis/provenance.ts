@@ -2,8 +2,8 @@ import type { BipolarType } from "./config";
 
 /**
  * Bump whenever a change alters stored results, so results computed the old
- * way stop counting as current until a full recompute (the 90-day backfill
- * runs one). 2026.10.1: a night is the day's overnight periods, short nights
+ * way stop counting as current until a full recompute (the next sync runs
+ * one, as does Alerts, Update all history). 2026.10.1: a night is the day's overnight periods, short nights
  * typed `sleep` included; today's partial activity waits; only choppier
  * nights add within-night variability to the score. 2026.10.2: nights far
  * from a metric's baseline center no longer widen its spread. 2026.10.3: the
