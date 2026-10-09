@@ -9,6 +9,7 @@ import { SleepCompositionBar } from "@/components/charts/sleep-composition-bar";
 import { SleepTrendChart } from "@/components/charts/sleep-trend-chart";
 import { MissingNightNotice } from "./missing-night-notice";
 import { NightPanel } from "./night-panel";
+import { NightStripChart } from "./night-strip-chart";
 import { Panel } from "@/components/ui/panel";
 import { PatternStatus } from "@/components/pattern-status";
 import { ScorePanel } from "./score-panel";
@@ -101,6 +102,17 @@ export function HealthDashboard({
           )}
         </Panel>
 
+        {data.week && (
+          <Panel
+            id="week"
+            title="Last 7 nights"
+            description="Each bar is a night on the clock, drawn over the window you usually sleep in. A later, shorter or broken night shows as a bar that moves, shrinks or splits."
+            className="order-5"
+          >
+            <NightStripChart strip={data.week} />
+          </Panel>
+        )}
+
         <Panel
           id="stages"
           title="Sleep stages"
@@ -110,7 +122,7 @@ export function HealthDashboard({
               ? "The longest stretch of the night, with heart rate. ET."
               : "With heart rate overlaid. ET."
           }
-          className="order-7"
+          className="order-8"
         >
           {data.night?.main.hypnogram5min ? (
             <HypnogramChart
@@ -127,7 +139,7 @@ export function HealthDashboard({
         </Panel>
 
         {trends.chartData.length > 0 && (
-          <section aria-labelledby="trends" className="order-8 space-y-4">
+          <section aria-labelledby="trends" className="order-9 space-y-4">
             <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
               <h2 id="trends" className="text-base font-semibold tracking-tight">
                 Last {trends.windowDays} days
@@ -164,7 +176,7 @@ export function HealthDashboard({
           today={data.today}
           className="order-3"
         />
-        <div className="order-5">
+        <div className="order-6">
           <DailyLogCard
             initialDay={data.today}
             medications={dailyLog.medications}
@@ -177,12 +189,12 @@ export function HealthDashboard({
           sleep={data.scores.sleep}
           readiness={data.scores.readiness}
           nightLabel={nightLabel}
-          className="order-6"
+          className="order-7"
         />
         <DataAvailabilityCard
           data={data.availability}
           missingScopes={data.missingScopes}
-          className="order-9"
+          className="order-10"
         />
       </div>
     </div>

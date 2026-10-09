@@ -2,6 +2,7 @@ import { cn } from "@/lib/utils";
 import { formatDuration } from "@/lib/dashboard-metrics";
 import { formatNightLabel } from "@/lib/health/format";
 import type { HealthDashboardData } from "@/lib/health/health-dashboard-data";
+import { describeShortNightRun } from "@/lib/health/night-strip";
 import { ResearchTooltip } from "@/components/research-tooltip";
 import { NightWindowChart } from "./night-window-chart";
 import { Panel } from "@/components/ui/panel";
@@ -54,6 +55,16 @@ export function NightPanel({
           : "No baseline comparison for this night yet"}
         <ResearchTooltip metric="sleepDuration" />
       </p>
+      {data.shortRun && data.shortRun.nights >= 2 && (
+        <p
+          className={cn(
+            "mt-1 text-sm",
+            sleep?.level === "unusual" ? "text-attention" : "text-muted-foreground"
+          )}
+        >
+          {describeShortNightRun(data.shortRun)}
+        </p>
+      )}
 
       {window && (
         <div className="mt-5">

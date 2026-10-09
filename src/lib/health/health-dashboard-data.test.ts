@@ -9,7 +9,7 @@ import {
   vi,
 } from "vitest";
 import { db } from "@/lib/db";
-import { oauthTokens, sleepPeriods } from "@/lib/db/schema";
+import { dailyAnalysis, oauthTokens, sleepPeriods } from "@/lib/db/schema";
 import { shiftIsoDay } from "@/lib/date-utils";
 import { loadHealthDashboard } from "./health-dashboard-data";
 
@@ -230,5 +230,130 @@ describe("loadHealthDashboard trends", () => {
     expect(trends.chartData).toEqual([]);
     expect(trends.compositionData).toEqual([]);
     expect(trends.nightsCounted).toBe(0);
+  });
+});
+
+describe("loadHealthDashboard last week and short-night run", () => {
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder: "drizzle" });
+    const existing = await db.select().from(oauthTokens).limit(1);
+    if (existing.length === 0) {
+      await db.insert(oauthTokens).values({
+        accessToken: "access",
+        refreshToken: "refresh",
+        expiresAt: 0,
+        scope: "email personal daily heartrate workout tag session spo2 stress heart_health",
+        updatedAt: 0,
+      });
+    }
+  });
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-06T16:00:00Z"));
+    await db.delete(sleepPeriods);
+    await db.delete(dailyAnalysis);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A night of `hours` hours, with the analysis the detector would store for it. */
+  async function record(day: string, hours: number, sleepZ: number | null) {
+    await db
+      .insert(sleepPeriods)
+      .values({ ...night(day), totalSleepDuration: hours * 3600 });
+    await db.insert(dailyAnalysis).values({
+      day,
+      totalSleepMinutes: hours * 60,
+      baselineSleepMinutes: 420,
+      sleepDurationZScore: sleepZ,
+      baselineBedtimeMinutes: -60,
+      baselineWakeMinutes: 420,
+      createdAt: 0,
+    });
+  }
+
+  it("draws the last seven nights, newest first, with a missing one left as a gap", async () => {
+    for (const day of ["2026-10-06", "2026-10-05", "2026-10-04", "2026-10-02", "2026-10-01", "2026-09-30"]) {
+      await record(day, 7, 0);
+    }
+
+    const { week } = (await loadHealthDashboard())!;
+
+    expect(week!.rows.map((row) => row.day)).toEqual([
+      "2026-10-06",
+      "2026-10-05",
+      "2026-10-04",
+      "2026-10-03",
+      "2026-10-02",
+      "2026-10-01",
+      "2026-09-30",
+    ]);
+    expect(week!.rows.filter((row) => !row.recorded).map((row) => row.day)).toEqual([
+      "2026-10-03",
+    ]);
+    expect(week!.rows[0]).toMatchObject({
+      asleep: "7h 0m",
+      comparison: "About usual",
+      bedtimeLabel: "11:00 PM",
+      wakeLabel: "7:00 AM",
+    });
+    expect(week!.rows[0].usual).not.toBeNull();
+  });
+
+  it("ends the week on the last night that is due: until noon, the morning's night is not a gap", async () => {
+    vi.setSystemTime(new Date("2026-10-06T10:00:00Z"));
+    await record("2026-10-05", 7, 0);
+
+    const { week } = (await loadHealthDashboard())!;
+
+    expect(week!.rows[0].day).toBe("2026-10-05");
+    expect(week!.rows.filter((row) => row.day > "2026-10-05")).toEqual([]);
+  });
+
+  it("says there is no baseline yet for nights that have not been analysed", async () => {
+    await db.insert(sleepPeriods).values(night(TODAY));
+
+    const { week, shortRun } = (await loadHealthDashboard())!;
+
+    expect(week!.rows[0]).toMatchObject({ comparison: "No baseline yet", level: "unknown" });
+    expect(shortRun).toBeNull();
+  });
+
+  it("counts short nights in a row back from the latest, and how much less sleep they added up to", async () => {
+    await record("2026-10-03", 7, 0.2);
+    await record("2026-10-04", 6, -1.4);
+    await record("2026-10-05", 5.5, -2);
+    await record("2026-10-06", 6.5, -1.1);
+
+    const { shortRun } = (await loadHealthDashboard())!;
+
+    expect(shortRun).toEqual({ nights: 3, minutesShort: 60 + 90 + 30, endedByGap: false });
+  });
+
+  it("says the run may be longer when it ends at a night with nothing recorded", async () => {
+    await record("2026-10-05", 5.5, -2);
+    await record("2026-10-06", 6, -1.4);
+
+    const { shortRun } = (await loadHealthDashboard())!;
+
+    expect(shortRun).toEqual({ nights: 2, minutesShort: 90 + 60, endedByGap: true });
+  });
+
+  it("has no run when the latest night is within her usual", async () => {
+    await record("2026-10-05", 5.5, -2);
+    await record("2026-10-06", 7, -0.2);
+
+    expect((await loadHealthDashboard())!.shortRun).toBeNull();
+  });
+
+  it("counts back from the latest night on record when this morning's has not arrived", async () => {
+    vi.setSystemTime(new Date("2026-10-06T10:00:00Z"));
+    await record("2026-10-04", 6, -1.4);
+    await record("2026-10-05", 5.5, -2);
+
+    expect((await loadHealthDashboard())!.shortRun).toMatchObject({ nights: 2 });
   });
 });
