@@ -9,7 +9,17 @@ import {
   vi,
 } from "vitest";
 import { db } from "@/lib/db";
-import { dailyAnalysis, oauthTokens, sleepPeriods } from "@/lib/db/schema";
+import { DEFAULT_CONFIG } from "@/lib/analysis/config";
+import {
+  PATTERN_ALGORITHM_VERSION,
+  PATTERN_SIGNAL_MODE,
+} from "@/lib/analysis/provenance";
+import {
+  dailyAnalysis,
+  episodeAssessments,
+  oauthTokens,
+  sleepPeriods,
+} from "@/lib/db/schema";
 import { shiftIsoDay } from "@/lib/date-utils";
 import { loadHealthDashboard } from "./health-dashboard-data";
 
@@ -233,6 +243,22 @@ describe("loadHealthDashboard trends", () => {
   });
 });
 
+/** A night of `hours` hours, with the analysis the detector would store for it. */
+async function record(day: string, hours: number, sleepZ: number | null) {
+  await db
+    .insert(sleepPeriods)
+    .values({ ...night(day), totalSleepDuration: hours * 3600 });
+  await db.insert(dailyAnalysis).values({
+    day,
+    totalSleepMinutes: hours * 60,
+    baselineSleepMinutes: 420,
+    sleepDurationZScore: sleepZ,
+    baselineBedtimeMinutes: -60,
+    baselineWakeMinutes: 420,
+    createdAt: 0,
+  });
+}
+
 describe("loadHealthDashboard last week and short-night run", () => {
   beforeAll(async () => {
     await migrate(db, { migrationsFolder: "drizzle" });
@@ -258,22 +284,6 @@ describe("loadHealthDashboard last week and short-night run", () => {
   afterEach(() => {
     vi.useRealTimers();
   });
-
-  /** A night of `hours` hours, with the analysis the detector would store for it. */
-  async function record(day: string, hours: number, sleepZ: number | null) {
-    await db
-      .insert(sleepPeriods)
-      .values({ ...night(day), totalSleepDuration: hours * 3600 });
-    await db.insert(dailyAnalysis).values({
-      day,
-      totalSleepMinutes: hours * 60,
-      baselineSleepMinutes: 420,
-      sleepDurationZScore: sleepZ,
-      baselineBedtimeMinutes: -60,
-      baselineWakeMinutes: 420,
-      createdAt: 0,
-    });
-  }
 
   it("draws the last seven nights, newest first, with a missing one left as a gap", async () => {
     for (const day of ["2026-10-06", "2026-10-05", "2026-10-04", "2026-10-02", "2026-10-01", "2026-09-30"]) {
@@ -355,5 +365,218 @@ describe("loadHealthDashboard last week and short-night run", () => {
     await record("2026-10-05", 5.5, -2);
 
     expect((await loadHealthDashboard())!.shortRun).toMatchObject({ nights: 2 });
+  });
+});
+
+describe("loadHealthDashboard with a chosen range", () => {
+  const JULY = { start: "2026-07-01", end: "2026-07-31" };
+
+  function flagged(day: string) {
+    return {
+      day,
+      tier: "watch",
+      direction: "hyper",
+      confidence: 0.6,
+      configVersion: DEFAULT_CONFIG.version,
+      bipolarProfile: "unspecified",
+      algorithmVersion: PATTERN_ALGORITHM_VERSION,
+      signalMode: PATTERN_SIGNAL_MODE,
+      createdAt: 0,
+    };
+  }
+
+  beforeAll(async () => {
+    await migrate(db, { migrationsFolder: "drizzle" });
+    const existing = await db.select().from(oauthTokens).limit(1);
+    if (existing.length === 0) {
+      await db.insert(oauthTokens).values({
+        accessToken: "access",
+        refreshToken: "refresh",
+        expiresAt: 0,
+        scope: "email personal daily heartrate workout tag session spo2 stress heart_health",
+        updatedAt: 0,
+      });
+    }
+  });
+
+  beforeEach(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-06T16:00:00Z"));
+    await db.delete(sleepPeriods);
+    await db.delete(dailyAnalysis);
+    await db.delete(episodeAssessments);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("charts the days asked for, not the last 30", async () => {
+    await db.insert(sleepPeriods).values(nightsBetween("2026-06-15", TODAY));
+
+    const { trends } = (await loadHealthDashboard(JULY))!;
+
+    expect(trends.chartData.map((row) => row.day)).toEqual(
+      Array.from({ length: 31 }, (_, index) => shiftIsoDay("2026-07-01", index))
+    );
+    expect(trends.nightsCounted).toBe(31);
+    expect(trends.windowDays).toBe(31);
+    expect(trends.averageSleepSeconds).toBe(25_200);
+  });
+
+  it("takes the stage shares from the last 14 days of the range, or all of a shorter one", async () => {
+    await db.insert(sleepPeriods).values(nightsBetween("2026-06-15", TODAY));
+
+    const month = (await loadHealthDashboard(JULY))!.trends;
+    const days = (await loadHealthDashboard({ start: "2026-07-20", end: "2026-07-24" }))!
+      .trends;
+
+    expect(month.compositionData.map((row) => row.day)).toEqual(
+      Array.from({ length: 14 }, (_, index) => shiftIsoDay("2026-07-18", index))
+    );
+    expect(days.compositionData.map((row) => row.day)).toEqual([
+      "2026-07-20",
+      "2026-07-21",
+      "2026-07-22",
+      "2026-07-23",
+      "2026-07-24",
+    ]);
+  });
+
+  it("draws a range that ended in the past to its last day, so a missing night there is a gap", async () => {
+    await db
+      .insert(sleepPeriods)
+      .values([
+        ...nightsBetween("2026-07-01", "2026-07-30"),
+        ...nightsBetween("2026-09-20", TODAY),
+      ]);
+
+    const { trends } = (await loadHealthDashboard(JULY))!;
+
+    expect(trends.chartData.at(-1)).toMatchObject({
+      day: "2026-07-31",
+      noNight: true,
+    });
+    expect(trends.nightsCounted).toBe(30);
+  });
+
+  it("ends a range that runs past today at today", async () => {
+    await db.insert(sleepPeriods).values(nightsBetween("2026-09-20", TODAY));
+
+    const { trends } = (await loadHealthDashboard({
+      start: "2026-10-01",
+      end: "2026-12-31",
+    }))!;
+
+    expect(trends.chartData.map((row) => row.day)).toEqual([
+      "2026-10-01",
+      "2026-10-02",
+      "2026-10-03",
+      "2026-10-04",
+      "2026-10-05",
+      "2026-10-06",
+    ]);
+    expect(trends.windowDays).toBe(6);
+  });
+
+  it("draws nothing for a range with no nights, and still finds last night", async () => {
+    await db.insert(sleepPeriods).values(nightsBetween("2026-09-20", TODAY));
+
+    const data = (await loadHealthDashboard({
+      start: "2026-01-01",
+      end: "2026-01-31",
+    }))!;
+
+    expect(data.trends.chartData).toEqual([]);
+    expect(data.trends.compositionData).toEqual([]);
+    expect(data.trends.nightsCounted).toBe(0);
+    expect(data.trends.windowDays).toBe(31);
+    expect(data.shownDay).toBe(TODAY);
+  });
+
+  it("is the same page for the last 30 days as for no range", async () => {
+    await db
+      .insert(sleepPeriods)
+      .values(nightsBetween("2026-08-01", TODAY, HOLE));
+
+    const none = (await loadHealthDashboard())!;
+    const last30 = (await loadHealthDashboard({
+      start: "2026-09-07",
+      end: TODAY,
+    }))!;
+
+    expect(last30).toEqual(none);
+  });
+
+  it("keeps last night, the week and the short-night run on the latest days", async () => {
+    await record("2026-09-25", 7, 0);
+    for (let day = "2026-09-26"; day <= TODAY; day = shiftIsoDay(day, 1)!) {
+      await record(day, 6, -1.4);
+    }
+    await db.insert(sleepPeriods).values(nightsBetween("2026-07-10", "2026-07-12"));
+
+    const inJuly = (await loadHealthDashboard(JULY))!;
+    const none = (await loadHealthDashboard())!;
+
+    expect(inJuly.shownDay).toBe(TODAY);
+    expect(inJuly.isLastNight).toBe(true);
+    expect(inJuly.shortRun).toEqual({
+      nights: 11,
+      minutesShort: 11 * 60,
+      endedByGap: false,
+    });
+    expect(inJuly.week).toEqual(none.week);
+    expect(inJuly.night).toEqual(none.night);
+    expect(inJuly.signals).toEqual(none.signals);
+    expect(inJuly.trends.chartData[0].day).toBe("2026-07-10");
+    expect(inJuly.trends.chartData.at(-1)?.day).toBe("2026-07-31");
+  });
+
+  it("finds the latest night of the last 30 days, with its comparison, after a quiet spell", async () => {
+    await record("2026-09-23", 7, 0);
+    await record("2026-09-24", 5, -2);
+    await db.insert(sleepPeriods).values(nightsBetween("2026-07-10", "2026-07-12"));
+
+    const data = (await loadHealthDashboard(JULY))!;
+
+    expect(data.shownDay).toBe("2026-09-24");
+    expect(data.isLastNight).toBe(false);
+    expect(data.night).not.toBeNull();
+    expect(data.signals.length).toBeGreaterThan(0);
+    expect(data.shortRun).toMatchObject({ nights: 1 });
+    expect(data.trends.chartData.every((row) => row.day.startsWith("2026-07"))).toBe(
+      true
+    );
+  });
+
+  it("reads the pattern status from now, however far back the range is", async () => {
+    await db.insert(sleepPeriods).values(nightsBetween("2026-07-01", TODAY));
+    await db
+      .insert(episodeAssessments)
+      .values([flagged("2026-07-10"), flagged("2026-07-11")]);
+    await db.insert(dailyAnalysis).values({
+      day: "2026-07-10",
+      isAnomaly: 1,
+      anomalyDirection: "high",
+      createdAt: 0,
+    });
+
+    const past = (await loadHealthDashboard(JULY))!;
+
+    expect(past.pattern).toBeNull();
+    expect(past.latestCheckedDay).toBeNull();
+    expect(
+      past.trends.analysisChartData.find((row) => row.day === "2026-07-10")
+    ).toMatchObject({ isAnomaly: 1 });
+
+    await db.insert(episodeAssessments).values(flagged("2026-10-05"));
+
+    const now = (await loadHealthDashboard(JULY))!;
+
+    expect(now.latestCheckedDay).toBe("2026-10-05");
+    expect(now.pattern).toMatchObject({
+      lastFlaggedDay: "2026-10-05",
+      flaggedDays: 1,
+    });
   });
 });

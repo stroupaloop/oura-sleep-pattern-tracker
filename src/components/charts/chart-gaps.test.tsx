@@ -324,12 +324,12 @@ describe("SleepCompositionBar with missing nights", () => {
     missing("2026-10-04"),
   ];
 
-  it("counts calendar days in its title and says how many have no night", () => {
+  it("dates its title by the calendar days it covers and says how many have no night", () => {
     const html = renderToStaticMarkup(
       createElement(SleepCompositionBar, { data: days })
     );
 
-    expect(html).toContain("last 4 days");
+    expect(html).toContain("share of time in bed, Oct 1 – Oct 4");
     expect(html).not.toContain("last 4 nights");
     expect(html).toContain(TWO_GAPS);
   });

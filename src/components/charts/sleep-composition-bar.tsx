@@ -12,7 +12,7 @@ import {
 import { GapNote, type GapRow, NoNightTooltip, hasValues } from "./chart-gaps";
 import { CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
-import { formatNightLabel } from "@/lib/health/format";
+import { formatAxisDay, formatNightLabel } from "@/lib/health/format";
 import {
   Card,
   CardContent,
@@ -79,14 +79,25 @@ export function CustomTooltip({
   );
 }
 
+/** "Sep 24 – Oct 6": the days the bars cover, which are the tail of the chosen range. */
+export function describeCompositionSpan(
+  data: ReadonlyArray<{ day: string }>
+): string {
+  if (data.length === 0) return "";
+  const first = formatAxisDay(data[0].day);
+  const last = formatAxisDay(data[data.length - 1].day);
+  return first === last ? first : `${first} – ${last}`;
+}
+
 export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
+  const span = describeCompositionSpan(data);
   return (
     <Card>
       <CardHeader>
         <CardTitle>Time in Bed by Stage</CardTitle>
         <CardDescription>
-          Each night&apos;s stages and awake time as a share of time in bed,
-          last {data.length} days
+          Each night&apos;s stages and awake time as a share of time in bed
+          {span ? `, ${span}` : ""}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -99,6 +110,7 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
             <XAxis
               type="number"
               domain={[0, 100]}
+              allowDataOverflow
               tickFormatter={(v: number) => `${v}%`}
               fontSize={11}
               tick={{ fill: "var(--muted-foreground)" }}
@@ -106,9 +118,9 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
             <YAxis
               dataKey="day"
               type="category"
-              tickFormatter={(d: string) => d.slice(5)}
+              tickFormatter={(d: string) => formatAxisDay(d)}
               fontSize={11}
-              width={50}
+              width={64}
               tick={{ fill: "var(--muted-foreground)" }}
             />
             <Tooltip content={<CustomTooltip />} filterNull={false} />

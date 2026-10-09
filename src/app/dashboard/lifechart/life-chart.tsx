@@ -40,7 +40,7 @@ import {
   type PatternTier,
 } from "@/lib/design/pattern-tiers";
 import { episodeLabel } from "@/lib/episode-states";
-import { formatNightLabel } from "@/lib/health/format";
+import { axisDayProps, formatNightLabel } from "@/lib/health/format";
 
 interface AnalysisRow {
   day: string;
@@ -347,6 +347,7 @@ export function LifeChart({
   const episodeMap = new Map(episodes.map((e) => [e.day, e]));
 
   const allDays = collectLifeChartDays(analysis, moods, episodes);
+  const dayAxis = axisDayProps(allDays);
   const syncId = "lifechart";
   const thresholdLabel = `±${Number(threshold.toFixed(2))}`;
 
@@ -519,9 +520,8 @@ export function LifeChart({
           <BarChart data={stepsData} syncId={syncId}>
             <XAxis
               dataKey="day"
-              tickFormatter={(d) => d.slice(5)}
+              {...dayAxis}
               tick={AXIS_TICK}
-              interval="preserveStartEnd"
             />
             <YAxis tick={AXIS_TICK} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
             <Tooltip content={<StepsTooltip />} />
