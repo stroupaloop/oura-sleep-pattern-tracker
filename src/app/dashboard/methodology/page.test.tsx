@@ -113,6 +113,15 @@ describe("Methodology page measure count", () => {
   });
 });
 
+describe("Methodology page baseline", () => {
+  it("says which nights make a night's usual, from the window the detector uses", () => {
+    expect(text).toContain(
+      `the ${DEFAULT_CONFIG.baselineDays} nights before the latest ${DEFAULT_CONFIG.baselineGuardDays}`
+    );
+    expect(text).not.toMatch(/30-day/);
+  });
+});
+
 describe("Methodology page fixed rules", () => {
   const prior = Array.from({ length: 14 }, (_, i) => metrics(day(i)));
 
@@ -167,7 +176,6 @@ describe("Methodology page easing rule", () => {
       isAnomaly: true,
       direction,
       notes: "",
-      hrvCrash: false,
     };
   }
 
