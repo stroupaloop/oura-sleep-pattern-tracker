@@ -289,10 +289,10 @@ export default function MethodologyPage() {
               episodes.
             </p>
             <p className="text-xs text-muted-foreground">
-              <strong>BP2 pattern profile:</strong> Gives more daily-score
-              weight to exploratory within-night variability, slightly less to
-              sleep duration, and applies the default higher-activation
-              bounce-back attenuation. It is not a validated hypomania
+              <strong>BP2 pattern profile:</strong> Uses the base daily metric
+              weights and the default bounce-back attenuation, so it scores
+              the same as Not specified. The research does not yet support
+              scoring Bipolar II differently. It is not a validated hypomania
               detector.
             </p>
             <p className="text-xs text-muted-foreground">
