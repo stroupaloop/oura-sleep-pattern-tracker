@@ -1,6 +1,5 @@
 export const dynamic = "force-dynamic";
 
-import { Suspense } from "react";
 import { db } from "@/lib/db";
 import { dailyAnalysis, dailyMood, episodeAssessments } from "@/lib/db/schema";
 import { gte, lte, and } from "drizzle-orm";
@@ -14,23 +13,32 @@ import {
   filterCurrentPatternAssessments,
 } from "@/lib/analysis/provenance";
 import {
-  getLifeChartStartDay,
-  resolveLifeChartRange,
-} from "@/lib/life-chart";
+  presetsFor,
+  resolveDateRange,
+  type RangeParams,
+} from "@/lib/date-range";
 import { LifeChart } from "./life-chart";
-import { TimeRangeSelector } from "./time-range-selector";
 import { PageHeader } from "@/components/page-header";
+import { DateRangeSelector } from "@/components/ui/date-range-selector";
 import { EmptyState } from "@/components/ui/empty-state";
 
 interface Props {
-  searchParams: Promise<{ range?: string }>;
+  searchParams: Promise<RangeParams>;
 }
+
+const RANGE_PRESETS = presetsFor(["30d", "90d", "180d", "1y", "all"]);
 
 export default async function LifeChartPage({ searchParams }: Props) {
   const params = await searchParams;
-  const rangeDays = resolveLifeChartRange(params.range);
-  const endDate = getTodayET();
-  const startDate = getLifeChartStartDay(endDate, rangeDays);
+  const today = getTodayET();
+  const requested = resolveDateRange(params, { today, defaultToken: "90d" });
+  const endDate = requested.end;
+  // All-time has no first day until the rows are read.
+  const within = (day: Parameters<typeof gte>[0]) =>
+    and(
+      requested.start ? gte(day, requested.start) : undefined,
+      lte(day, endDate)
+    );
 
   const [
     analysisRows,
@@ -52,12 +60,7 @@ export default async function LifeChartPage({ searchParams }: Props) {
         steps: dailyAnalysis.steps,
       })
       .from(dailyAnalysis)
-      .where(
-        and(
-          gte(dailyAnalysis.day, startDate),
-          lte(dailyAnalysis.day, endDate)
-        )
-      )
+      .where(within(dailyAnalysis.day))
       .orderBy(dailyAnalysis.day),
     db
       .select({
@@ -71,9 +74,7 @@ export default async function LifeChartPage({ searchParams }: Props) {
         episodeState: dailyMood.episodeState,
       })
       .from(dailyMood)
-      .where(
-        and(gte(dailyMood.day, startDate), lte(dailyMood.day, endDate))
-      )
+      .where(within(dailyMood.day))
       .orderBy(dailyMood.day),
     db
       .select({
@@ -86,12 +87,7 @@ export default async function LifeChartPage({ searchParams }: Props) {
         signalMode: episodeAssessments.signalMode,
       })
       .from(episodeAssessments)
-      .where(
-        and(
-          gte(episodeAssessments.day, startDate),
-          lte(episodeAssessments.day, endDate)
-        )
-      )
+      .where(within(episodeAssessments.day))
       .orderBy(episodeAssessments.day),
     loadActiveConfig(),
     loadBipolarType(),
@@ -118,18 +114,24 @@ export default async function LifeChartPage({ searchParams }: Props) {
   const episodes = currentAssessments.filter(
     (assessment) => assessment.tier !== "none"
   );
+  // The rows are ordered by day, so each one's first row is its earliest.
+  const earliest =
+    [analysisRows[0]?.day, moods[0]?.day, assessmentRows[0]?.day]
+      .filter((day): day is string => Boolean(day))
+      .sort()[0] ?? null;
+  const range =
+    requested.kind === "all"
+      ? resolveDateRange(params, { today, defaultToken: "90d", earliest })
+      : requested;
 
   return (
     <div className="max-w-6xl mx-auto space-y-4 md:space-y-6">
       <PageHeader
         title="Life Chart"
         description="Personal mood, sleep, and activity timeline"
-        actions={
-          <Suspense>
-            <TimeRangeSelector />
-          </Suspense>
-        }
       />
+
+      <DateRangeSelector range={range} presets={RANGE_PRESETS} today={today} />
 
       {analysis.length === 0 && moods.length === 0 && episodes.length === 0 ? (
         <EmptyState title="No sleep, mood, or episode data for the selected range">

@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { EpisodeTimeline } from "./episode-timeline";
+import { EpisodeTimeline, formatTimelineTick } from "./episode-timeline";
 
 describe("EpisodeTimeline", () => {
   const html = renderToStaticMarkup(
@@ -33,5 +33,46 @@ describe("EpisodeTimeline", () => {
 
   it("never names a color in its legend", () => {
     expect(html).not.toMatch(/\b(blue|amber|purple|red|green)\b/i);
+  });
+});
+
+describe("EpisodeTimeline over a stretch with missing days", () => {
+  const flagged = (day: string) => ({
+    day,
+    tier: "none",
+    direction: null,
+    confidence: 1.2,
+    primaryDrivers: null,
+  });
+  const render = (days: string[]) =>
+    renderToStaticMarkup(
+      createElement(EpisodeTimeline, {
+        episodes: days.map(flagged),
+        selfReports: [],
+        thresholds: { watch: 2, warning: 3.5, alert: 5 },
+      })
+    );
+
+  it("gives every day its own column and says how many have no check", () => {
+    expect(render(["2026-07-28", "2026-07-29", "2026-07-30"])).not.toContain(
+      "appear as gaps"
+    );
+    expect(render(["2026-07-28", "2026-07-31"])).toContain(
+      "2 nights have no recording and appear as gaps."
+    );
+    expect(render(["2026-07-28", "2026-07-30"])).toContain(
+      "1 night has no recording and appears as a gap."
+    );
+  });
+});
+
+describe("formatTimelineTick", () => {
+  it("names the month so a label is not mistaken for a day count", () => {
+    expect(formatTimelineTick("2026-10-09", false)).toBe("Oct 9");
+    expect(formatTimelineTick("2026-01-05", false)).toBe("Jan 5");
+  });
+
+  it("adds the year when the chart spans more than one", () => {
+    expect(formatTimelineTick("2025-03-27", true)).toBe("Mar 27 ’25");
   });
 });

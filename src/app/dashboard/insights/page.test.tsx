@@ -47,8 +47,10 @@ function findTabs(node: ReactNode): ReactElement | null {
   return null;
 }
 
-async function renderedTabs() {
-  const tabs = findTabs(await InsightsPage());
+async function renderedTabs(params: Record<string, string> = {}) {
+  const tabs = findTabs(
+    await InsightsPage({ searchParams: Promise.resolve(params) })
+  );
   expect(tabs).not.toBeNull();
   return tabs!.props as {
     analysis: Array<{ day: string }>;
@@ -96,6 +98,36 @@ describe("InsightsPage", () => {
       "2026-10-02",
       "2026-10-05",
     ]);
+  });
+
+  describe("date range", () => {
+    beforeEach(async () => {
+      await db.insert(dailyAnalysis).values(
+        ["2026-03-10", "2026-08-15", "2026-09-20", "2026-10-02"].map((day) => ({
+          day,
+          isAnomaly: 0,
+          createdAt: 0,
+        }))
+      );
+    });
+
+    it("follows a preset", async () => {
+      const tabs = await renderedTabs({ range: "30d" });
+      expect(tabs.range).toEqual({ start: "2026-09-07", end: TODAY });
+      expect(tabs.analysis.map((row) => row.day)).toEqual(["2026-09-20", "2026-10-02"]);
+    });
+
+    it("follows dates, both ends included", async () => {
+      const tabs = await renderedTabs({ from: "2026-08-15", to: "2026-09-20" });
+      expect(tabs.range).toEqual({ start: "2026-08-15", end: "2026-09-20" });
+      expect(tabs.analysis.map((row) => row.day)).toEqual(["2026-08-15", "2026-09-20"]);
+    });
+
+    it("starts all-time at the first day on record", async () => {
+      const tabs = await renderedTabs({ range: "all" });
+      expect(tabs.range).toEqual({ start: "2026-03-10", end: TODAY });
+      expect(tabs.analysis).toHaveLength(4);
+    });
   });
 
   it("counts a day with only a short daytime sleep as having no night", async () => {
