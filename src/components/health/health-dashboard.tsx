@@ -56,7 +56,7 @@ export function HealthDashboard({
                 : "Oura hasn't synced yet"}
             </p>
           </div>
-          {canSync && <SyncNowButton />}
+          {canSync && <SyncNowButton latestNight={data.shownDay} />}
         </header>
 
         {!data.isLastNight && !paused && (
@@ -160,6 +160,8 @@ export function HealthDashboard({
           pattern={data.pattern}
           latestCheckedDay={data.latestCheckedDay}
           paused={paused}
+          canSync={canSync}
+          today={data.today}
           className="order-3"
         />
         <div className="order-5">

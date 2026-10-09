@@ -203,7 +203,7 @@ Panels round at 14px, controls at 8px, meters and the corridor band are pills. T
 - **Signal row:** label and value on the first line; the comparison in words and the corridor gauge on the second. Unusual rows add a Lamp Amber pill and comparison text.
 - **Corridor gauge:** -3 to +3 standard deviations; band at ±1; ticks at the detector's threshold; Moonlight dot, Lamp Amber once unusual.
 - **Charts:** axes, legends and tooltips come from the chart theme; tooltips are a popover surface with a swatch beside readable text; the hover cursor is a muted wash, not the library's bright gray.
-- **Pattern status:** always present. Flagged: tinted surface in the tier's color, the tier named in words. Clear: a Sage check and when the check last ran. Paused: says why.
+- **Pattern status:** always present. Flagged: tinted surface in the tier's color, the tier named in words. Eased (flagged earlier in the 14 days, clear since): neutral surface and when it was last flagged, never the tier's tint. Clear: a Sage check and when the check last ran. Behind (the last check is more than a night old): a Dawn Blue notice with the last night checked and how it catches up, never a check mark, and a line under a flag too. Paused: says why.
 - **Notices:** a missing night is Dawn Blue and explains how the data arrives; a lost Oura connection is an amber banner across every dashboard page with the way to reconnect.
 - **Buttons:** shadcn variants on these tokens. Default, small and icon sizes reach 40px on phones and tighten from `sm`.
 

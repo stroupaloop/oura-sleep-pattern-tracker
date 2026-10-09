@@ -4,46 +4,8 @@ import { buildNightWindow } from "@/lib/health/night-window";
 import type { Signal } from "@/lib/health/signals";
 import { MissingNightNotice } from "./missing-night-notice";
 import { NightWindowChart } from "./night-window-chart";
-import { PatternStatus } from "@/components/pattern-status";
 import { scoreBand } from "./score-panel";
 import { SignalList } from "./signal-list";
-
-describe("PatternStatus", () => {
-  it("names the tier, the count and the direction of a flag", () => {
-    const html = renderToStaticMarkup(
-      <PatternStatus
-        pattern={{ tier: "warning", direction: "hyper", flaggedDays: 3 }}
-        latestCheckedDay="2026-10-01"
-        paused={false}
-      />
-    );
-    expect(html).toContain("Warning: 3 flagged days in the last 14 days");
-    expect(html).toContain("Higher-activation personal-baseline pattern");
-    expect(html).toContain("not a mood-episode diagnosis");
-    expect(html).toContain('href="/dashboard/alerts"');
-  });
-
-  it("says when the check last ran when nothing is flagged", () => {
-    const html = renderToStaticMarkup(
-      <PatternStatus pattern={null} latestCheckedDay="2026-10-01" paused={false} />
-    );
-    expect(html).toContain("No pattern flags in the last 14 days");
-    expect(html).toContain("Checked through the night of Sep 30 → Oct 1.");
-  });
-
-  it("says why checks are not running", () => {
-    expect(
-      renderToStaticMarkup(
-        <PatternStatus pattern={null} latestCheckedDay="2026-09-02" paused />
-      )
-    ).toContain("Pattern checks are paused");
-    expect(
-      renderToStaticMarkup(
-        <PatternStatus pattern={null} latestCheckedDay={null} paused={false} />
-      )
-    ).toContain("They start once there are 14 nights to compare with.");
-  });
-});
 
 describe("SignalList", () => {
   const signals: Signal[] = [

@@ -1,3 +1,5 @@
+import { formatNightLabel, formatSyncedAt } from "@/lib/health/format";
+
 const DATASET_LABELS: Record<string, string> = {
   daily_resilience: "Resilience",
   daily_spo2: "Blood Oxygen",
@@ -59,13 +61,17 @@ function readString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-export function formatOuraSyncSummary(
-  value: unknown,
-  options: SyncSummaryOptions
-): string {
-  const data = isRecord(value) ? value : {};
-  const coreRecords = readCount(data.records);
-  const privateRecords = readCount(data.sensitiveRecords);
+interface SyncGaps {
+  /** Datasets Oura withheld because the app was not granted them. */
+  notShared: string[];
+  /** Granted datasets that did not fully update. */
+  unavailable: string[];
+  /** Steps after the core sync that did not finish. */
+  failedSteps: string[];
+  partial: boolean;
+}
+
+function readSyncGaps(data: Record<string, unknown>): SyncGaps {
   const warnings = Array.isArray(data.warnings) ? data.warnings : [];
   const labelsFor = (notGranted: boolean) => [
     ...new Set(
@@ -77,14 +83,8 @@ export function formatOuraSyncSummary(
       })
     ),
   ];
-  const notSharedDatasets = labelsFor(true);
-  const unavailableDatasets = labelsFor(false);
-  const startDate = readString(data.startDate);
-  const endDate = readString(data.endDate);
-  const range =
-    options.includeRange && startDate && endDate
-      ? ` (${startDate} to ${endDate})`
-      : "";
+  const notShared = labelsFor(true);
+  const unavailable = labelsFor(false);
   const failedSteps = [
     ...new Set(
       (Array.isArray(data.failedSteps) ? data.failedSteps : []).flatMap(
@@ -95,14 +95,40 @@ export function formatOuraSyncSummary(
       )
     ),
   ];
+  return {
+    notShared,
+    unavailable,
+    failedSteps,
+    partial:
+      data.status === "partial" ||
+      unavailable.length > 0 ||
+      notShared.length > 0 ||
+      failedSteps.length > 0,
+  };
+}
+
+export function formatOuraSyncSummary(
+  value: unknown,
+  options: SyncSummaryOptions
+): string {
+  const data = isRecord(value) ? value : {};
+  const coreRecords = readCount(data.records);
+  const privateRecords = readCount(data.sensitiveRecords);
+  const {
+    notShared: notSharedDatasets,
+    unavailable: unavailableDatasets,
+    failedSteps,
+    partial: isPartial,
+  } = readSyncGaps(data);
+  const startDate = readString(data.startDate);
+  const endDate = readString(data.endDate);
+  const range =
+    options.includeRange && startDate && endDate
+      ? ` (${startDate} to ${endDate})`
+      : "";
   const recomputedNights = isRecord(data.analysis)
     ? readCount(data.analysis.daysProcessed)
     : null;
-  const isPartial =
-    data.status === "partial" ||
-    unavailableDatasets.length > 0 ||
-    notSharedDatasets.length > 0 ||
-    failedSteps.length > 0;
   const coverage = isPartial ? " with partial coverage" : "";
   const records = `${formatRecordCount(
     coreRecords,
@@ -145,4 +171,73 @@ export function formatOuraSyncSummary(
     );
   }
   return sentences.join(" ");
+}
+
+function upperFirst(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function describeSyncProblems(gaps: SyncGaps): string {
+  const problems: string[] = [];
+  if (gaps.notShared.length > 0) {
+    problems.push(`Oura didn't share ${formatList(gaps.notShared)}`);
+  }
+  if (gaps.unavailable.length > 0) {
+    problems.push(`${formatList(gaps.unavailable)} didn't fully update`);
+  }
+  if (gaps.failedSteps.length > 0) {
+    problems.push(`${formatList(gaps.failedSteps)} didn't finish`);
+  }
+  return problems.length > 0
+    ? formatList(problems)
+    : "some optional data didn't fully update";
+}
+
+/**
+ * What the Sync now button says once a sync has finished and the page has
+ * refreshed, from what the sync did rather than from the HTTP status alone:
+ * a sync that brought nothing newer, or left datasets or steps undone, is not
+ * "up to date".
+ */
+export function formatSyncNowResult(
+  result: unknown,
+  {
+    latestBefore,
+    latestAfter,
+    syncedAt,
+    today,
+  }: {
+    /** The newest night on record when the button was tapped. */
+    latestBefore: string | null;
+    /** The newest night on record now that the page has refreshed. */
+    latestAfter: string | null;
+    /** When the sync finished, in Unix seconds. */
+    syncedAt: number;
+    today: string;
+  }
+): string {
+  const gaps = readSyncGaps(isRecord(result) ? result : {});
+
+  if (latestAfter != null && latestAfter === latestBefore && latestAfter < today) {
+    const opening = `Synced. Oura had nothing newer than ${formatNightLabel(
+      latestAfter,
+      { weekday: false }
+    )}.`;
+    return gaps.partial
+      ? `${opening} ${upperFirst(describeSyncProblems(gaps))}. See Settings.`
+      : opening;
+  }
+
+  const opening = `Synced ${formatSyncedAt(syncedAt, today)}`;
+  return gaps.partial
+    ? `${opening}, but ${describeSyncProblems(gaps)}. See Settings.`
+    : `${opening}.`;
+}
+
+/** What the Sync now button says when the route answered with an error. */
+export function formatSyncNowFailure(error: unknown): string {
+  return typeof error === "string" &&
+    /token_refresh|HTTP 401|daily scope/.test(error)
+    ? "Oura rejected the connection. Reconnect it in Settings."
+    : "Sync didn't finish. Try again in a minute.";
 }
