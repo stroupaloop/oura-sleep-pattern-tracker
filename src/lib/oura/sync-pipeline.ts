@@ -4,6 +4,7 @@ import {
   type CycleComputationOutcome,
 } from "@/lib/analysis/cycle";
 import { runHealthSignalDetection } from "@/lib/analysis/health-signals";
+import { hasOutdatedPatternResults } from "@/lib/analysis/outdated-results";
 import { reprocessAll, type ReprocessResult } from "@/lib/analysis/reprocess";
 import { renewOuraTokenIfDue } from "./client";
 import type { OuraSyncWarning } from "./contracts";
@@ -23,7 +24,8 @@ export interface SyncPipelineOptions {
   includePrivate: boolean;
   /**
    * Which nights to recompute pattern checks for: the synced window, or every
-   * night on record, so history follows the current algorithm.
+   * night on record, so history follows the current algorithm. A window sync
+   * recomputes everything anyway when stored results are out of date.
    */
   recompute: "window" | "history";
 }
@@ -100,9 +102,14 @@ export async function runOuraSyncPipeline(
       loadActiveConfig(),
       loadBipolarType(),
     ]);
+    // Results from an older algorithm, profile or configuration stay hidden
+    // until history is recomputed, so the first sync after a change does it.
+    const wholeHistory =
+      options.recompute === "history" ||
+      (await hasOutdatedPatternResults(config.version, bipolarType));
     return reprocessAll(
       config,
-      options.recompute === "history" ? undefined : startDate,
+      wholeHistory ? undefined : startDate,
       endDate,
       bipolarType
     );
