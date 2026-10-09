@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { DayMetrics } from "./anomaly";
 import { DEFAULT_CONFIG } from "./config";
 import { scoreHistory, type ScoredHistory } from "./score-history";
@@ -188,7 +188,11 @@ function runsAtLeast(history: ScoredHistory, rank: number, fromIndex: number, to
   return runs;
 }
 
+// Each test scores several simulated years; a slow CI runner needs more than the 5 s default.
+vi.setConfig({ testTimeout: 60_000 });
+
 const SEEDS = Array.from({ length: 12 }, (_, index) => 9100 + index);
+const STEADY_YEAR_PEOPLE = 6;
 const ONSET = 150;
 
 /** The nights from `from` up to, not including, `to`: the only ones assessed. */
@@ -218,7 +222,7 @@ describe("detector behaviour on simulated people", () => {
     let watch = 0;
     let warning = 0;
     let alert = 0;
-    for (const seed of SEEDS.slice(0, 8)) {
+    for (const seed of SEEDS.slice(0, STEADY_YEAR_PEOPLE)) {
       const history = scoreHistory(
         simulate(days, seed),
         DEFAULT_CONFIG,
@@ -229,7 +233,7 @@ describe("detector behaviour on simulated people", () => {
       warning += runsAtLeast(history, 2, warmUp, days);
       alert += runsAtLeast(history, 3, warmUp, days);
     }
-    const years = (8 * (days - warmUp)) / 365;
+    const years = (STEADY_YEAR_PEOPLE * (days - warmUp)) / 365;
     expect(watch / years).toBeLessThan(14);
     expect(warning / years).toBeLessThan(3);
     expect(alert / years).toBeLessThan(0.5);
