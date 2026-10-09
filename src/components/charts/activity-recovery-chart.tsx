@@ -20,10 +20,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ResearchTooltip } from "@/components/research-tooltip";
+import {
+  GapNote,
+  type GapRow,
+  NoNightTooltip,
+  hasValues,
+  isolatedDot,
+} from "./chart-gaps";
 import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
-interface ActivityPoint {
+interface ActivityPoint extends GapRow {
   day: string;
   steps: number | null;
   activeMinutes: number | null;
@@ -42,16 +49,18 @@ interface ActivityRecoveryChartProps {
 
 interface ActivityTooltipProps {
   active?: boolean;
-  payload?: ReadonlyArray<{ payload: ActivityPoint }>;
+  payload?: ReadonlyArray<{ value?: unknown; payload: ActivityPoint }>;
 }
 
 /** Neutral series only: the first in Moonlight, the next in Mist. */
 const MOONLIGHT = "var(--foreground)";
 const MIST = CHART.axis;
 
-function ActivityTooltipContent({ active, payload }: ActivityTooltipProps) {
+export function ActivityTooltipContent({ active, payload }: ActivityTooltipProps) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
+  if (p.noNight) return <NoNightTooltip title={p.day} />;
+  if (!hasValues(payload)) return null;
   return (
     <ChartTooltipFrame title={p.day}>
       {p.steps != null && (
@@ -93,9 +102,11 @@ function ActivityTooltipContent({ active, payload }: ActivityTooltipProps) {
   );
 }
 
-function StressTooltipContent({ active, payload }: ActivityTooltipProps) {
+export function StressTooltipContent({ active, payload }: ActivityTooltipProps) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload;
+  if (p.noNight) return <NoNightTooltip title={p.day} />;
+  if (!hasValues(payload)) return null;
   return (
     <ChartTooltipFrame title={p.day}>
       {p.stressHigh != null && (
@@ -159,7 +170,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                   orientation="right"
                   tick={AXIS_TICK}
                 />
-                <Tooltip content={<ActivityTooltipContent />} />
+                <Tooltip content={<ActivityTooltipContent />} filterNull={false} />
                 <Legend formatter={legendLabel} />
                 <Bar
                   yAxisId="steps"
@@ -174,7 +185,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                   dataKey="activeMinutes"
                   stroke={MOONLIGHT}
                   strokeWidth={2}
-                  dot={false}
+                  dot={isolatedDot}
                   name="Active Min"
                   connectNulls={false}
                 />
@@ -203,6 +214,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                   Days with a workout
                 </p>
               )}
+              <GapNote rows={data} />
             </>
           ) : (
             <div className="flex min-h-48 items-center justify-center rounded-md border border-dashed border-border px-4 text-center text-sm text-muted-foreground">
@@ -236,14 +248,14 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                 tick={AXIS_TICK}
                 tickFormatter={(value) => `${value}m`}
               />
-              <Tooltip content={<StressTooltipContent />} />
+              <Tooltip content={<StressTooltipContent />} filterNull={false} />
               <Legend formatter={legendLabel} />
               <Line
                 type="monotone"
                 dataKey="stressHigh"
                 stroke={MOONLIGHT}
                 strokeWidth={2}
-                dot={false}
+                dot={isolatedDot}
                 name="High stress (min)"
                 connectNulls={false}
               />
@@ -253,7 +265,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
                 stroke={MIST}
                 strokeDasharray="6 4"
                 strokeWidth={2}
-                dot={false}
+                dot={isolatedDot}
                 name="Restorative (min)"
                 connectNulls={false}
               />
@@ -265,6 +277,7 @@ export function ActivityRecoveryChart({ data, limitations }: ActivityRecoveryCha
               this range.
             </div>
           )}
+          {hasStressRecoveryData && <GapNote rows={data} />}
           {limitations && (
             <p className="text-xs text-muted-foreground mt-2">{limitations}</p>
           )}

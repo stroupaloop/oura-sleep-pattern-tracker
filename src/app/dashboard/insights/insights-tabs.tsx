@@ -7,6 +7,7 @@ import { ActivityRecoveryChart } from "@/components/charts/activity-recovery-cha
 import { VariabilityChart } from "@/components/charts/variability-chart";
 import { WithinNightChart } from "@/components/charts/within-night-chart";
 import { CorrelationView } from "@/components/charts/correlation-view";
+import { fillCalendarDays } from "@/lib/health/calendar-rows";
 import { summarizeWorkoutsByDay } from "@/lib/workout-summary";
 
 const TABS = [
@@ -60,6 +61,39 @@ interface AnalysisRow {
   anxietyScore: number | null;
 }
 
+/** A calendar day of the window; `noNight` marks one the app has no night for. */
+interface DayRow extends AnalysisRow {
+  noNight?: boolean;
+}
+
+const NOT_ANALYSED: Omit<AnalysisRow, "day"> = {
+  circadianIS: null,
+  circadianIV: null,
+  circadianRA: null,
+  steps: null,
+  activeMinutes: null,
+  stressHigh: null,
+  recoveryHigh: null,
+  resilienceLevel: null,
+  dayToDaySleepCV: null,
+  dayToDayBedtimeCV: null,
+  dayToDayWakeCV: null,
+  withinNightHrvCV: null,
+  withinNightHrCV: null,
+  hypnogramFragmentation: null,
+  avgHrv: null,
+  efficiency: null,
+  deepPct: null,
+  anomalyScore: null,
+  anomalyDirection: null,
+  isAnomaly: null,
+  totalSleepMinutes: null,
+  moodScore: null,
+  energyScore: null,
+  irritabilityScore: null,
+  anxietyScore: null,
+};
+
 interface WorkoutRow {
   day: string;
   activity: string | null;
@@ -90,9 +124,20 @@ interface InsightsTabsProps {
   episodes: EpisodeRow[];
   workouts: WorkoutRow[];
   moods: MoodRow[];
+  /** The days the page covers, ending today. */
+  range: { start: string; end: string };
+  /** Days with a night recorded, analysed or not. */
+  nightDays: string[];
 }
 
-export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTabsProps) {
+export function InsightsTabs({
+  analysis,
+  episodes,
+  workouts,
+  moods,
+  range,
+  nightDays,
+}: InsightsTabsProps) {
   const [activeTab, setActiveTab] = useState<TabId>("circadian");
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -110,7 +155,14 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
 
   const episodeMap = new Map(episodes.map((e) => [e.day, e]));
 
-  const circadianData = analysis.map((a) => {
+  const nightDaySet = new Set(nightDays);
+  const days = fillCalendarDays<DayRow>(analysis, range, (day) => ({
+    ...NOT_ANALYSED,
+    day,
+    noNight: !nightDaySet.has(day),
+  }));
+
+  const circadianData = days.map((a) => {
     const ep = episodeMap.get(a.day);
     return {
       day: a.day,
@@ -119,13 +171,14 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
       ra: a.circadianRA,
       isEpisode: !!ep && ep.tier !== "none",
       episodeTier: ep?.tier,
+      noNight: a.noNight,
     };
   });
 
   const workoutsByDay = summarizeWorkoutsByDay(workouts);
 
-  const activityData = analysis.map((a) => {
-    const w = workoutsByDay.get(a.day);
+  const activityData = days.map((a) => {
+    const w = a.noNight ? undefined : workoutsByDay.get(a.day);
     return {
       day: a.day,
       steps: a.steps,
@@ -138,21 +191,24 @@ export function InsightsTabs({ analysis, episodes, workouts, moods }: InsightsTa
       workoutCount: w?.count ?? 0,
       workoutCalories: w?.calories ?? null,
       workoutTypes: w?.types ?? [],
+      noNight: a.noNight,
     };
   });
 
-  const variabilityData = analysis.map((a) => ({
+  const variabilityData = days.map((a) => ({
     day: a.day,
     sleepCV: a.dayToDaySleepCV,
     bedtimeCV: a.dayToDayBedtimeCV,
     wakeCV: a.dayToDayWakeCV,
+    noNight: a.noNight,
   }));
 
-  const withinNightData = analysis.map((a) => ({
+  const withinNightData = days.map((a) => ({
     day: a.day,
     hrvCV: a.withinNightHrvCV,
     hrCV: a.withinNightHrCV,
     fragmentation: a.hypnogramFragmentation,
+    noNight: a.noNight,
   }));
 
   const moodMap = new Map(moods.map((m) => [m.day, m]));

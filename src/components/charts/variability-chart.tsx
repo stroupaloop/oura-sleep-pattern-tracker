@@ -18,10 +18,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ResearchTooltip } from "@/components/research-tooltip";
+import {
+  GapNote,
+  type GapRow,
+  NoNightTooltip,
+  hasValues,
+  isolatedDot,
+} from "./chart-gaps";
 import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
-interface VariabilityPoint {
+interface VariabilityPoint extends GapRow {
   day: string;
   sleepCV: number | null;
   bedtimeCV: number | null;
@@ -34,6 +41,7 @@ interface VariabilityChartProps {
 }
 
 interface VariabilityTooltipPayload {
+  value?: unknown;
   payload: VariabilityPoint;
 }
 
@@ -41,7 +49,7 @@ interface VariabilityTooltipPayload {
 const MOONLIGHT = "var(--foreground)";
 const MIST = CHART.axis;
 
-function VariabilityTooltipContent({
+export function VariabilityTooltipContent({
   active,
   payload,
   mode,
@@ -52,6 +60,8 @@ function VariabilityTooltipContent({
 }) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload as VariabilityPoint;
+  if (p.noNight) return <NoNightTooltip title={p.day} />;
+  if (!hasValues(payload)) return null;
   return (
     <ChartTooltipFrame title={p.day}>
       {mode === "sleep" && p.sleepCV != null && (
@@ -131,13 +141,14 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
                     />
                     <Tooltip
                       content={<VariabilityTooltipContent mode="sleep" />}
+                      filterNull={false}
                     />
                     <Line
                       type="monotone"
                       dataKey="sleepCV"
                       stroke={MOONLIGHT}
                       strokeWidth={2}
-                      dot={false}
+                      dot={isolatedDot}
                       name="Sleep Duration CV"
                       connectNulls={false}
                     />
@@ -166,6 +177,7 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
                     />
                     <Tooltip
                       content={<VariabilityTooltipContent mode="clock" />}
+                      filterNull={false}
                     />
                     <Legend formatter={legendLabel} />
                     <Line
@@ -173,7 +185,7 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
                       dataKey="bedtimeCV"
                       stroke={MOONLIGHT}
                       strokeWidth={2}
-                      dot={false}
+                      dot={isolatedDot}
                       name="Bedtime variation"
                       connectNulls={false}
                     />
@@ -183,7 +195,7 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
                       stroke={MIST}
                       strokeDasharray="6 4"
                       strokeWidth={2}
-                      dot={false}
+                      dot={isolatedDot}
                       name="Wake-time variation"
                       connectNulls={false}
                     />
@@ -193,6 +205,7 @@ export function VariabilityChart({ data, limitations }: VariabilityChartProps) {
             )}
           </div>
         )}
+        {(hasSleepVariability || hasClockVariation) && <GapNote rows={data} />}
         {limitations && (
           <p className="text-xs text-muted-foreground mt-2">{limitations}</p>
         )}

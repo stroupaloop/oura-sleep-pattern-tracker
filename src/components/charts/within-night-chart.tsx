@@ -19,10 +19,17 @@ import {
 } from "@/components/ui/card";
 import { Pill } from "@/components/ui/pill";
 import { ResearchTooltip } from "@/components/research-tooltip";
+import {
+  GapNote,
+  type GapRow,
+  NoNightTooltip,
+  hasValues,
+  isolatedDot,
+} from "./chart-gaps";
 import { AXIS_TICK, CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 
-interface WithinNightPoint {
+interface WithinNightPoint extends GapRow {
   day: string;
   hrvCV: number | null;
   hrCV: number | null;
@@ -35,13 +42,14 @@ interface WithinNightChartProps {
 }
 
 interface WithinNightTooltipPayload {
+  value?: unknown;
   payload: WithinNightPoint;
 }
 
 /** Stage changes are neither HRV nor heart rate, so they draw in Moonlight. */
 const FRAGMENTATION_COLOR = "var(--foreground)";
 
-function WithinNightTooltipContent({
+export function WithinNightTooltipContent({
   active,
   payload,
   mode,
@@ -52,6 +60,8 @@ function WithinNightTooltipContent({
 }) {
   if (!active || !payload?.length) return null;
   const p = payload[0].payload as WithinNightPoint;
+  if (p.noNight) return <NoNightTooltip title={p.day} />;
+  if (!hasValues(payload)) return null;
   return (
     <ChartTooltipFrame title={p.day}>
       {mode === "cv" && p.hrvCV != null && (
@@ -147,6 +157,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                     />
                     <Tooltip
                       content={<WithinNightTooltipContent mode="cv" />}
+                      filterNull={false}
                     />
                     <Legend formatter={legendLabel} />
                     <Line
@@ -154,7 +165,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                       dataKey="hrvCV"
                       stroke={CHART.hrv}
                       strokeWidth={2}
-                      dot={false}
+                      dot={isolatedDot}
                       name="HRV CV"
                       connectNulls={false}
                     />
@@ -163,7 +174,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                       dataKey="hrCV"
                       stroke={CHART.heartRate}
                       strokeWidth={2}
-                      dot={false}
+                      dot={isolatedDot}
                       name="HR CV"
                       connectNulls={false}
                     />
@@ -196,13 +207,14 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
                       content={
                         <WithinNightTooltipContent mode="fragmentation" />
                       }
+                      filterNull={false}
                     />
                     <Line
                       type="monotone"
                       dataKey="fragmentation"
                       stroke={FRAGMENTATION_COLOR}
                       strokeWidth={2}
-                      dot={false}
+                      dot={isolatedDot}
                       name="Sleep-stage changes"
                       connectNulls={false}
                     />
@@ -212,6 +224,7 @@ export function WithinNightChart({ data, limitations }: WithinNightChartProps) {
             ) : null}
           </div>
         )}
+        {(hasCvData || hasFragmentationData) && <GapNote rows={data} />}
         {limitations && (
           <p className="text-xs text-muted-foreground mt-2">{limitations}</p>
         )}

@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { GapNote, type GapRow, NoNightTooltip, hasValues } from "./chart-gaps";
 import { CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
 import { formatNightLabel } from "@/lib/health/format";
@@ -21,7 +22,7 @@ import {
 } from "@/components/ui/card";
 
 
-interface CompositionData {
+interface CompositionData extends GapRow {
   day: string;
   deep: number | null;
   rem: number | null;
@@ -54,7 +55,7 @@ interface TooltipPayloadItem {
   payload: CompositionData;
 }
 
-function CustomTooltip({
+export function CustomTooltip({
   active,
   payload,
   label,
@@ -65,8 +66,11 @@ function CustomTooltip({
 }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
+  const title = label ? formatNightLabel(label, { weekday: false }) : undefined;
+  if (d.noNight) return <NoNightTooltip title={title} />;
+  if (!hasValues(payload)) return null;
   return (
-    <ChartTooltipFrame title={label ? formatNightLabel(label, { weekday: false }) : undefined}>
+    <ChartTooltipFrame title={title}>
       <ChartTooltipRow color={CHART.deep} label="Deep" value={formatStage(d.deep, d.deepMin)} />
       <ChartTooltipRow color={CHART.rem} label="REM" value={formatStage(d.rem, d.remMin)} />
       <ChartTooltipRow color={CHART.light} label="Light" value={formatStage(d.light, d.lightMin)} />
@@ -82,7 +86,7 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
         <CardTitle>Time in Bed by Stage</CardTitle>
         <CardDescription>
           Each night&apos;s stages and awake time as a share of time in bed,
-          last {data.length} nights
+          last {data.length} days
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -107,7 +111,7 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
               width={50}
               tick={{ fill: "var(--muted-foreground)" }}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} filterNull={false} />
             <Legend formatter={legendLabel} />
             <Bar dataKey="deep" stackId="a" fill="var(--stage-deep)" name="Deep" />
             <Bar dataKey="rem" stackId="a" fill="var(--stage-rem)" name="REM" />
@@ -115,6 +119,7 @@ export function SleepCompositionBar({ data }: { data: CompositionData[] }) {
             <Bar dataKey="awake" stackId="a" fill="var(--stage-awake)" name="Awake" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
+        <GapNote rows={data} />
       </CardContent>
     </Card>
   );

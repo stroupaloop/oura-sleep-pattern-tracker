@@ -1,12 +1,22 @@
 export const dynamic = "force-dynamic";
 
 import { db } from "@/lib/db";
-import { dailyAnalysis, episodeAssessments, workouts, dailyMood } from "@/lib/db/schema";
-import { gte } from "drizzle-orm";
+import {
+  dailyAnalysis,
+  episodeAssessments,
+  workouts,
+  dailyMood,
+  sleepPeriods,
+} from "@/lib/db/schema";
+import { and, gte, inArray } from "drizzle-orm";
 import { format, subDays } from "date-fns";
 import Link from "next/link";
 import { InsightsTabs } from "./insights-tabs";
 import { getTodayET } from "@/lib/date-utils";
+import {
+  NIGHT_SLEEP_TYPES,
+  selectNightSleepByDay,
+} from "@/lib/oura/main-sleep";
 import { normalizeEvidenceScore } from "@/lib/analysis/window";
 import {
   loadActiveConfig,
@@ -20,8 +30,9 @@ import { PageHeader } from "@/components/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export default async function InsightsPage() {
+  const today = getTodayET();
   const ninetyDaysAgo = format(
-    subDays(new Date(`${getTodayET()}T12:00:00`), 89),
+    subDays(new Date(`${today}T12:00:00`), 89),
     "yyyy-MM-dd"
   );
 
@@ -32,6 +43,7 @@ export default async function InsightsPage() {
     moodData,
     patternConfig,
     bipolarType,
+    periodRows,
   ] = await Promise.all([
     db
       .select({
@@ -105,6 +117,21 @@ export default async function InsightsPage() {
       .orderBy(dailyMood.day),
     loadActiveConfig(),
     loadBipolarType(),
+    db
+      .select({
+        day: sleepPeriods.day,
+        type: sleepPeriods.type,
+        bedtimeStart: sleepPeriods.bedtimeStart,
+        bedtimeEnd: sleepPeriods.bedtimeEnd,
+        totalSleepDuration: sleepPeriods.totalSleepDuration,
+      })
+      .from(sleepPeriods)
+      .where(
+        and(
+          gte(sleepPeriods.day, ninetyDaysAgo),
+          inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES])
+        )
+      ),
   ]);
   const currentAssessments = filterCurrentPatternAssessments(
     assessmentRows,
@@ -160,6 +187,8 @@ export default async function InsightsPage() {
           }))}
           workouts={workoutData}
           moods={moodData}
+          range={{ start: ninetyDaysAgo, end: today }}
+          nightDays={[...selectNightSleepByDay(periodRows).keys()]}
         />
       )}
     </div>
