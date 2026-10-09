@@ -25,12 +25,20 @@ import {
 } from "@/lib/oura/main-sleep";
 import { fillCalendarDays } from "./calendar-rows";
 import { currentEtHour, MORNING_ENDS_ET_HOUR } from "./format";
+import {
+  buildNightStrip,
+  shortNightRun,
+  type RunNight,
+  type StripNight,
+} from "./night-strip";
 import { buildNightWindow } from "./night-window";
 import { buildSignals } from "./signals";
 
 const TREND_DAYS = 30;
 const COMPOSITION_DAYS = 14;
 const PATTERN_DAYS = 14;
+const STRIP_DAYS = 7;
+const SHORT_RUN_LOOKBACK_DAYS = 14;
 
 /** A day on the trend charts; `noNight` marks one with no night recorded. */
 interface TrendRow {
@@ -266,10 +274,51 @@ export async function loadHealthDashboard() {
     })
   );
 
+  const asleepMinutes = (day: string) => {
+    const seconds = groups.get(day)?.night.totalSleepDuration;
+    return seconds != null ? seconds / 60 : null;
+  };
+  const stripNight = (day: string): StripNight | null => {
+    const group = groups.get(day);
+    if (!group) return null;
+    const analysis = analysisByDay.get(day);
+    return {
+      periods: group.periods,
+      asleepMinutes: asleepMinutes(day),
+      usual: analysis
+        ? {
+            bedtimeMinutes: analysis.baselineBedtimeMinutes,
+            wakeMinutes: analysis.baselineWakeMinutes,
+            sleepMinutes: analysis.baselineSleepMinutes,
+            sleepZ: analysis.sleepDurationZScore,
+          }
+        : null,
+    };
+  };
+  const stripDays = Array.from({ length: STRIP_DAYS }, (_, offset) =>
+    shiftIsoDay(lastDueNight, -offset)
+  ).filter((day): day is string => day != null);
+  const week = buildNightStrip(stripDays, stripNight, config.dailyAnomalyThreshold);
+
+  const runNights: RunNight[] = shownDay
+    ? Array.from({ length: SHORT_RUN_LOOKBACK_DAYS }, (_, offset) => {
+        const day = shiftIsoDay(shownDay, -offset) ?? shownDay;
+        const analysis = analysisByDay.get(day);
+        return {
+          recorded: groups.has(day),
+          asleepMinutes: asleepMinutes(day),
+          usualMinutes: analysis?.baselineSleepMinutes ?? null,
+          sleepZ: analysis?.sleepDurationZScore ?? null,
+        };
+      })
+    : [];
+
   return {
     today,
     shownDay,
     isLastNight: shownDay === today,
+    week,
+    shortRun: shortNightRun(runNights),
     night: shown
       ? {
           totalSleepSeconds: shown.night.totalSleepDuration,
