@@ -183,6 +183,23 @@ describe("Alerts page", () => {
     expect(html).not.toContain("0-day");
   });
 
+  it("says how far a flag has eased from its peak, not 'bounce-back'", async () => {
+    state.rows.episode_assessments = [
+      assessment("2026-10-01", {
+        tier: "watch",
+        direction: "hyper",
+        confidence: 3,
+        confounderLikelihood: 0.45,
+        consecutiveConcerningDays: 2,
+        researchContext: STORED_CONTEXT,
+      }),
+    ];
+    const html = await renderAlerts();
+    expect(html).toContain("Eased from its peak:");
+    expect(html).toContain("45%");
+    expect(html).not.toMatch(/bounce-back/i);
+  });
+
   it("still words a flag stored without a night count by its consecutive days", async () => {
     flaggedRows("hyper");
     const html = await renderAlerts();

@@ -553,7 +553,7 @@ export default async function AlertsPage({
 
               {(ep.confounderLikelihood ?? 0) > 0.2 && (
                 <p className="text-xs text-muted-foreground tabular-nums">
-                  Bounce-back index:{" "}
+                  Eased from its peak:{" "}
                   {((ep.confounderLikelihood ?? 0) * 100).toFixed(0)}%
                 </p>
               )}

@@ -202,6 +202,13 @@ describe("how many concerning nights each tier needs", () => {
     expect(mostlyAgainst.consecutiveConcerningDays).toBe(7);
   });
 
+  it("says how far the latest night has eased from the stretch's peak, in the app's own word", () => {
+    const eased = assess([[HIGH, 1], [HIGH, 1], [2, 1]]);
+    expect(eased.tier).not.toBe("none");
+    expect(eased.summary).toMatch(/Eased from its peak: 43%\./);
+    expect(eased.summary).not.toMatch(/bounce/i);
+  });
+
   it("stops at Watch when the nights lean toward neither side", () => {
     const unclear = assess(Array.from({ length: 7 }, () => [HIGH, 0] as [number, number]));
     expect(unclear.direction).toBeNull();

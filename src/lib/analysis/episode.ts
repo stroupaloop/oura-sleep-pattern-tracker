@@ -276,7 +276,7 @@ function buildSummary(
   }
 
   if (confounderLikelihood > 0.3) {
-    parts.push(`Bounce-back index: ${(confounderLikelihood * 100).toFixed(0)}%.`);
+    parts.push(`Eased from its peak: ${(confounderLikelihood * 100).toFixed(0)}%.`);
   }
 
   return parts.join(" ");

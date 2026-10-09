@@ -172,7 +172,8 @@ export default function MethodologyPage() {
             <p className="text-xs text-muted-foreground">
               A flag is lowered when the latest night has eased. The app
               compares the latest night&apos;s score with the highest score in
-              the 3-, 5- or 7-night stretch that gave the strongest evidence.
+              the 3-, 5- or 7-night stretch (or the 14 nights of the two-week
+              check) that gave the strongest evidence.
               The evidence is reduced in proportion to the drop, and a drop of
               more than {percent(SENSITIVITY_PRESETS.medium.bounceBackThreshold)}{" "}
               of that peak at Medium sensitivity (
@@ -318,20 +319,20 @@ export default function MethodologyPage() {
             <div className="text-sm font-medium">Pattern Profile</div>
             <p className="text-xs text-muted-foreground">
               <strong>BP1 pattern profile:</strong> Uses the base daily metric
-              weights and applies less bounce-back attenuation to
-              higher-activation evidence. It is not validated to detect manic
-              episodes.
+              weights. When the latest night has eased, it takes less off a
+              higher-activation pattern&apos;s evidence than the default does.
+              It is not validated to detect manic episodes.
             </p>
             <p className="text-xs text-muted-foreground">
               <strong>BP2 pattern profile:</strong> Uses the base daily metric
-              weights and the default bounce-back attenuation, so it scores
-              the same as Not specified. The research does not yet support
+              weights and the default easing, so it scores the same as Not
+              specified. The research does not yet support
               scoring Bipolar II differently. It is not a validated hypomania
               detector.
             </p>
             <p className="text-xs text-muted-foreground">
               <strong>Not specified:</strong> Uses the base daily metric
-              weights and default bounce-back attenuation.
+              weights and the default easing.
             </p>
           </div>
           <div className="rounded-lg border p-4 space-y-1">
