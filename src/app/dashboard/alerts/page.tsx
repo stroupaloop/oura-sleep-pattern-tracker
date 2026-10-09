@@ -1,7 +1,7 @@
 export const dynamic = "force-dynamic";
 
 import Link from "next/link";
-import { ChevronDown, History } from "lucide-react";
+import { ChevronDown, CircleCheck, History } from "lucide-react";
 import { db } from "@/lib/db";
 import {
   dailyAnalysis,
@@ -30,6 +30,13 @@ import {
   type RetrospectiveAgreement,
 } from "@/lib/analysis/retrospective";
 import { PageHeader } from "@/components/page-header";
+import { DateRangeSelector } from "@/components/ui/date-range-selector";
+import {
+  filterToDateRange,
+  presetsFor,
+  resolveDateRange,
+  type RangeParams,
+} from "@/lib/date-range";
 import { PatternDirectionLabel } from "@/components/pattern-direction-label";
 import { Callout } from "@/components/ui/callout";
 import { SupportLine } from "@/components/support-line";
@@ -99,12 +106,12 @@ function RetrospectiveAgreementCard({
     <Panel
       id="retrospective-agreement"
       title="Retrospective Agreement"
-      description="Compares wearable-only flags with separately logged episode-state check-ins. This is not clinical accuracy."
+      description="Compares wearable-only flags with separately logged episode-state check-ins in the range above. This is not clinical accuracy."
     >
       {agreement.explicitLabelDays === 0 ? (
         <p className="text-sm text-muted-foreground">
-          No episode-state check-ins are available for comparison. Optional
-          check-ins remain separate from scoring.
+          No episode-state check-ins in this range. Optional check-ins remain
+          separate from scoring.
         </p>
       ) : agreement.labelledEvents === 0 ? (
         <p className="text-sm text-muted-foreground">
@@ -233,7 +240,14 @@ function ResearchContextCard({
   );
 }
 
-export default async function AlertsPage() {
+const RANGE_PRESETS = presetsFor(["14d", "30d", "90d", "180d", "1y", "all"]);
+
+export default async function AlertsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<RangeParams>;
+} = {}) {
+  const params = (await searchParams) ?? {};
   const [allEpisodes, allAnalysis, moodRows, config, bipolarType] =
     await Promise.all([
       db
@@ -257,10 +271,20 @@ export default async function AlertsPage() {
     config.version,
     bipolarType
   );
-  const episodes = currentAssessments.filter(
+  const today = getTodayET();
+  const range = resolveDateRange(params, {
+    today,
+    defaultToken: "90d",
+    earliest: currentAssessments.at(-1)?.day ?? null,
+  });
+  const assessmentsInRange = filterToDateRange(currentAssessments, range);
+  const allFlagged = currentAssessments.filter(
     (assessment) => assessment.tier !== "none"
   );
-  const labelledMood = moodRows.filter(
+  const episodes = assessmentsInRange.filter(
+    (assessment) => assessment.tier !== "none"
+  );
+  const labelledMood = filterToDateRange(moodRows, range).filter(
     (
       row
     ): row is {
@@ -268,6 +292,8 @@ export default async function AlertsPage() {
       episodeState: string;
     } => row.episodeState !== null && row.episodeState !== "none"
   );
+  // Events are the labels inside the range; their lookback reads the days
+  // before it, so every assessment goes in.
   const agreement = evaluateRetrospectiveAgreement(
     currentAssessments.map((assessment) => ({
       day: assessment.day,
@@ -275,7 +301,7 @@ export default async function AlertsPage() {
       direction: assessment.direction,
       evaluable: assessment.bestWindowDays !== null,
     })),
-    moodRows
+    filterToDateRange(moodRows, range)
   );
   const staleAssessmentCount =
     allEpisodes.length - currentAssessments.length;
@@ -283,10 +309,9 @@ export default async function AlertsPage() {
   const latestEvaluatedAt = formatEvaluatedAt(
     latestAssessment?.evaluatedAt ?? null
   );
-  const today = getTodayET();
   const currentYear = today.slice(0, 4);
 
-  const timelineEpisodes = currentAssessments.map((e) => ({
+  const timelineEpisodes = assessmentsInRange.map((e) => ({
     day: e.day,
     tier: e.tier,
     direction: e.direction,
@@ -304,9 +329,9 @@ export default async function AlertsPage() {
         title="Pattern Alerts"
         description={
           <>
-            {currentAssessments.length} current days analyzed, {episodes.length}{" "}
+            {currentAssessments.length} current days analyzed, {allFlagged.length}{" "}
             in-app pattern flag
-            {episodes.length !== 1 ? "s" : ""}
+            {allFlagged.length !== 1 ? "s" : ""}
             <span className="mt-1 block text-xs">
               {profileLabel(bipolarType)} heuristic · config v{config.version} ·{" "}
               {PATTERN_SIGNAL_MODE} · algorithm {PATTERN_ALGORITHM_VERSION}
@@ -315,6 +340,13 @@ export default async function AlertsPage() {
           </>
         }
         actions={<AnalyzeButton />}
+      />
+
+      <DateRangeSelector
+        range={range}
+        presets={RANGE_PRESETS}
+        today={today}
+        detail={`${episodes.length} flagged ${episodes.length === 1 ? "night" : "nights"}`}
       />
 
       {staleAssessmentCount > 0 && (
@@ -342,7 +374,13 @@ export default async function AlertsPage() {
         </Callout>
       )}
 
-      {currentAssessments.length > 0 && (
+      {currentAssessments.length > 0 && assessmentsInRange.length === 0 && (
+        <EmptyState title="No pattern checks in this range">
+          Nights are checked after each sync. Try a longer range.
+        </EmptyState>
+      )}
+
+      {assessmentsInRange.length > 0 && (
         <EpisodeTimeline
           episodes={timelineEpisodes}
           selfReports={timelineSelfReports}
@@ -365,12 +403,20 @@ export default async function AlertsPage() {
         </EmptyState>
       )}
 
-      {episodes.length === 0 && latestAssessment && (
-        <AlertsCheckStatus
-          latestCheckedDay={latestAssessment.day}
-          today={today}
-        />
-      )}
+      {episodes.length === 0 &&
+        latestAssessment &&
+        assessmentsInRange.length > 0 &&
+        (range.end === today ? (
+          <AlertsCheckStatus
+            latestCheckedDay={latestAssessment.day}
+            today={today}
+          />
+        ) : (
+          <Callout icon={CircleCheck} title="No pattern flags in this range">
+            The checked nights in this range raised no sustained pattern flags.
+            This is not a clinical assessment.
+          </Callout>
+        ))}
 
       {episodes.map((storedEpisode) => {
         const ep = {
