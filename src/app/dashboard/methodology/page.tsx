@@ -7,6 +7,74 @@ import {
 } from "@/lib/research/references";
 import { PageHeader } from "@/components/page-header";
 import { Callout } from "@/components/ui/callout";
+import {
+  DEFAULT_ABSOLUTE_THRESHOLDS,
+  SENSITIVITY_PRESETS,
+  type MetricWeights,
+} from "@/lib/analysis/config";
+
+const SCORED_MEASURES: Record<
+  keyof MetricWeights,
+  { category: string; label: string }
+> = {
+  sleepDuration: { category: "Sleep", label: "duration" },
+  bedtimeShift: { category: "Sleep", label: "bedtime" },
+  wakeTimeShift: { category: "Sleep", label: "wake time" },
+  latency: { category: "Sleep", label: "onset latency" },
+  restlessPeriods: { category: "Sleep", label: "restless periods" },
+  sleepEfficiency: { category: "Sleep", label: "efficiency" },
+  deepPct: { category: "Sleep", label: "deep-sleep percentage" },
+  remPct: { category: "Sleep", label: "REM percentage" },
+  heartRate: { category: "Heart", label: "average heart rate" },
+  hrv: { category: "Heart", label: "HRV (RMSSD)" },
+  withinNightVariability: {
+    category: "Heart",
+    label:
+      "within-night variability (heart rate, HRV or sleep stages, whichever is furthest above your usual)",
+  },
+  circadianRegularity: {
+    category: "Circadian",
+    label: "Intradaily Variability (IV)",
+  },
+  temperatureDelta: {
+    category: "Temperature",
+    label: "temperature deviation from Oura's readiness data",
+  },
+  activityLevel: {
+    category: "Activity",
+    label: "daily steps (active minutes when steps are missing)",
+  },
+};
+
+const SCORED_COUNT = Object.keys(SCORED_MEASURES).length;
+
+const METRIC_CARDS = [
+  { category: "Sleep", notScored: "light-sleep percentage" },
+  { category: "Heart", notScored: "lowest heart rate" },
+  {
+    category: "Circadian",
+    notScored:
+      "Interdaily Stability (IS) and Relative Amplitude (RA), computed from 5-min activity data",
+  },
+  { category: "Temperature", notScored: null },
+  {
+    category: "Activity",
+    notScored:
+      "recovery-high minutes, high-stress minutes and resilience level (the last two are also read across several nights)",
+  },
+  {
+    category: "Self-Report",
+    notScored:
+      "mood score, energy level, irritability and anxiety, captured through daily check-ins and retained as context and retrospective labels, not inputs to the pattern score",
+  },
+];
+
+const FIXED_SLEEP_HOURS = DEFAULT_ABSOLUTE_THRESHOLDS.minSleepMinutes / 60;
+const FIXED_EFFICIENCY = DEFAULT_ABSOLUTE_THRESHOLDS.minEfficiency;
+
+function percent(fraction: number): string {
+  return `${Math.round(fraction * 100)}%`;
+}
 
 export default function MethodologyPage() {
   return (
@@ -28,9 +96,20 @@ export default function MethodologyPage() {
           <div className="rounded-lg border p-4 space-y-2">
             <div className="text-sm font-medium">Stage 1: Daily Anomaly Detection</div>
             <p className="text-xs text-muted-foreground">
-              Each day, 14+ metrics are compared against your personal 30-day
-              trimmed-mean baseline. A weighted composite z-score identifies
-              days that deviate significantly from your norm.
+              Each day, {SCORED_COUNT} measures are compared against your
+              personal 30-day trimmed-mean baseline. A weighted composite
+              z-score identifies days that deviate significantly from your
+              norm.
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Two fixed rules are added to that score and do not depend on your
+              usual: a night under {FIXED_SLEEP_HOURS} hours adds 0.5, and
+              sleep efficiency under {FIXED_EFFICIENCY}% adds 0.3. They are a
+              backstop, so a very short or very broken night still counts when
+              your own usual has slipped that low. On their own they cannot flag
+              a night (the line is {SENSITIVITY_PRESETS.medium.dailyAnomalyThreshold}{" "}
+              at Medium sensitivity). Both are rules of thumb chosen for this
+              app, not validated cutoffs.
             </p>
           </div>
           <div className="rounded-lg border p-4 space-y-2">
@@ -49,6 +128,21 @@ export default function MethodologyPage() {
               Higher- or lower-activation direction describes which inputs
               dominate; it does not identify a mood episode.
             </p>
+            <p className="text-xs text-muted-foreground">
+              A flag is lowered when the latest night has eased. The app
+              compares the latest night&apos;s score with the highest score in
+              the 3-, 5- or 7-night stretch that gave the strongest evidence.
+              The evidence is reduced in proportion to the drop, and a drop of
+              more than {percent(SENSITIVITY_PRESETS.medium.bounceBackThreshold)}{" "}
+              of that peak at Medium sensitivity (
+              {percent(SENSITIVITY_PRESETS.low.bounceBackThreshold)} at Low,{" "}
+              {percent(SENSITIVITY_PRESETS.high.bounceBackThreshold)} at High)
+              clears the flag completely, however strong the evidence was
+              earlier in the stretch. Lower-activation patterns need a drop 20
+              percentage points larger. This keeps a flag from lingering after a
+              rough night has passed; it is a rule of thumb, not a validated
+              cutoff.
+            </p>
           </div>
         </div>
       </section>
@@ -57,53 +151,39 @@ export default function MethodologyPage() {
       <section className="space-y-4">
         <h2 className="text-xl font-semibold">Metrics We Track</h2>
         <p className="text-sm text-muted-foreground">
-          We compute and monitor 16+ metrics across six categories.
+          {SCORED_COUNT} measures are scored every night, each against your own
+          usual. Measures listed as not scored are still stored and shown in
+          the app, but they do not add to the nightly score.
         </p>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="rounded-lg border p-4 space-y-1">
-            <div className="text-sm font-medium">Sleep</div>
-            <p className="text-xs text-muted-foreground">
-              Duration, deep/REM/light stage percentages, efficiency, onset
-              latency, restless periods, fragmentation index
-            </p>
-          </div>
-          <div className="rounded-lg border p-4 space-y-1">
-            <div className="text-sm font-medium">Heart</div>
-            <p className="text-xs text-muted-foreground">
-              Average HR, lowest HR, HRV (RMSSD), within-night HR variability
-              (CV), within-night HRV variability (CV)
-            </p>
-          </div>
-          <div className="rounded-lg border p-4 space-y-1">
-            <div className="text-sm font-medium">Circadian</div>
-            <p className="text-xs text-muted-foreground">
-              Interdaily Stability (IS), Intradaily Variability (IV), Relative
-              Amplitude (RA) &mdash; computed from 5-min activity data
-            </p>
-          </div>
-          <div className="rounded-lg border p-4 space-y-1">
-            <div className="text-sm font-medium">Temperature</div>
-            <p className="text-xs text-muted-foreground">
-              Skin temperature delta from baseline, temperature deviation from
-              readiness data
-            </p>
-          </div>
-          <div className="rounded-lg border p-4 space-y-1">
-            <div className="text-sm font-medium">Activity</div>
-            <p className="text-xs text-muted-foreground">
-              Daily steps, active minutes, stress high periods, recovery high
-              periods, resilience level
-            </p>
-          </div>
-          <div className="rounded-lg border p-4 space-y-1">
-            <div className="text-sm font-medium">Self-Report</div>
-            <p className="text-xs text-muted-foreground">
-              Mood score, energy level, irritability, anxiety &mdash; captured
-              through daily check-ins and retained as context and retrospective
-              labels, not inputs to the pattern score
-            </p>
-          </div>
+          {METRIC_CARDS.map((card) => {
+            const scored = Object.values(SCORED_MEASURES)
+              .filter((measure) => measure.category === card.category)
+              .map((measure) => measure.label);
+            return (
+              <div
+                key={card.category}
+                className="rounded-lg border p-4 space-y-1"
+              >
+                <div className="text-sm font-medium">{card.category}</div>
+                {scored.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Scored:</span>{" "}
+                    {scored.join(", ")}
+                  </p>
+                )}
+                {card.notScored && (
+                  <p className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      Not scored:
+                    </span>{" "}
+                    {card.notScored}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
 
