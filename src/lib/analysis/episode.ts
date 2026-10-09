@@ -11,6 +11,7 @@ import {
   concerningNightsInSpan,
   describePersistence,
   FlagTier,
+  LOWER_VIEW_BREAK,
   LOWER_VIEW_DAYS,
   LOWER_VIEW_MIN_NIGHTS,
   Persistence,
@@ -452,7 +453,8 @@ export function assessEpisode(
     persistence = null;
   }
 
-  if (lowerView) {
+  const swungHigher = (latestResult.activation ?? 0) > LOWER_VIEW_BREAK;
+  if (lowerView && !swungHigher) {
     const lower = strongestTierMet(
       lowerViewRules(config),
       lowerView.confidence,
@@ -471,9 +473,17 @@ export function assessEpisode(
     }
   }
 
+  // The same swing voids a "lower" label on the short windows, which also
+  // look back: the flag stays, but it no longer says which way, and with no
+  // direction it goes no higher than Watch.
+  let direction = chosen.direction;
+  if (direction === "hypo" && swungHigher && tier !== "none") {
+    direction = null;
+    if (TIER_RANK[tier] > TIER_RANK.watch) tier = "watch";
+  }
+
   const confidence = chosen.confidence;
   const confounderLikelihood = Math.min(1, chosen.bounceBackScore);
-  const direction = chosen.direction;
   const summary = buildSummary(tier, direction, confidence, confounderLikelihood, persistence, drivers);
   const researchContext = buildResearchContext(
     tier,

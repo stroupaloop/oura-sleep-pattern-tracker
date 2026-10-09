@@ -216,6 +216,20 @@ describe("how many concerning nights each tier needs", () => {
     expect(unclear.tier).toBe("watch");
   });
 
+  it("no longer calls a pattern lower once the latest night swings clearly higher, and holds it at Watch", () => {
+    const lowerNights: Array<[number, number]> = Array.from({ length: 7 }, () => [HIGH, -1]);
+    const steady = assess(lowerNights);
+    expect(steady.direction).toBe("hypo");
+    expect(steady.tier).toBe("alert");
+
+    const swung = assess([...lowerNights.slice(1), [HIGH, 1.8]]);
+    expect(swung.direction).toBeNull();
+    expect(swung.tier).toBe("watch");
+
+    const milder = assess([...lowerNights.slice(1), [HIGH, 0.6]]);
+    expect(milder.direction).toBe("hypo");
+  });
+
   describe("the two-week view", () => {
     // Eight concerning nights of fourteen, never two in a row at the end.
     const slide = (activation: number): Array<[number, number]> =>
@@ -237,6 +251,28 @@ describe("how many concerning nights each tier needs", () => {
       const result = assess(slide(1));
       expect(result.tier).toBe("none");
       expect(result.bestWindowDays).not.toBe(14);
+    });
+
+    // Ten concerning nights leaning lower among the first thirteen, then a quiet last night.
+    const withLastNight = (last: [number, number]): Array<[number, number]> => [
+      ...[...("CCCqCCCCqCqCC")].map((night): [number, number] =>
+        night === "C" ? [1.6, -1] : [0.9, -0.5]
+      ),
+      last,
+    ];
+
+    it("is set aside when the latest night swings clearly toward higher activation", () => {
+      const swung = assess(withLastNight([0.9, 1.8]));
+      expect(swung.tier).toBe("none");
+      expect(swung.direction).not.toBe("hypo");
+    });
+
+    it("stays when the latest night only leans a little the other way", () => {
+      const result = assess(withLastNight([0.9, 0.6]));
+      expect(result.bestWindowDays).toBe(14);
+      expect(result.direction).toBe("hypo");
+      expect(result.tier).toBe("warning");
+      expect(result.researchContext?.persistence).toEqual({ nights: 10, span: 14 });
     });
 
     it("lets go once the latest night has eased far enough", () => {

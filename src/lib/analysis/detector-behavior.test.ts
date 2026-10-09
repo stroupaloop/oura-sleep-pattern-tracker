@@ -340,6 +340,33 @@ describe("detector behaviour on simulated people", () => {
     expect(calledLower / flaggedLate).toBeGreaterThanOrEqual(0.95);
   });
 
+  it("does not go on calling the pattern lower once a lower stretch swings to higher activation", () => {
+    const swing = ONSET + 21;
+    const lower = episode(ONSET, 7, 14, 0, LOWER);
+    const higher = episode(swing, 2, 8, 2, HIGHER_STRONG);
+    let lowerOnSecondNight = 0;
+    let higherByFourthNight = 0;
+    for (const seed of SEEDS) {
+      const history = scoreHistory(
+        simulate(swing + 20, seed, (index) => (index < swing ? lower(index) : higher(index))),
+        DEFAULT_CONFIG,
+        "bp2",
+        nightsBetween(swing, swing + 6)
+      );
+      if (history.assessments.get(dayAt(swing + 1))?.direction === "hypo" && flaggedOn(history, swing + 1)) {
+        lowerOnSecondNight++;
+      }
+      if (
+        flaggedOn(history, swing + 3) &&
+        history.assessments.get(dayAt(swing + 3))?.direction === "hyper"
+      ) {
+        higherByFourthNight++;
+      }
+    }
+    expect(lowerOnSecondNight / SEEDS.length).toBeLessThanOrEqual(0.25);
+    expect(higherByFourthNight / SEEDS.length).toBeGreaterThanOrEqual(0.8);
+  });
+
   it("does not let one all-nighter and a recovery sleep reach an alert", () => {
     let warned = 0;
     for (const seed of SEEDS) {

@@ -19,6 +19,16 @@ export const ALERT_SPAN_DAYS = 7;
  */
 export const LOWER_VIEW_DAYS = 14;
 
+/**
+ * The two-week view looks back, so after a swing it would go on reading
+ * "lower" for the first nights of a pattern that has turned. A night that
+ * leans this far toward higher activation sets the view aside until the
+ * pattern settles. An ordinary night inside a lower stretch almost never gets
+ * here (2 in 1,000 in a moderate simulated slide, none in a full one),
+ * while 1 night in 12 does in a steady year, when nothing is being read.
+ */
+export const LOWER_VIEW_BREAK = 1.0;
+
 /** Nights out of the last 14, leaning lower, that each tier asks for. */
 export const LOWER_VIEW_MIN_NIGHTS: Record<FlagTier, number> = {
   watch: 8,
