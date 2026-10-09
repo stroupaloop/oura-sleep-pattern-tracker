@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { EpisodeTimeline, formatTimelineTick } from "./episode-timeline";
+import { EpisodeTimeline } from "./episode-timeline";
 
 describe("EpisodeTimeline", () => {
   const html = renderToStaticMarkup(
@@ -63,16 +63,5 @@ describe("EpisodeTimeline over a stretch with missing days", () => {
     expect(render(["2026-07-28", "2026-07-30"])).toContain(
       "1 night has no recording and appears as a gap."
     );
-  });
-});
-
-describe("formatTimelineTick", () => {
-  it("names the month so a label is not mistaken for a day count", () => {
-    expect(formatTimelineTick("2026-10-09", false)).toBe("Oct 9");
-    expect(formatTimelineTick("2026-01-05", false)).toBe("Jan 5");
-  });
-
-  it("adds the year when the chart spans more than one", () => {
-    expect(formatTimelineTick("2025-03-27", true)).toBe("Mar 27 ’25");
   });
 });

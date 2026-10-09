@@ -21,7 +21,7 @@ import {
 } from "./chart-gaps";
 import { CHART, legendLabel } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
-import { formatNightLabel } from "@/lib/health/format";
+import { axisDayProps, formatNightLabel } from "@/lib/health/format";
 import {
   Card,
   CardContent,
@@ -265,6 +265,7 @@ export function SleepTrendChart({
   windowDays = 30,
   threshold = 1.5,
 }: SleepTrendChartProps) {
+  const dayAxis = axisDayProps(data.map((point) => point.day));
   const hrvData = mergeHrvData(data, analysisData, threshold);
   const hrData = mergeHrData(data, analysisData, threshold);
   const hasHrvBaseline =
@@ -278,7 +279,7 @@ export function SleepTrendChart({
         <CardHeader>
           <CardTitle>Sleep Duration</CardTitle>
           <CardDescription>
-            Hours in each stage, last {windowDays} days
+            Hours in each stage over {windowDays} days
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -287,10 +288,9 @@ export function SleepTrendChart({
               <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
               <XAxis
                 dataKey="day"
-                tickFormatter={(d) => d.slice(5)}
+                {...dayAxis}
                 fontSize={11}
                 tick={{ fill: "var(--muted-foreground)" }}
-                interval="preserveStartEnd"
               />
               <YAxis
                 domain={[0, "auto"]}
@@ -351,10 +351,9 @@ export function SleepTrendChart({
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
                   dataKey="day"
-                  tickFormatter={(d) => d.slice(5)}
+                  {...dayAxis}
                   fontSize={11}
                   tick={{ fill: "var(--muted-foreground)" }}
-                  interval="preserveStartEnd"
                 />
                 <YAxis
                   // Fit the night-to-night range; from zero it flattens.
@@ -417,10 +416,9 @@ export function SleepTrendChart({
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
                 <XAxis
                   dataKey="day"
-                  tickFormatter={(d) => d.slice(5)}
+                  {...dayAxis}
                   fontSize={11}
                   tick={{ fill: "var(--muted-foreground)" }}
-                  interval="preserveStartEnd"
                 />
                 <YAxis
                   // Fit the night-to-night range; from zero it flattens.

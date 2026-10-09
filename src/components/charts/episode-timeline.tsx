@@ -28,7 +28,7 @@ import {
   type EpisodeState,
 } from "@/lib/episode-states";
 import { fillCalendarDays } from "@/lib/health/calendar-rows";
-import { formatNightLabel } from "@/lib/health/format";
+import { axisDayProps, formatNightLabel } from "@/lib/health/format";
 import { GapNote } from "./chart-gaps";
 import { AXIS_TICK } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
@@ -275,16 +275,6 @@ function buildTimeline(
   );
 }
 
-/** "Oct 9", with the year when the chart spans more than one: "Mar 27 ’25". */
-export function formatTimelineTick(day: string, withYear: boolean): string {
-  const label = new Intl.DateTimeFormat("en-US", {
-    timeZone: "UTC",
-    month: "short",
-    day: "numeric",
-  }).format(new Date(`${day}T12:00:00Z`));
-  return withYear ? `${label} ’${day.slice(2, 4)}` : label;
-}
-
 export function EpisodeTimeline({
   episodes,
   selfReports,
@@ -296,7 +286,6 @@ export function EpisodeTimeline({
 }) {
   const data = buildTimeline(episodes, selfReports);
   if (data.length === 0) return null;
-  const spansYears = data[0].day.slice(0, 4) !== data[data.length - 1].day.slice(0, 4);
 
   // Each threshold gets its own tick, so a line is read by its value too.
   const ticks = [
@@ -324,10 +313,8 @@ export function EpisodeTimeline({
           >
             <XAxis
               dataKey="day"
-              tickFormatter={(day: string) => formatTimelineTick(day, spansYears)}
+              {...axisDayProps(data.map((point) => point.day))}
               tick={AXIS_TICK}
-              interval="preserveStartEnd"
-              minTickGap={spansYears ? 36 : 24}
             />
             <YAxis
               domain={[0, 10]}
