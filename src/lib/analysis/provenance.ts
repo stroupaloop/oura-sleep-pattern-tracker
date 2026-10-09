@@ -9,9 +9,12 @@ import type { BipolarType } from "./config";
  * from a metric's baseline center no longer widen its spread. 2026.10.3: the
  * same for prior windows' sleep-onset and bedtime variability. 2026.10.4: a
  * night's usual comes from the 90 nights before the latest 14, so a long
- * shift is still measured against the nights before it.
+ * shift is still measured against the nights before it. 2026.10.5: a tier
+ * needs enough concerning nights among the last few rather than an unbroken
+ * run, direction comes from a signed activation score, an unclear direction
+ * stays at Watch, and a two-week view reads a slow lower-activation slide.
  */
-export const PATTERN_ALGORITHM_VERSION = "2026.10.4";
+export const PATTERN_ALGORITHM_VERSION = "2026.10.5";
 export const PATTERN_SIGNAL_MODE = "wearable-only";
 
 export interface PatternProvenance {

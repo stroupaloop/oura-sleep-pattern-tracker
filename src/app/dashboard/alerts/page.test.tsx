@@ -161,6 +161,34 @@ describe("Alerts page", () => {
     expect(html).not.toContain("physical activity");
   });
 
+  it("says how many of the last nights a flag rests on when it was not an unbroken run", async () => {
+    state.rows.episode_assessments = [
+      assessment("2026-10-01", {
+        tier: "watch",
+        direction: "hypo",
+        confidence: 3,
+        bestWindowDays: 14,
+        consecutiveConcerningDays: 0,
+        researchContext: JSON.stringify({
+          ...JSON.parse(STORED_CONTEXT),
+          persistence: { nights: 9, span: 14 },
+        }),
+      }),
+    ];
+    const html = await renderAlerts();
+    expect(html).toContain(
+      "Lower-activation pattern flag on 9 of the last 14 nights, from the available data"
+    );
+    expect(html).toContain("Nights outside your usual");
+    expect(html).not.toContain("0-day");
+  });
+
+  it("still words a flag stored without a night count by its consecutive days", async () => {
+    flaggedRows("hyper");
+    const html = await renderAlerts();
+    expect(html).toContain("2-day higher-activation pattern flag from the available data");
+  });
+
   describe("date range", () => {
     const recentFlag = assessment("2026-09-20", {
       tier: "watch",

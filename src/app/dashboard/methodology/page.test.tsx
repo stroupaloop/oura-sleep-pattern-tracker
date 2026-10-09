@@ -12,6 +12,10 @@ import {
   type DetectionConfigValues,
 } from "@/lib/analysis/config";
 import { assessEpisode } from "@/lib/analysis/episode";
+import {
+  LOWER_VIEW_DAYS,
+  LOWER_VIEW_MIN_NIGHTS,
+} from "@/lib/analysis/persistence";
 import MethodologyPage from "./page";
 
 const html = renderToStaticMarkup(<MethodologyPage />);
@@ -242,5 +246,116 @@ describe("Methodology page pattern profiles", () => {
     expect(text).toContain("Uses the base daily metric weights and the default");
     expect(text).toContain("scores the same as Not specified");
     expect(text).not.toMatch(/exploratory within-night variability/);
+  });
+});
+
+describe("Methodology page flagging rules", () => {
+  // Evidence bars are lowered so the night counts are what decides the tier.
+  const config = {
+    ...DEFAULT_CONFIG,
+    watchMinConfidence: 0,
+    warningMinConfidence: 0,
+    alertMinConfidence: 0,
+  };
+  const CONCERNING = DEFAULT_CONFIG.concernThreshold + 1;
+  const QUIET = DEFAULT_CONFIG.concernThreshold - 0.1;
+
+  function nightsOf(pattern: boolean[], activation: number): DailyAnalysisResult[] {
+    return pattern.map((concerning, index) => ({
+      day: `2026-07-${String(index + 1).padStart(2, "0")}`,
+      metrics: metrics(`2026-07-${String(index + 1).padStart(2, "0")}`),
+      baselines: {},
+      zScores: { withinNightVar: 1, activity: 1, circadianIV: 1 },
+      compositeScore: concerning ? CONCERNING : QUIET,
+      isAnomaly: concerning,
+      direction: concerning ? (activation > 0 ? "hyper" : "hypo") : null,
+      notes: "",
+      activation: concerning ? activation : activation / 2,
+    }));
+  }
+
+  function tierOf(pattern: boolean[], activation = 1) {
+    const nights = nightsOf(pattern, activation);
+    return assessEpisode(nights[nights.length - 1].day, nights, [], config).tier;
+  }
+
+  const [watchNights, warningNights, alertNights, alertSpan] = numbersIn(
+    /Watch needs (\d+) such nights in a row, Warning (\d+) and Alert (\d+) of the last (\d+)/
+  );
+
+  it("states the minimum nights the detector is configured with", () => {
+    expect([watchNights, warningNights, alertNights]).toEqual([
+      DEFAULT_CONFIG.watchMinDays,
+      DEFAULT_CONFIG.warningMinDays,
+      DEFAULT_CONFIG.alertMinDays,
+    ]);
+  });
+
+  it("raises Watch and Warning only after the stated unbroken run", () => {
+    const endingIn = (run: number) => [...Array(7 - run).fill(false), ...Array(run).fill(true)];
+    expect(tierOf(endingIn(watchNights - 1))).toBe("none");
+    expect(tierOf(endingIn(watchNights))).toBe("watch");
+    expect(tierOf(endingIn(warningNights - 1))).toBe("watch");
+    expect(tierOf(endingIn(warningNights))).toBe("warning");
+  });
+
+  it("raises Alert on the stated count of the stated last nights, with gaps allowed", () => {
+    const gaps = alertSpan - alertNights;
+    // Quiet nights come early, so the last night is still a concerning one.
+    const quietAt = [1, 4, 2, 3];
+    const pattern = (quiet: number) =>
+      Array.from({ length: alertSpan }, (_, index) => !quietAt.slice(0, quiet).includes(index));
+    expect(pattern(gaps).filter(Boolean)).toHaveLength(alertNights);
+    expect(tierOf(pattern(gaps))).toBe("alert");
+    expect(tierOf(pattern(gaps + 1))).not.toBe("alert");
+  });
+
+  it("counts only nights that lean the same way as the pattern toward Alert", () => {
+    const nights = nightsOf(Array(alertSpan).fill(true), 1).map((night, index) =>
+      index < alertSpan - alertNights + 1 ? { ...night, activation: -0.2 } : night
+    );
+    const last = nights[nights.length - 1].day;
+    expect(assessEpisode(last, nights, [], config).tier).not.toBe("alert");
+  });
+
+  it("stops an unclear pattern at Watch", () => {
+    expect(tierOf(Array(alertSpan).fill(true), 0)).toBe("watch");
+  });
+
+  describe("the two-week check", () => {
+    const [days, watchK, warningK, alertK] = numbersIn(
+      /Over the last (\d+) nights, (\d+), (\d+) or (\d+) nights leaning toward lower activation/
+    );
+
+    it("states the span and the counts the detector uses", () => {
+      expect([days, watchK, warningK, alertK]).toEqual([
+        LOWER_VIEW_DAYS,
+        LOWER_VIEW_MIN_NIGHTS.watch,
+        LOWER_VIEW_MIN_NIGHTS.warning,
+        LOWER_VIEW_MIN_NIGHTS.alert,
+      ]);
+    });
+
+    // The first seven nights fill up first; the rest are spread so the last
+    // night is quiet and no short rule fires before the two-week one.
+    const fortnight = (count: number) => {
+      const pattern: boolean[] = Array(days).fill(false);
+      const order = [0, 1, 2, 3, 4, 5, 6, 7, 9, 11, 12, 8];
+      order.slice(0, count).forEach((index) => (pattern[index] = true));
+      return pattern;
+    };
+
+    it("raises each tier at the stated count of lower-leaning nights, and not one night sooner", () => {
+      expect(tierOf(fortnight(watchK - 1), -1)).toBe("none");
+      expect(tierOf(fortnight(watchK), -1)).toBe("watch");
+      expect(tierOf(fortnight(warningK - 1), -1)).toBe("watch");
+      expect(tierOf(fortnight(warningK), -1)).toBe("warning");
+      expect(tierOf(fortnight(alertK - 1), -1)).toBe("warning");
+      expect(tierOf(fortnight(alertK), -1)).toBe("alert");
+    });
+
+    it("leaves the same nights unflagged when they lean toward higher activation", () => {
+      expect(tierOf(fortnight(warningK), 1)).toBe("none");
+    });
   });
 });

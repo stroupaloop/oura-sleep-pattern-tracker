@@ -3,9 +3,18 @@ import { episodeAssessments } from "@/lib/db/schema";
 import { sql } from "drizzle-orm";
 import { DetectionConfigValues, BipolarType } from "./config";
 import { DailyAnalysisResult } from "./anomaly";
-import { WindowResult, analyzeAllWindows } from "./window";
+import { NIGHT_AGREES_AT, WindowResult, analyzeAllWindows } from "./window";
 import { getReferencesForDirection } from "@/lib/research/references";
 import { isNextCalendarDay } from "./baseline";
+import {
+  ALERT_SPAN_DAYS,
+  concerningNightsInSpan,
+  describePersistence,
+  FlagTier,
+  LOWER_VIEW_DAYS,
+  LOWER_VIEW_MIN_NIGHTS,
+  Persistence,
+} from "./persistence";
 import {
   PATTERN_ALGORITHM_VERSION,
   PATTERN_SIGNAL_MODE,
@@ -26,6 +35,8 @@ export interface AlertResearchContext {
     moodCoverage: number;
     note: string | null;
   };
+  /** Concerning nights behind the flag, out of the nights its rule looks at. */
+  persistence?: Persistence;
 }
 
 export interface EpisodeResult {
@@ -50,6 +61,97 @@ export function finiteMetricOrNull(
   value: number | null | undefined
 ): number | null {
   return value != null && Number.isFinite(value) ? value : null;
+}
+
+const TIER_RANK: Record<Tier, number> = { none: 0, watch: 1, warning: 2, alert: 3 };
+
+interface TierRule {
+  tier: FlagTier;
+  minConfidence: number;
+  minNights: number;
+  /** Nights looked back over; an unbroken run when it equals `minNights`. */
+  span: number;
+  /** Count only nights that lean the pattern's way. */
+  leaning: boolean;
+}
+
+function minConfidenceFor(tier: FlagTier, config: DetectionConfigValues): number {
+  return tier === "alert"
+    ? config.alertMinConfidence
+    : tier === "warning"
+      ? config.warningMinConfidence
+      : config.watchMinConfidence;
+}
+
+const STRONGEST_FIRST: FlagTier[] = ["alert", "warning", "watch"];
+
+/** Watch and Warning need an unbroken run; Alert needs enough of the last seven nights. */
+function standardRules(config: DetectionConfigValues): TierRule[] {
+  return [
+    {
+      tier: "alert",
+      minConfidence: config.alertMinConfidence,
+      minNights: config.alertMinDays,
+      span: Math.max(config.alertMinDays, ALERT_SPAN_DAYS),
+      leaning: true,
+    },
+    {
+      tier: "warning",
+      minConfidence: config.warningMinConfidence,
+      minNights: config.warningMinDays,
+      span: config.warningMinDays,
+      leaning: false,
+    },
+    {
+      tier: "watch",
+      minConfidence: config.watchMinConfidence,
+      minNights: config.watchMinDays,
+      span: config.watchMinDays,
+      leaning: false,
+    },
+  ];
+}
+
+/** The two-week rules, read only for a lower-activation lean. */
+function lowerViewRules(config: DetectionConfigValues): TierRule[] {
+  return STRONGEST_FIRST.map((tier) => ({
+    tier,
+    minConfidence: minConfidenceFor(tier, config),
+    minNights: LOWER_VIEW_MIN_NIGHTS[tier],
+    span: LOWER_VIEW_DAYS,
+    leaning: true,
+  }));
+}
+
+function strongestTierMet(
+  rules: TierRule[],
+  confidence: number,
+  nights: DailyAnalysisResult[],
+  run: number,
+  concernThreshold: number,
+  direction: "hyper" | "hypo" | null
+): { tier: Tier; persistence: Persistence | null } {
+  for (const rule of rules) {
+    if (confidence < rule.minConfidence) continue;
+    if (rule.span === rule.minNights) {
+      if (run >= rule.minNights) {
+        return { tier: rule.tier, persistence: { nights: run, span: run } };
+      }
+      continue;
+    }
+    const counted = concerningNightsInSpan(
+      nights,
+      concernThreshold,
+      rule.span,
+      rule.leaning && direction
+        ? { direction, margin: NIGHT_AGREES_AT }
+        : undefined
+    );
+    if (counted >= rule.minNights) {
+      return { tier: rule.tier, persistence: { nights: counted, span: rule.span } };
+    }
+  }
+  return { tier: "none", persistence: null };
 }
 
 function countConsecutiveConcerning(
@@ -141,10 +243,10 @@ function buildSummary(
   direction: "hyper" | "hypo" | null,
   confidence: number,
   confounderLikelihood: number,
-  consecutiveDays: number,
+  persistence: Persistence | null,
   drivers: string[]
 ): string {
-  if (tier === "none") {
+  if (tier === "none" || !persistence) {
     if (confounderLikelihood > 0.5) {
       return "An isolated change was followed by a return toward baseline.";
     }
@@ -166,7 +268,7 @@ function buildSummary(
         : "Strong pattern";
 
   const parts = [
-    `${tierLabel}: ${consecutiveDays}-day ${dirLabel} pattern (evidence score ${confidence.toFixed(1)}/10).`,
+    `${tierLabel}: ${dirLabel} pattern on ${describePersistence(persistence)} (evidence score ${confidence.toFixed(1)}/10).`,
   ];
 
   if (drivers.length > 0) {
@@ -184,13 +286,13 @@ function buildResearchContext(
   tier: Tier,
   direction: "hyper" | "hypo" | null,
   confidence: number,
-  consecutiveDays: number,
+  persistence: Persistence | null,
   drivers: string[],
   result: DailyAnalysisResult,
   config: DetectionConfigValues,
   moodCoverage?: number
 ): AlertResearchContext | null {
-  if (tier === "none") return null;
+  if (tier === "none" || !persistence) return null;
 
   const dirLabel =
     direction === "hyper"
@@ -200,7 +302,7 @@ function buildResearchContext(
         : "mixed";
 
   const headline =
-    `Your available data over the last ${consecutiveDays} day${consecutiveDays !== 1 ? "s" : ""} matched this app's ${dirLabel} pattern rule`;
+    `Your available data matched this app's ${dirLabel} pattern rule on ${describePersistence(persistence)}`;
 
   const whatWeDetected: string[] = [];
   const detected = config.concernThreshold;
@@ -276,6 +378,7 @@ function buildResearchContext(
     disclaimer:
       "This tool tracks patterns for personal awareness. It is not a medical device and does not provide diagnoses. Always consult your healthcare provider for medical decisions.",
     dataCompleteness,
+    persistence,
   };
 }
 
@@ -287,7 +390,7 @@ export function assessEpisode(
   expectedDaysByWindow?: Record<number, number>,
   bipolarType: BipolarType = "unspecified"
 ): EpisodeResult {
-  const { best } = analyzeAllWindows(
+  const { best, lowerView } = analyzeAllWindows(
     recentDailyResults,
     allPriorResults,
     config,
@@ -318,46 +421,65 @@ export function assessEpisode(
     };
   }
 
-  const confidence = best.confidence;
-  const confounderLikelihood = Math.min(1, best.bounceBackScore);
   const drivers = computePrimaryDrivers(
     latestResult,
     latestResult.baselines,
     config
   );
 
-  let tier: Tier = "none";
-  if (
-    confidence >= config.alertMinConfidence &&
-    consecutiveDays >= config.alertMinDays
-  ) {
-    tier = "alert";
-  } else if (
-    confidence >= config.warningMinConfidence &&
-    consecutiveDays >= config.warningMinDays
-  ) {
-    tier = "warning";
-  } else if (
-    confidence >= config.watchMinConfidence &&
-    consecutiveDays >= config.watchMinDays
-  ) {
+  const bounceLimitFor = (window: WindowResult) =>
+    window.direction === "hypo"
+      ? Math.min(config.bounceBackThreshold + 0.2, 1.0)
+      : config.bounceBackThreshold;
+
+  let chosen = best;
+  let { tier, persistence } = strongestTierMet(
+    standardRules(config),
+    best.confidence,
+    recentDailyResults,
+    consecutiveDays,
+    config.concernThreshold,
+    best.direction
+  );
+
+  // Nights that are unusual with no lean toward either side are worth a look
+  // but not an escalation: a direction is what the higher tiers rest on.
+  if (best.direction === null && TIER_RANK[tier] > TIER_RANK.watch) {
     tier = "watch";
   }
-
-  const effectiveBounceThreshold = best.direction === "hypo"
-    ? Math.min(config.bounceBackThreshold + 0.2, 1.0)
-    : config.bounceBackThreshold;
-  if (tier !== "none" && best.bounceBackScore > effectiveBounceThreshold) {
+  if (tier !== "none" && best.bounceBackScore > bounceLimitFor(best)) {
     tier = "none";
+    persistence = null;
   }
 
-  const direction = best.direction;
-  const summary = buildSummary(tier, direction, confidence, confounderLikelihood, consecutiveDays, drivers);
+  if (lowerView) {
+    const lower = strongestTierMet(
+      lowerViewRules(config),
+      lowerView.confidence,
+      recentDailyResults,
+      consecutiveDays,
+      config.concernThreshold,
+      "hypo"
+    );
+    if (
+      TIER_RANK[lower.tier] > TIER_RANK[tier] &&
+      lowerView.bounceBackScore <= bounceLimitFor(lowerView)
+    ) {
+      tier = lower.tier;
+      persistence = lower.persistence;
+      chosen = lowerView;
+    }
+  }
+
+  const confidence = chosen.confidence;
+  const confounderLikelihood = Math.min(1, chosen.bounceBackScore);
+  const direction = chosen.direction;
+  const summary = buildSummary(tier, direction, confidence, confounderLikelihood, persistence, drivers);
   const researchContext = buildResearchContext(
     tier,
     direction,
     confidence,
-    consecutiveDays,
+    persistence,
     drivers,
     latestResult,
     config
@@ -368,8 +490,8 @@ export function assessEpisode(
     tier,
     direction,
     confidence,
-    bestWindowDays: best.windowDays,
-    bestWindow: best,
+    bestWindowDays: chosen.windowDays,
+    bestWindow: chosen,
     consecutiveConcerningDays: consecutiveDays,
     confounderLikelihood,
     primaryDrivers: drivers,
