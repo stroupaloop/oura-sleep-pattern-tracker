@@ -33,7 +33,7 @@ const SUSTAINED_TEMPERATURE_CONFIG: SignalConfig = {
     summary:
       "Temperature and related trends matched this app's sustained-pattern rule.",
     guidance:
-      "This nonspecific pattern cannot establish ovulation, pregnancy, or illness. Consider symptoms, an appropriate test, or clinical advice when relevant.",
+      "This pattern is nonspecific; it can follow many things. If you are worried about your health, talk with your care team.",
 };
 
 const THERMAL_SHIFT_TIMING_CONFIG: SignalConfig = {

@@ -6,9 +6,13 @@ import {
   cyclePredictions,
   healthSignals,
 } from "@/lib/db/schema";
-import { gte, lte, desc, and, isNotNull, eq, lt } from "drizzle-orm";
+import { gte, lte, desc, and, isNotNull, eq, lt, inArray } from "drizzle-orm";
 import { format, subDays, differenceInDays, parseISO } from "date-fns";
 import { getTodayET } from "@/lib/date-utils";
+import {
+  NIGHT_SLEEP_TYPES,
+  selectNightSleepByDay,
+} from "@/lib/oura/main-sleep";
 import { isNextCalendarDay } from "./baseline";
 import type { CycleComputationOutcome } from "./cycle";
 
@@ -112,11 +116,17 @@ export function isWithinRecentCalendarDays(
   return age >= 0 && age <= maximumAgeDays;
 }
 
+/**
+ * Fewer baseline nights than this is not a personal baseline: with two, a
+ * new night lands past 2 standard deviations 18% of the time by chance.
+ */
+export const PERSONAL_BASELINE_MIN_NIGHTS = 7;
+
 export function personalBaselineZScore(
   currentValue: number,
   baselineValues: number[]
 ): number | null {
-  if (baselineValues.length < 2) return null;
+  if (baselineValues.length < PERSONAL_BASELINE_MIN_NIGHTS) return null;
   const mean =
     baselineValues.reduce((sum, value) => sum + value, 0) /
     baselineValues.length;
@@ -269,6 +279,52 @@ export async function runHealthSignalDetection(
   return { signals: detectedSignals.length, resolved };
 }
 
+/**
+ * An ordinary luteal phase keeps temperature up for 11 to 15 nights after
+ * the shift, so any shorter run is just the cycle.
+ */
+const SUSTAINED_TEMPERATURE_MIN_NIGHTS = 18;
+
+/**
+ * One night per sleep day, short `sleep`-typed nights included, so a
+ * two-hour night is a night here as it is in the detector.
+ */
+async function selectNightRows(startDay: string, endDay: string) {
+  const periods = await db
+    .select({
+      day: sleepPeriods.day,
+      type: sleepPeriods.type,
+      bedtimeStart: sleepPeriods.bedtimeStart,
+      bedtimeEnd: sleepPeriods.bedtimeEnd,
+      totalSleepDuration: sleepPeriods.totalSleepDuration,
+      averageHeartRate: sleepPeriods.averageHeartRate,
+      averageHrv: sleepPeriods.averageHrv,
+    })
+    .from(sleepPeriods)
+    .where(
+      and(
+        gte(sleepPeriods.day, startDay),
+        lte(sleepPeriods.day, endDay),
+        inArray(sleepPeriods.type, [...NIGHT_SLEEP_TYPES])
+      )
+    )
+    .orderBy(sleepPeriods.day);
+  return [...selectNightSleepByDay(periods).values()].sort((a, b) =>
+    a.day.localeCompare(b.day)
+  );
+}
+
+async function selectNightHeartRates(
+  startDay: string,
+  endDay: string
+): Promise<Array<{ day: string; value: number | null }>> {
+  const nights = await selectNightRows(startDay, endDay);
+  return nights.map((night) => ({
+    day: night.day,
+    value: night.averageHeartRate,
+  }));
+}
+
 async function detectSustainedTemperaturePattern(
   todayStr: string,
   todayDate: Date
@@ -290,13 +346,19 @@ async function detectSustainedTemperaturePattern(
 
   const shiftDate = parseISO(latestWithShift.thermalShiftDay);
   const daysSinceShift = differenceInDays(todayDate, shiftDate);
-  if (daysSinceShift < 10 || daysSinceShift > 30) return [];
+  if (
+    daysSinceShift < SUSTAINED_TEMPERATURE_MIN_NIGHTS - 1 ||
+    daysSinceShift > 30
+  ) {
+    return [];
+  }
 
   const postShiftCutoff = latestWithShift.thermalShiftDay;
   const preShiftCutoff = format(
     subDays(shiftDate, 14),
     "yyyy-MM-dd"
   );
+  const dayBeforeShift = format(subDays(shiftDate, 1), "yyyy-MM-dd");
   const [postShiftTemps, postShiftHr, baselineTemps, baselineHr] =
     await Promise.all([
       db
@@ -313,21 +375,7 @@ async function detectSustainedTemperaturePattern(
           )
         )
         .orderBy(dailyReadiness.day),
-      db
-        .select({
-          day: sleepPeriods.day,
-          value: sleepPeriods.averageHeartRate,
-        })
-        .from(sleepPeriods)
-        .where(
-          and(
-            gte(sleepPeriods.day, postShiftCutoff),
-            lte(sleepPeriods.day, todayStr),
-            isNotNull(sleepPeriods.averageHeartRate),
-            eq(sleepPeriods.type, "long_sleep")
-          )
-        )
-        .orderBy(sleepPeriods.day),
+      selectNightHeartRates(postShiftCutoff, todayStr),
       db
         .select({
           day: dailyReadiness.day,
@@ -342,21 +390,7 @@ async function detectSustainedTemperaturePattern(
           )
         )
         .orderBy(dailyReadiness.day),
-      db
-        .select({
-          day: sleepPeriods.day,
-          value: sleepPeriods.averageHeartRate,
-        })
-        .from(sleepPeriods)
-        .where(
-          and(
-            gte(sleepPeriods.day, preShiftCutoff),
-            lt(sleepPeriods.day, postShiftCutoff),
-            isNotNull(sleepPeriods.averageHeartRate),
-            eq(sleepPeriods.type, "long_sleep")
-          )
-        )
-        .orderBy(sleepPeriods.day),
+      selectNightHeartRates(preShiftCutoff, dayBeforeShift),
     ]);
 
   const baselineTemperatureRun = latestConsecutiveValues(
@@ -387,17 +421,12 @@ async function detectSustainedTemperaturePattern(
     eligiblePostShiftTemperatures,
     (value) => value > baselineTemperature + 0.15
   );
-  if (consecutiveTemperatureDays < 10) return [];
+  if (consecutiveTemperatureDays < SUSTAINED_TEMPERATURE_MIN_NIGHTS) return [];
 
   const indicators = [
     `Nighttime skin-temperature deviation remained elevated for ${consecutiveTemperatureDays} calendar-consecutive days after a detected thermal shift`,
   ];
-  let evidenceStrength =
-    consecutiveTemperatureDays >= 18
-      ? 0.55
-      : consecutiveTemperatureDays >= 14
-        ? 0.4
-        : 0.25;
+  let evidenceStrength = 0.55;
 
   const baselineHeartRateRun = latestConsecutiveValues(
     baselineHr.filter((row): row is DatedValue => row.value != null),
@@ -422,7 +451,7 @@ async function detectSustainedTemperaturePattern(
     if (consecutiveHeartRateDays >= 7) {
       evidenceStrength += consecutiveHeartRateDays >= 14 ? 0.15 : 0.08;
       indicators.push(
-        `Average heart rate during the Oura long-sleep period was elevated for ${consecutiveHeartRateDays} calendar-consecutive days`
+        `Average heart rate during the night's sleep was elevated for ${consecutiveHeartRateDays} calendar-consecutive days`
       );
     }
   }
@@ -441,6 +470,14 @@ async function detectSustainedTemperaturePattern(
   ];
 }
 
+/**
+ * A night's SpO₂ counts as lower than usual when it is both past 2 standard
+ * deviations of her own recent nights and at least this many points under
+ * their average, so a very steady baseline does not turn a rounding wobble
+ * into a signal.
+ */
+const SPO2_MIN_DROP_POINTS = 1;
+
 async function detectAcuteIllness(
   todayStr: string,
   todayDate: Date
@@ -448,22 +485,8 @@ async function detectAcuteIllness(
   const baselineCutoff = format(subDays(todayDate, 21), "yyyy-MM-dd");
   const recentCutoff = format(subDays(todayDate, 2), "yyyy-MM-dd");
 
-  const [hrData, temperatureData, hrvData, spo2Data] = await Promise.all([
-    db
-      .select({
-        day: sleepPeriods.day,
-        value: sleepPeriods.averageHeartRate,
-      })
-      .from(sleepPeriods)
-      .where(
-        and(
-          gte(sleepPeriods.day, baselineCutoff),
-          lte(sleepPeriods.day, todayStr),
-          isNotNull(sleepPeriods.averageHeartRate),
-          eq(sleepPeriods.type, "long_sleep")
-        )
-      )
-      .orderBy(sleepPeriods.day),
+  const [nights, temperatureData, spo2Data] = await Promise.all([
+    selectNightRows(baselineCutoff, todayStr),
     db
       .select({
         day: dailyReadiness.day,
@@ -479,18 +502,6 @@ async function detectAcuteIllness(
       )
       .orderBy(dailyReadiness.day),
     db
-      .select({ day: sleepPeriods.day, value: sleepPeriods.averageHrv })
-      .from(sleepPeriods)
-      .where(
-        and(
-          gte(sleepPeriods.day, baselineCutoff),
-          lte(sleepPeriods.day, todayStr),
-          isNotNull(sleepPeriods.averageHrv),
-          eq(sleepPeriods.type, "long_sleep")
-        )
-      )
-      .orderBy(sleepPeriods.day),
-    db
       .select({ day: dailySpo2.day, value: dailySpo2.averageSpo2 })
       .from(dailySpo2)
       .where(
@@ -502,6 +513,14 @@ async function detectAcuteIllness(
       )
       .orderBy(dailySpo2.day),
   ]);
+  const hrData = nights.map((night) => ({
+    day: night.day,
+    value: night.averageHeartRate,
+  }));
+  const hrvData = nights.map((night) => ({
+    day: night.day,
+    value: night.averageHrv,
+  }));
 
   const baselineHeartRate = latestConsecutiveValues(
     hrData
@@ -517,7 +536,12 @@ async function detectAcuteIllness(
         row.value != null && row.day >= recentCutoff
     )
     .sort((a, b) => a.day.localeCompare(b.day));
-  if (baselineHeartRate.length < 7 || recentHeartRate.length === 0) return [];
+  if (
+    baselineHeartRate.length < PERSONAL_BASELINE_MIN_NIGHTS ||
+    recentHeartRate.length === 0
+  ) {
+    return [];
+  }
 
   const latestHeartRate = recentHeartRate[recentHeartRate.length - 1];
   const heartRateZ = personalBaselineZScore(
@@ -527,7 +551,7 @@ async function detectAcuteIllness(
   if (heartRateZ == null || heartRateZ <= 2) return [];
 
   const indicators = [
-    `Average heart rate during the Oura long-sleep period was ${heartRateZ.toFixed(1)} standard deviations above its recent baseline`,
+    `Average heart rate during the night's sleep was ${heartRateZ.toFixed(1)} standard deviations above its recent baseline`,
   ];
   let evidenceStrength = 0.4;
 
@@ -582,14 +606,33 @@ async function detectAcuteIllness(
     }
   }
 
+  const baselineSpo2 = latestConsecutiveValues(
+    spo2Data.filter(
+      (row): row is DatedValue =>
+        row.value != null && row.day < recentCutoff
+    ),
+    14
+  );
   const currentSpo2 = spo2Data.find(
     (row) => row.day === latestHeartRate.day && row.value != null
   );
-  if (currentSpo2?.value != null && currentSpo2.value < 95) {
-    evidenceStrength += 0.1;
-    indicators.push(
-      `Average overnight SpO₂ was ${currentSpo2.value}%`
+  if (currentSpo2?.value != null) {
+    const spo2Z = personalBaselineZScore(
+      currentSpo2.value,
+      baselineSpo2.map((row) => row.value)
     );
+    if (spo2Z != null && spo2Z < -2) {
+      const spo2Mean =
+        baselineSpo2.reduce((sum, row) => sum + row.value, 0) /
+        baselineSpo2.length;
+      const spo2Drop = spo2Mean - currentSpo2.value;
+      if (spo2Drop >= SPO2_MIN_DROP_POINTS) {
+        evidenceStrength += 0.1;
+        indicators.push(
+          `Average overnight SpO₂ was ${currentSpo2.value.toFixed(1)}%, ${spo2Drop.toFixed(1)} points below its recent baseline`
+        );
+      }
+    }
   }
 
   if (indicators.length < 2) return [];
@@ -603,7 +646,7 @@ async function detectAcuteIllness(
       indicators,
       summary:
         "Multiple measurements show a physiological strain pattern. This pattern is not specific to illness.",
-      details: `Oura long-sleep average heart-rate z-score ${heartRateZ.toFixed(1)} with ${indicators.length - 1} supporting measurement${indicators.length === 2 ? "" : "s"}.`,
+      details: `Nightly average heart-rate z-score ${heartRateZ.toFixed(1)} with ${indicators.length - 1} supporting measurement${indicators.length === 2 ? "" : "s"}.`,
     },
   ];
 }

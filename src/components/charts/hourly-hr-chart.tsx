@@ -27,7 +27,19 @@ import {
 } from "@/components/ui/segmented-control";
 import { AXIS_TICK, CHART } from "./chart-theme";
 import { ChartTooltipFrame, ChartTooltipRow } from "./chart-tooltip";
-import { type HourlyHrPoint, type HrAnomaly, detectHrAnomalies } from "@/lib/hr-anomalies";
+import {
+  HR_ANOMALY_BASELINE_DAYS,
+  HR_ANOMALY_MIN_BASELINE_DAYS,
+  HR_ANOMALY_MIN_RUN_HOURS,
+  HR_ANOMALY_NIGHT_FIRST_HOUR,
+  HR_ANOMALY_NIGHT_LAST_HOUR,
+  HR_ANOMALY_Z_THRESHOLD,
+  HR_ELEVATED_RESTING_HOURS,
+  HR_ELEVATED_RESTING_Z,
+  type HourlyHrPoint,
+  type HrAnomaly,
+  detectHrAnomalies,
+} from "@/lib/hr-anomalies";
 import { formatIsoDay, shiftIsoDay } from "@/lib/date-utils";
 import { formatNightLabel } from "@/lib/health/format";
 
@@ -63,6 +75,10 @@ function formatHour(h: number): string {
   if (normalized < 12) return `${normalized}a`;
   if (normalized === 12) return "12p";
   return `${normalized - 12}p`;
+}
+
+function standardDeviations(count: number): string {
+  return `${count} standard deviation${count === 1 ? "" : "s"}`;
 }
 
 function prevDay(day: string): string {
@@ -235,9 +251,17 @@ export function HourlyHrChart({ data, firstDay }: HourlyHrChartProps) {
           )}
         </div>
         <CardDescription>
-          Hourly average and observed min–max band (bpm). Markers compare
-          each hour with your average for the same local hour over the two
-          weeks before; they are not clinical alerts.
+          Hourly average and observed min–max band (bpm). Amber marks
+          overnight hours ({formatHour(HR_ANOMALY_NIGHT_FIRST_HOUR)}–
+          {formatHour(HR_ANOMALY_NIGHT_LAST_HOUR + 1)}) that stay more than{" "}
+          {standardDeviations(HR_ANOMALY_Z_THRESHOLD)} above or below your
+          average for the same hour over the previous{" "}
+          {HR_ANOMALY_BASELINE_DAYS} days for at least{" "}
+          {HR_ANOMALY_MIN_RUN_HOURS} hours in a row, and rest hours more than{" "}
+          {standardDeviations(HR_ELEVATED_RESTING_Z)} above it for at least{" "}
+          {HR_ELEVATED_RESTING_HOURS} in a row. An hour needs at least{" "}
+          {HR_ANOMALY_MIN_BASELINE_DAYS} of those days to be compared. They
+          are not clinical alerts.
         </CardDescription>
       </CardHeader>
       <CardContent>

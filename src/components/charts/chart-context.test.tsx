@@ -178,7 +178,7 @@ describe("compact chart context", () => {
     );
 
     expect(html).toContain(
-      "average for the same local hour over the two weeks before"
+      "your average for the same hour over the previous"
     );
     expect(html).toContain("not clinical alerts");
     expect(html).toContain("No hourly heart-rate samples");
